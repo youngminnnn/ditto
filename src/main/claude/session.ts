@@ -128,7 +128,9 @@ export class ClaudeSession {
       input
     })
 
-    if (decision.behavior === 'allow') return { behavior: 'allow' }
+    // allow 분기는 런타임 스키마상 updatedInput(record) 이 필수다(.d.ts 에는 optional 로
+    // 표기돼 있으나 CLI 브리지의 Zod 검증은 필수). 원래 입력을 그대로 돌려준다.
+    if (decision.behavior === 'allow') return { behavior: 'allow', updatedInput: input }
     return { behavior: 'deny', message: 'User denied permission' }
   }
 

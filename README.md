@@ -1,0 +1,76 @@
+# Ditto
+
+병렬 Claude Code 에이전트를 격리된 git worktree 위에서 오케스트레이션하는 데스크톱 앱.
+[Conductor](https://conductor.build) 의 컨셉을 따르되 **Claude Code 전용**이며, 새 세션은
+**자동 프롬프트 없이 빈 입력창**으로 시작한다.
+
+## 컨셉
+
+- **Repository** — git 리포를 연결한다(메인 체크아웃).
+- **Workspace** — 작업 1개 = 전용 git worktree + 브랜치 + Claude Code 세션 1개.
+  worktree 는 리포의 형제 디렉토리 `<repo>-worktrees/<branch>` 에 생성된다.
+- 각 workspace 의 세션은 **독립적·병렬**로 실행된다. 한 workspace 에서 에이전트가
+  돌아가는 동안 다른 workspace 를 열어 작업할 수 있다.
+- **Setup / Dev 스크립트** — 리포 단위로 지정(`npm install`, `npm run dev` 등). setup 은
+  workspace 생성 시 자동 실행(옵션), dev 는 스크립트 패널에서 실행/중지한다.
+
+## 동작 특징
+
+- **첫 세션에 디폴트 프롬프트 없음** — 입력창은 빈 상태로 시작하고, 사용자가 첫 메시지를
+  보낼 때 비로소 세션이 시작된다(자동 실행 없음).
+- **Claude Code 전용** — 다른 에이전트는 지원하지 않는다.
+- 인증은 **설치된 Claude Code 의 로그인 정보를 그대로 사용**한다(별도 API 키 불필요).
+
+## 요구 사항
+
+- macOS, Node 20+
+- [Claude Code](https://claude.com/claude-code) 가 로그인된 상태 (Agent SDK 가 번들 CLI 로
+  실행하며, 자격 증명은 `~/.claude` 를 재사용)
+- `git`
+
+## 개발 / 빌드
+
+```sh
+npm install
+npm run dev        # 개발 모드 (HMR)
+npm run typecheck  # 타입 검사 (main + renderer)
+npm run build      # 프로덕션 번들 (out/)
+npm run dist       # macOS 앱 패키징 (release/)
+```
+
+## 아키텍처
+
+Electron + React + TypeScript, electron-vite 빌드.
+
+```
+src/
+├── shared/          # main↔renderer 공유 타입 + IPC 계약 (SSOT)
+│   ├── types.ts
+│   └── api.ts       # window.api 표면
+├── main/            # Electron 메인 프로세스
+│   ├── index.ts     # 앱 생명주기 / 윈도우
+│   ├── ipc.ts       # IPC 핸들러 등록
+│   ├── store.ts     # 설정 영속화 (userData/ditto.json)
+│   ├── transcripts.ts  # workspace 별 대화 기록 영속화
+│   ├── git.ts       # worktree / 브랜치 / 상태
+│   ├── scripts.ts   # setup/dev 스크립트 실행기
+│   └── claude/
+│       ├── session.ts   # Agent SDK streaming-input 세션 래퍼
+│       ├── manager.ts   # workspace→세션 생명주기 + 권한 라우팅
+│       └── asyncQueue.ts
+├── preload/         # contextBridge → window.api
+└── renderer/        # React UI (zustand 상태)
+```
+
+- **세션 구동**: `@anthropic-ai/claude-agent-sdk` 의 `query()` 를 streaming input 으로
+  열어 장수명 세션 1개를 유지한다. 사용자 메시지를 입력 큐에 흘려보내 멀티턴 맥락을 유지하고,
+  SDK 메시지(`stream_event`/`assistant`/`user`/`result`)를 UI 용 이벤트로 변환한다.
+- **권한**: `canUseTool` 콜백을 renderer 로 라우팅해 허용/거부 프롬프트를 띄운다. 권한 모드는
+  workspace 별로 선택(확인 요청 / 편집 자동 승인 / 플랜 / 모두 자동 승인).
+
+## 알려진 한계 (v1)
+
+- **Diff 뷰어 미포함** (변경 파일 수 배지만 제공). 후순위.
+- **앱 재시작 간 세션 resume 미지원** — UI 대화 기록은 영속화되지만, 에이전트 맥락은
+  실행마다 새로 시작한다(세션 replay 중복 렌더링을 피하기 위한 결정).
+- 스크립트 중지는 단일 프로세스 종료(자식 프로세스 그룹 정리는 후순위).

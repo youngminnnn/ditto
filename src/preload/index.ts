@@ -1,0 +1,63 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import { IPC } from '@shared/types'
+import type { DittoApi } from '@shared/api'
+
+function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
+  const listener = (_event: unknown, payload: T): void => cb(payload)
+  ipcRenderer.on(channel, listener as never)
+  return () => ipcRenderer.removeListener(channel, listener as never)
+}
+
+const api: DittoApi = {
+  getState: () => ipcRenderer.invoke(IPC.appGetState),
+
+  repo: {
+    add: () => ipcRenderer.invoke(IPC.repoAdd),
+    update: (repoId, patch) => ipcRenderer.invoke(IPC.repoUpdate, repoId, patch),
+    remove: (repoId) => ipcRenderer.invoke(IPC.repoRemove, repoId),
+    listBranches: (repoId) => ipcRenderer.invoke(IPC.repoListBranches, repoId)
+  },
+
+  workspace: {
+    create: (args) => ipcRenderer.invoke(IPC.workspaceCreate, args),
+    remove: (workspaceId, deleteBranch) =>
+      ipcRenderer.invoke(IPC.workspaceRemove, workspaceId, deleteBranch),
+    setPermissionMode: (workspaceId, mode) =>
+      ipcRenderer.invoke(IPC.workspaceSetPermissionMode, workspaceId, mode),
+    revealInFinder: (workspaceId) => ipcRenderer.invoke(IPC.workspaceRevealInFinder, workspaceId),
+    openInEditor: (workspaceId) => ipcRenderer.invoke(IPC.workspaceOpenInEditor, workspaceId)
+  },
+
+  chat: {
+    send: (workspaceId, text) => ipcRenderer.invoke(IPC.chatSend, workspaceId, text),
+    interrupt: (workspaceId) => ipcRenderer.invoke(IPC.chatInterrupt, workspaceId),
+    getHistory: (workspaceId) => ipcRenderer.invoke(IPC.chatGetHistory, workspaceId)
+  },
+
+  permission: {
+    respond: (requestId, decision) =>
+      ipcRenderer.invoke(IPC.permissionRespond, requestId, decision)
+  },
+
+  script: {
+    run: (workspaceId, kind) => ipcRenderer.invoke(IPC.scriptRun, workspaceId, kind),
+    stop: (workspaceId, kind) => ipcRenderer.invoke(IPC.scriptStop, workspaceId, kind),
+    getStatus: (workspaceId) => ipcRenderer.invoke(IPC.scriptGetStatus, workspaceId)
+  },
+
+  git: {
+    status: (workspaceId) => ipcRenderer.invoke(IPC.gitStatus, workspaceId)
+  },
+
+  settings: {
+    update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch)
+  },
+
+  onChat: (cb) => subscribe(IPC.evtChat, cb),
+  onPermission: (cb) => subscribe(IPC.evtPermission, cb),
+  onScriptOutput: (cb) => subscribe(IPC.evtScriptOutput, cb),
+  onScriptExit: (cb) => subscribe(IPC.evtScriptExit, cb),
+  onState: (cb) => subscribe(IPC.evtState, cb)
+}
+
+contextBridge.exposeInMainWorld('api', api)

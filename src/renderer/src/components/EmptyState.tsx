@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import Logo from './Logo'
 
 export default function EmptyState(): React.JSX.Element {
   const app = useStore((s) => s.app)!
@@ -7,7 +8,9 @@ export default function EmptyState(): React.JSX.Element {
   return (
     <div className="h-full grid place-items-center text-center px-8">
       <div className="max-w-sm">
-        <div className="text-5xl mb-4">🎻</div>
+        <div className="mb-4 flex justify-center">
+          <Logo size={56} />
+        </div>
         <h2 className="text-lg font-semibold text-neutral-200 mb-2">Ditto</h2>
         <p className="text-sm text-neutral-500 leading-relaxed">
           {hasRepo

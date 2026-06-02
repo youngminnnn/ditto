@@ -8,7 +8,8 @@ import {
   RefreshCw,
   Cpu,
   GitPullRequest,
-  ExternalLink
+  ExternalLink,
+  BellDot
 } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
@@ -28,6 +29,13 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   const settingsModel = useStore((s) => s.app!.settings.model)
   const permissions = useStore((s) => s.permissions)
   const pending = permissions.find((p) => p.workspaceId === workspace.id) ?? null
+
+  const unread = useStore((s) => s.unread)
+  const nextUnreadId = useStore((s) => s.nextUnreadId)
+  const selectWorkspace = useStore((s) => s.selectWorkspace)
+  const unreadCount = Object.entries(unread).filter(
+    ([id, on]) => on && id !== workspace.id
+  ).length
 
   const model = modelLabel(workspace.lastModel ?? settingsModel)
 
@@ -135,6 +143,25 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
       {/* 권한 프롬프트 */}
       {pending && <PermissionPrompt request={pending} />}
+
+      {/* 입력창 바로 위, 오른쪽: 다른 세션의 완료된 미확인 응답으로 이동 */}
+      {unreadCount > 0 && (
+        <div className="px-4">
+          <div className="max-w-3xl mx-auto flex justify-end">
+            <button
+              onClick={() => {
+                const id = nextUnreadId()
+                if (id) void selectWorkspace(id)
+              }}
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-blue-600/90 text-white text-[11.5px] font-medium hover:bg-blue-500 shadow-lg"
+              title="Jump to the next session with a completed response"
+            >
+              <BellDot size={13} />
+              Next unread ({unreadCount})
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 입력 */}
       <Composer workspace={workspace} />

@@ -54,7 +54,11 @@ function Item({ item }: { item: ChatItem }): React.JSX.Element | null {
     case 'assistant':
       return (
         <div className="md text-[13px] text-neutral-200">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={{ a: ExternalLinkRenderer }}
+          >
             {item.text || (item.streaming ? '…' : '')}
           </ReactMarkdown>
         </div>
@@ -172,6 +176,27 @@ function ResultFooter({
     >
       {text}
     </div>
+  )
+}
+
+/** 채팅 메시지 안의 링크는 항상 사용자의 기본 브라우저로 연다(앱 내 이동 방지). */
+function ExternalLinkRenderer({
+  href,
+  children
+}: {
+  href?: string
+  children?: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      onClick={(e) => {
+        e.preventDefault()
+        if (href) void window.api.openExternal(href)
+      }}
+    >
+      {children}
+    </a>
   )
 }
 

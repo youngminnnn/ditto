@@ -81,13 +81,16 @@ export const useStore = create<UIState>((set, get) => ({
       if (event.type === 'item') {
         set({ transcripts: { ...transcripts, [workspaceId]: upsertItem(items, event.item) } })
 
-        // 응답 완료: 알림음 + 현재 보고 있지 않은 세션이면 미확인 표시.
+        // 응답 완료: 알림음 + 미확인 표시 + git/PR 상태 새로고침
+        // (에이전트가 방금 커밋·PR 생성을 했을 수 있으므로 칩이 곧바로 반영되도록).
         if (event.item.type === 'result') {
           const s = get()
           if (s.app?.settings.soundOnComplete) playNotification()
           if (workspaceId !== s.selectedWorkspaceId) {
             set({ unread: { ...s.unread, [workspaceId]: true } })
           }
+          void s.refreshGit(workspaceId)
+          void s.refreshPr(workspaceId)
         }
       } else if (event.type === 'delta') {
         const idx = items.findIndex((i) => i.id === event.id)

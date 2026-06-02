@@ -1,6 +1,7 @@
+import { app } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { basename, dirname, join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { GitStatus } from '@shared/types'
 
 const exec = promisify(execFile)
@@ -59,13 +60,13 @@ export function sanitizeBranch(name: string): string {
 }
 
 /**
- * worktree 경로를 리포의 형제 디렉토리 `<repo>-worktrees/<branch>` 에 둔다.
- * (메인 repo 안에 두면 빌드 도구가 하위 디렉토리를 스캔해 충돌하므로 형제 위치 사용.)
+ * worktree 경로를 앱 데이터 디렉토리 하위 `worktrees/<repo_name>/<branch>` 에 둔다(Conductor 와 동일).
+ * 사용자 리포 부모 디렉토리를 어지럽히지 않도록 앱이 관리하는 위치에 모은다.
  */
 export function worktreePathFor(repoPath: string, branch: string): string {
   const repoName = basename(repoPath)
   const slug = sanitizeBranch(branch).replace(/\//g, '-')
-  return join(dirname(repoPath), `${repoName}-worktrees`, slug)
+  return join(app.getPath('userData'), 'worktrees', repoName, slug)
 }
 
 /** 새 브랜치로 worktree 를 추가한다. 브랜치가 이미 있으면 그 브랜치를 체크아웃한다. */

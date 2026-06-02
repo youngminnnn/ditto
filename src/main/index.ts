@@ -40,10 +40,21 @@ function createWindow(): void {
     console.error(`[ditto] renderer load failed: ${code} ${desc}`)
   })
 
-  // 외부 링크는 기본 브라우저로.
+  // 외부 링크(window.open / target=_blank)는 기본 브라우저로.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // 앱 내 일반 링크(<a href> 클릭)가 창을 외부 URL 로 이동시키지 않게 가로채,
+  // 사용자의 기본 브라우저로 연다. 개발 서버 URL 로의 이동만 허용.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const devUrl = process.env['ELECTRON_RENDERER_URL']
+    if (devUrl && url.startsWith(devUrl)) return
+    if (/^https?:\/\//.test(url)) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {

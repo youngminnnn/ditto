@@ -67,8 +67,8 @@ export default function Sidebar({
                 </span>
                 <button
                   onClick={() => onConfigRepo(repo.id)}
-                  className="opacity-0 group-hover:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
-                  title="Repository settings (setup/dev scripts)"
+                  className="h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
+                  title="Repository settings (setup / dev / archive scripts)"
                 >
                   <Settings2 size={13} />
                 </button>

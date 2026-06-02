@@ -12,7 +12,7 @@ function normalizeMode(mode: unknown): PermissionMode {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  defaultPermissionMode: 'acceptEdits',
+  defaultPermissionMode: 'default',
   autoRunSetup: true,
   model: DEFAULT_MODEL,
   soundOnComplete: true,

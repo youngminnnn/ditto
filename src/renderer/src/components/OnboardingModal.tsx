@@ -1,4 +1,5 @@
 import IntegrationsPanel from './IntegrationsPanel'
+import Logo from './Logo'
 import { primaryBtn } from './Modal'
 
 export default function OnboardingModal({ onDone }: { onDone: () => void }): React.JSX.Element {
@@ -6,7 +7,9 @@ export default function OnboardingModal({ onDone }: { onDone: () => void }): Rea
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
       <div className="no-drag w-[520px] max-w-[92vw] bg-[#15171c] border border-[#23262d] rounded-xl shadow-2xl overflow-hidden">
         <div className="px-6 pt-7 pb-2 text-center">
-          <div className="text-5xl mb-3">🎻</div>
+          <div className="mb-3 flex justify-center">
+            <Logo size={56} />
+          </div>
           <h2 className="text-lg font-semibold text-neutral-100">Welcome to Ditto</h2>
           <p className="mt-1.5 text-[12.5px] text-neutral-500 leading-relaxed">
             Run parallel Claude Code agents, each in its own isolated git worktree.

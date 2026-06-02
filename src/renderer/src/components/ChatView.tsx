@@ -1,18 +1,12 @@
 import { useState } from 'react'
 import { GitBranch, FolderOpen, Code2, Terminal, Trash2, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
+import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
 import MessageList from './MessageList'
 import Composer from './Composer'
 import ScriptPanel from './ScriptPanel'
 import PermissionPrompt from './PermissionPrompt'
 import type { PermissionMode, Workspace } from '@shared/types'
-
-const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  default: '확인 요청',
-  acceptEdits: '편집 자동 승인',
-  plan: '플랜 (읽기 전용)',
-  bypassPermissions: '모두 자동 승인'
-}
 
 export default function ChatView({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const [showScripts, setShowScripts] = useState(false)
@@ -23,7 +17,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
   const removeWorkspace = async (): Promise<void> => {
     const ok = window.confirm(
-      `workspace "${workspace.name}" 를 삭제할까요?\nworktree 디렉토리가 제거됩니다. (브랜치는 유지)`
+      `Delete workspace "${workspace.name}"?\nIts worktree directory will be removed. (The branch is kept.)`
     )
     if (!ok) return
     await window.api.workspace.remove(workspace.id, false)
@@ -54,7 +48,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
             <button
               onClick={() => void refreshGit(workspace.id)}
               className="text-neutral-600 hover:text-neutral-300"
-              title="git 상태 새로고침"
+              title="Refresh git status"
             >
               <RefreshCw size={10} />
             </button>
@@ -67,31 +61,31 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           value={workspace.permissionMode}
           onChange={(e) => setMode(e.target.value as PermissionMode)}
           className="no-drag text-[11.5px] bg-[#15171c] border border-[#23262d] rounded-md px-2 py-1 text-neutral-300 focus:outline-none focus:border-[#384050]"
-          title="권한 모드"
+          title="Permission mode — ⇧⇥ to cycle"
         >
-          {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((mode) => (
+          {PERMISSION_ORDER.map((mode) => (
             <option key={mode} value={mode}>
               {PERMISSION_LABELS[mode]}
             </option>
           ))}
         </select>
 
-        <HeaderButton title="스크립트 / 터미널" onClick={() => setShowScripts((v) => !v)} active={showScripts}>
+        <HeaderButton title="Scripts / terminal" onClick={() => setShowScripts((v) => !v)} active={showScripts}>
           <Terminal size={15} />
         </HeaderButton>
         <HeaderButton
-          title="에디터에서 열기"
+          title="Open in editor"
           onClick={() => void window.api.workspace.openInEditor(workspace.id)}
         >
           <Code2 size={15} />
         </HeaderButton>
         <HeaderButton
-          title="Finder 에서 보기"
+          title="Reveal in Finder"
           onClick={() => void window.api.workspace.revealInFinder(workspace.id)}
         >
           <FolderOpen size={15} />
         </HeaderButton>
-        <HeaderButton title="workspace 삭제" onClick={removeWorkspace} danger>
+        <HeaderButton title="Delete workspace" onClick={removeWorkspace} danger>
           <Trash2 size={15} />
         </HeaderButton>
       </div>

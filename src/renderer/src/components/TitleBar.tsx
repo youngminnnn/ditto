@@ -15,7 +15,7 @@ export default function TitleBar({
       <button
         onClick={onOpenSettings}
         className="no-drag h-7 w-7 grid place-items-center rounded-md text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-200"
-        title="설정"
+        title="Settings"
       >
         <Settings size={16} />
       </button>

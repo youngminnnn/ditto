@@ -53,6 +53,14 @@ const api: DittoApi = {
     update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch)
   },
 
+  auth: {
+    getStatus: () => ipcRenderer.invoke(IPC.authGetStatus),
+    claudeLogin: () => ipcRenderer.invoke(IPC.authClaudeLogin),
+    claudeLogout: () => ipcRenderer.invoke(IPC.authClaudeLogout),
+    githubLogin: () => ipcRenderer.invoke(IPC.authGithubLogin),
+    githubLogout: () => ipcRenderer.invoke(IPC.authGithubLogout)
+  },
+
   onChat: (cb) => subscribe(IPC.evtChat, cb),
   onPermission: (cb) => subscribe(IPC.evtPermission, cb),
   onScriptOutput: (cb) => subscribe(IPC.evtScriptOutput, cb),

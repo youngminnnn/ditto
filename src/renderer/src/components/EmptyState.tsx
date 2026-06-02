@@ -11,8 +11,8 @@ export default function EmptyState(): React.JSX.Element {
         <h2 className="text-lg font-semibold text-neutral-200 mb-2">Ditto</h2>
         <p className="text-sm text-neutral-500 leading-relaxed">
           {hasRepo
-            ? '왼쪽 리포지토리 옆 + 버튼으로 새 workspace 를 만드세요. 각 workspace 는 격리된 git worktree 에서 독립된 Claude Code 세션으로 실행됩니다.'
-            : '시작하려면 왼쪽 상단 + 버튼으로 git 리포지토리를 추가하세요.'}
+            ? 'Create a workspace with the + button next to a repository. Each workspace runs an independent Claude Code session in its own isolated git worktree.'
+            : 'To get started, add a git repository with the + button in the top-left.'}
         </p>
       </div>
     </div>

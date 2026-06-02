@@ -25,7 +25,7 @@ export default function Sidebar({
         <button
           onClick={addRepo}
           className="h-6 w-6 grid place-items-center rounded-md text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-100"
-          title="리포지토리 추가"
+          title="Add repository"
         >
           <Plus size={15} />
         </button>
@@ -34,9 +34,9 @@ export default function Sidebar({
       <div className="flex-1 overflow-y-auto px-2 pb-4">
         {app.repos.length === 0 && (
           <p className="px-3 py-8 text-xs text-neutral-600 text-center leading-relaxed">
-            아직 리포지토리가 없습니다.
+            No repositories yet.
             <br />
-            위 + 버튼으로 git 리포를 추가하세요.
+            Use the + button above to add a git repo.
           </p>
         )}
 
@@ -55,14 +55,14 @@ export default function Sidebar({
                 <button
                   onClick={() => onConfigRepo(repo.id)}
                   className="opacity-0 group-hover:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
-                  title="리포 설정 (setup/dev 스크립트)"
+                  title="Repository settings (setup/dev scripts)"
                 >
                   <Settings2 size={13} />
                 </button>
                 <button
                   onClick={() => onNewWorkspace(repo.id)}
                   className="h-5 w-5 grid place-items-center rounded text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-100"
-                  title="새 workspace"
+                  title="New workspace"
                 >
                   <Plus size={14} />
                 </button>
@@ -70,7 +70,7 @@ export default function Sidebar({
 
               <div className="mt-0.5 space-y-0.5">
                 {workspaces.length === 0 && (
-                  <p className="px-3 py-1 text-[11px] text-neutral-600">workspace 없음</p>
+                  <p className="px-3 py-1 text-[11px] text-neutral-600">No workspaces</p>
                 )}
                 {workspaces.map((ws) => (
                   <WorkspaceRow key={ws.id} workspace={ws} />

@@ -1,6 +1,7 @@
 import type {
   AppState,
   AppSettings,
+  AuthStatus,
   ChatItem,
   ChatEnvelope,
   CreateWorkspaceArgs,
@@ -62,6 +63,14 @@ export interface DittoApi {
 
   settings: {
     update(patch: Partial<AppSettings>): Promise<void>
+  }
+
+  auth: {
+    getStatus(): Promise<AuthStatus>
+    claudeLogin(): Promise<void>
+    claudeLogout(): Promise<void>
+    githubLogin(): Promise<void>
+    githubLogout(): Promise<void>
   }
 
   // 단방향 이벤트 구독. 반환값은 구독 해제 함수.

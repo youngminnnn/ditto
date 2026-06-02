@@ -18,7 +18,7 @@ export default function PermissionPrompt({
   }
 
   const heading =
-    request.title ?? `${request.displayName ?? request.toolName} 실행을 허용할까요?`
+    request.title ?? `Allow ${request.displayName ?? request.toolName}?`
   const detail = summarize(request)
 
   return (
@@ -38,13 +38,13 @@ export default function PermissionPrompt({
             onClick={() => respond('deny')}
             className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[#1c1f25]"
           >
-            거부
+            Deny
           </button>
           <button
             onClick={() => respond('allow')}
             className="text-[12px] px-2.5 py-1 rounded-md bg-amber-500/90 text-black font-medium hover:bg-amber-400"
           >
-            허용
+            Allow
           </button>
         </div>
       </div>

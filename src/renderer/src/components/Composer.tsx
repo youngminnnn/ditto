@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, Square } from 'lucide-react'
+import { PERMISSION_LABELS } from '../lib/permission'
 import type { Workspace } from '@shared/types'
 
 export default function Composer({ workspace }: { workspace: Workspace }): React.JSX.Element {
@@ -39,13 +40,13 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="Claude Code 에 메시지 보내기…  (Enter 전송 · Shift+Enter 줄바꿈)"
+          placeholder="Message Claude Code…  (Enter to send · Shift+Enter for newline)"
           className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
         />
         {running ? (
           <button
             onClick={() => void window.api.chat.interrupt(workspace.id)}
-            title="중단"
+            title="Stop"
             className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
           >
             <Square size={15} fill="currentColor" />
@@ -54,12 +55,16 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           <button
             onClick={send}
             disabled={!text.trim()}
-            title="전송"
+            title="Send"
             className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[#23262d] disabled:text-neutral-600 hover:bg-blue-500"
           >
             <Send size={15} />
           </button>
         )}
+      </div>
+      <div className="max-w-3xl mx-auto mt-1.5 px-1 flex items-center gap-1.5 text-[10.5px] text-neutral-600">
+        <kbd className="px-1 py-0.5 rounded bg-[#15171c] border border-[#23262d] font-sans">⇧⇥</kbd>
+        <span>{PERMISSION_LABELS[workspace.permissionMode]}</span>
       </div>
     </div>
   )

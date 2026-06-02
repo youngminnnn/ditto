@@ -54,7 +54,7 @@ export class ScriptRunner {
         workspaceId,
         kind,
         stream: 'stderr',
-        chunk: `\n[ditto] 실행 실패: ${err.message}\n`
+        chunk: `\n[ditto] failed to start: ${err.message}\n`
       })
     })
     proc.on('close', (code) => {

@@ -43,40 +43,39 @@ export default function NewWorkspaceModal({
 
   return (
     <Modal
-      title={`새 workspace · ${repo.name}`}
+      title={`New workspace · ${repo.name}`}
       onClose={onClose}
       footer={
         <>
           <button className={ghostBtn} onClick={onClose}>
-            취소
+            Cancel
           </button>
           <button className={primaryBtn} onClick={create} disabled={!name.trim() || busy}>
-            {busy ? '생성 중…' : '생성'}
+            {busy ? 'Creating…' : 'Create'}
           </button>
         </>
       }
     >
       <div className="space-y-4">
         <div>
-          <label className={labelClass}>이름</label>
+          <label className={labelClass}>Name</label>
           <input
             autoFocus
             className={inputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && create()}
-            placeholder="예: 로그인 버그 수정"
+            placeholder="e.g. fix login bug"
           />
           {name.trim() && (
             <p className="mt-1.5 text-[11px] text-neutral-600">
-              브랜치 <span className="text-neutral-400">{sanitizePreview(name)}</span> 가
-              생성됩니다.
+              Creates branch <span className="text-neutral-400">{sanitizePreview(name)}</span>.
             </p>
           )}
         </div>
 
         <div>
-          <label className={labelClass}>베이스 브랜치</label>
+          <label className={labelClass}>Base branch</label>
           <select
             className={inputClass}
             value={base}

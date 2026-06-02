@@ -6,7 +6,9 @@ import type { AppState, AppSettings } from '@shared/types'
 const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'acceptEdits',
   autoRunSetup: true,
-  model: null
+  model: null,
+  manualWorkspaceSetup: false,
+  onboarded: false
 }
 
 const EMPTY_STATE: AppState = {

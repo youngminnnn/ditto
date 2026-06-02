@@ -45,7 +45,7 @@ export default function ScriptPanel({
                 (active ? 'bg-[#1c1f25] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
               }
             >
-              {kind === 'dev' ? 'Dev 서버' : 'Setup'}
+              {kind === 'dev' ? 'Dev server' : 'Setup'}
               {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />}
             </button>
           )
@@ -59,18 +59,18 @@ export default function ScriptPanel({
               onClick={stop}
               className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md text-red-400 hover:bg-red-500/15"
             >
-              <Square size={12} fill="currentColor" /> 중지
+              <Square size={12} fill="currentColor" /> Stop
             </button>
           ) : (
             <button
               onClick={run}
               className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md text-emerald-400 hover:bg-emerald-500/15"
             >
-              <Play size={12} fill="currentColor" /> 실행
+              <Play size={12} fill="currentColor" /> Run
             </button>
           )
         ) : (
-          <span className="text-[11px] text-neutral-600">리포 설정에서 명령을 지정하세요</span>
+          <span className="text-[11px] text-neutral-600">Set a command in repo settings</span>
         )}
 
         <button
@@ -87,7 +87,7 @@ export default function ScriptPanel({
         </div>
       )}
       <pre className="flex-1 overflow-auto px-3 py-2 text-[11.5px] font-mono text-neutral-400 whitespace-pre-wrap">
-        {out || (command.trim() ? '아직 출력이 없습니다.' : '')}
+        {out || (command.trim() ? 'No output yet.' : '')}
       </pre>
     </div>
   )

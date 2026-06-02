@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   AppState,
+  AuthStatus,
   ChatEnvelope,
   ChatItem,
   GitStatus,
@@ -22,11 +23,13 @@ interface UIState {
   scriptStatus: Record<string, ScriptStatus[]>
   gitStatus: Record<string, GitStatus | null>
   permissions: PermissionRequest[]
+  authStatus: AuthStatus | null
 
   init: () => Promise<void>
   selectWorkspace: (id: string | null) => Promise<void>
   refreshGit: (workspaceId: string) => Promise<void>
   refreshScriptStatus: (workspaceId: string) => Promise<void>
+  refreshAuth: () => Promise<void>
   dismissPermission: (requestId: string) => void
 }
 
@@ -50,6 +53,7 @@ export const useStore = create<UIState>((set, get) => ({
   scriptStatus: {},
   gitStatus: {},
   permissions: [],
+  authStatus: null,
 
   init: async () => {
     if (initialized) return
@@ -57,6 +61,7 @@ export const useStore = create<UIState>((set, get) => ({
 
     const app = await window.api.getState()
     set({ app, ready: true })
+    void get().refreshAuth()
 
     window.api.onState((next) => set({ app: next }))
 
@@ -104,7 +109,7 @@ export const useStore = create<UIState>((set, get) => ({
       set({
         scriptOutput: {
           ...out,
-          [key]: (out[key] ?? '') + `\n[ditto] 종료 (code ${code ?? '?'})\n`
+          [key]: (out[key] ?? '') + `\n[ditto] exited (code ${code ?? '?'})\n`
         }
       })
       void get().refreshScriptStatus(workspaceId)
@@ -134,6 +139,15 @@ export const useStore = create<UIState>((set, get) => ({
   refreshScriptStatus: async (workspaceId) => {
     const status = await window.api.script.getStatus(workspaceId)
     set((s) => ({ scriptStatus: { ...s.scriptStatus, [workspaceId]: status } }))
+  },
+
+  refreshAuth: async () => {
+    try {
+      const status = await window.api.auth.getStatus()
+      set({ authStatus: status })
+    } catch {
+      set({ authStatus: { claude: { loggedIn: false }, github: { loggedIn: false } } })
+    }
   },
 
   dismissPermission: (requestId) => {

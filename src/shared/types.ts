@@ -52,6 +52,13 @@ export interface AppSettings {
   autoRunSetup: boolean
   /** 사용할 모델. null 이면 CLI 기본값. */
   model: string | null
+  /**
+   * true 면 새 workspace 생성 시 이름·베이스 브랜치를 직접 입력하는 모달을 띄운다.
+   * false(기본) 면 이름을 자동 생성하고 베이스는 리포 기본 브랜치(main/origin)로 즉시 만든다.
+   */
+  manualWorkspaceSetup: boolean
+  /** 최초 실행 온보딩(Claude/GitHub 연동 안내)을 완료했는지. */
+  onboarded: boolean
 }
 
 export interface AppState {
@@ -170,6 +177,11 @@ export const IPC = {
   scriptGetStatus: 'script:getStatus',
   gitStatus: 'git:status',
   settingsUpdate: 'settings:update',
+  authGetStatus: 'auth:getStatus',
+  authClaudeLogin: 'auth:claudeLogin',
+  authClaudeLogout: 'auth:claudeLogout',
+  authGithubLogin: 'auth:githubLogin',
+  authGithubLogout: 'auth:githubLogout',
 
   // 단방향 이벤트 (main.send → renderer.on)
   evtChat: 'evt:chat',
@@ -183,8 +195,31 @@ export const IPC = {
 
 export interface CreateWorkspaceArgs {
   repoId: string
-  name: string
-  baseBranch: string
+  /** 비어 있으면 main 이 고유 이름을 자동 생성한다. */
+  name?: string
+  /** 비어 있으면 리포 기본 브랜치를 사용한다. */
+  baseBranch?: string
+}
+
+// ── 외부 연동 인증 상태 (Claude / GitHub) ────────────────────────────────
+
+export interface ClaudeAuthStatus {
+  loggedIn: boolean
+  email?: string
+  orgName?: string
+  subscriptionType?: string
+  authMethod?: string
+}
+
+export interface GithubAuthStatus {
+  loggedIn: boolean
+  account?: string
+  protocol?: string
+}
+
+export interface AuthStatus {
+  claude: ClaudeAuthStatus
+  github: GithubAuthStatus
 }
 
 export interface ChatEnvelope {

@@ -24,7 +24,7 @@ export default function MessageList({ workspaceId }: { workspaceId: string }): R
   if (items.length === 0) {
     return (
       <div ref={containerRef} className="flex-1 overflow-y-auto grid place-items-center">
-        <p className="text-sm text-neutral-600">메시지를 입력해 Claude Code 세션을 시작하세요.</p>
+        <p className="text-sm text-neutral-600">Send a message to start a Claude Code session.</p>
       </div>
     )
   }
@@ -90,7 +90,7 @@ function Thinking({ text }: { text: string }): React.JSX.Element {
         className="flex items-center gap-1.5 text-neutral-500 hover:text-neutral-300"
       >
         <Brain size={12} />
-        <span>생각 중</span>
+        <span>Thinking</span>
         <ChevronRight size={12} className={open ? 'rotate-90 transition' : 'transition'} />
       </button>
       {open && (
@@ -148,7 +148,7 @@ function ToolResult({ text, isError }: { text: string; isError: boolean }): Reac
           onClick={() => setOpen((v) => !v)}
           className="mt-0.5 text-[11px] text-neutral-600 hover:text-neutral-400"
         >
-          {open ? '접기' : `더 보기 (${lines.length}줄)`}
+          {open ? 'Collapse' : `Show more (${lines.length} lines)`}
         </button>
       )}
     </div>

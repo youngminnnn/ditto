@@ -23,9 +23,9 @@ export default function RepoConfigModal({
   const removeRepo = async (): Promise<void> => {
     const wsCount = app.workspaces.filter((w) => w.repoId === repoId).length
     const ok = window.confirm(
-      `리포 "${repo.name}" 를 제거할까요?` +
+      `Remove repository "${repo.name}"?` +
         (wsCount > 0
-          ? `\nworkspace ${wsCount}개와 그 worktree 디렉토리도 함께 제거됩니다. (브랜치는 유지)`
+          ? `\n${wsCount} workspace(s) and their worktree directories will also be removed. (Branches are kept.)`
           : '')
     )
     if (!ok) return
@@ -35,26 +35,26 @@ export default function RepoConfigModal({
 
   return (
     <Modal
-      title={`리포 설정 · ${repo.name}`}
+      title={`Repository settings · ${repo.name}`}
       onClose={onClose}
       width={520}
       footer={
         <>
           <button className={ghostBtn + ' mr-auto text-red-400 hover:bg-red-500/15'} onClick={removeRepo}>
-            리포 제거
+            Remove repo
           </button>
           <button className={ghostBtn} onClick={onClose}>
-            취소
+            Cancel
           </button>
           <button className={primaryBtn} onClick={save}>
-            저장
+            Save
           </button>
         </>
       }
     >
       <div className="space-y-4">
         <div>
-          <label className={labelClass}>표시 이름</label>
+          <label className={labelClass}>Display name</label>
           <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
           <p className="mt-1.5 text-[11px] text-neutral-600 truncate" title={repo.path}>
             {repo.path}
@@ -62,28 +62,28 @@ export default function RepoConfigModal({
         </div>
 
         <div>
-          <label className={labelClass}>Setup 스크립트</label>
+          <label className={labelClass}>Setup script</label>
           <input
             className={inputClass + ' font-mono'}
             value={setupScript}
             onChange={(e) => setSetup(e.target.value)}
-            placeholder="예: npm install"
+            placeholder="e.g. npm install"
           />
           <p className="mt-1.5 text-[11px] text-neutral-600">
-            workspace 생성 직후 1회 실행 (설정의 자동 실행이 켜져 있을 때).
+            Runs once right after a workspace is created (when auto-run is enabled in Settings).
           </p>
         </div>
 
         <div>
-          <label className={labelClass}>Dev 스크립트</label>
+          <label className={labelClass}>Dev script</label>
           <input
             className={inputClass + ' font-mono'}
             value={devScript}
             onChange={(e) => setDev(e.target.value)}
-            placeholder="예: npm run dev"
+            placeholder="e.g. npm run dev"
           />
           <p className="mt-1.5 text-[11px] text-neutral-600">
-            스크립트 패널에서 실행/중지하는 개발 서버 명령.
+            Dev server command you start/stop from the scripts panel.
           </p>
         </div>
       </div>

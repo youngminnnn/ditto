@@ -14,6 +14,14 @@ import {
   sanitizeBranch,
   worktreePathFor
 } from './git'
+import { generateWorkspaceName } from './names'
+import {
+  getAuthStatus,
+  claudeLogin,
+  claudeLogout,
+  githubLogin,
+  githubLogout
+} from './auth'
 import { IPC } from '@shared/types'
 import type {
   AppSettings,
@@ -57,10 +65,10 @@ export function registerIpc(ctx: IpcContext): void {
 
     const path = result.filePaths[0]
     if (!(await isGitRepo(path))) {
-      return { error: '선택한 폴더가 git 리포지토리가 아닙니다.' }
+      return { error: 'The selected folder is not a git repository.' }
     }
     if (store.getState().repos.some((r) => r.path === path)) {
-      return { error: '이미 추가된 리포지토리입니다.' }
+      return { error: 'This repository has already been added.' }
     }
 
     const defaultBranch = await detectDefaultBranch(path)
@@ -117,13 +125,22 @@ export function registerIpc(ctx: IpcContext): void {
     IPC.workspaceCreate,
     async (_e, args: CreateWorkspaceArgs): Promise<{ workspaceId?: string; error?: string }> => {
       const repo = repoFor(args.repoId)
-      if (!repo) return { error: '리포지토리를 찾을 수 없습니다.' }
+      if (!repo) return { error: 'Repository not found.' }
 
-      const branch = sanitizeBranch(args.name)
+      // 이름 미입력 시 자동 생성, 베이스 미입력 시 리포 기본 브랜치(main/origin) 사용.
+      let rawName = (args.name ?? '').trim()
+      if (!rawName) {
+        const existing = new Set(
+          store.getState().workspaces.filter((w) => w.repoId === repo.id).map((w) => w.branch)
+        )
+        rawName = generateWorkspaceName(existing)
+      }
+      const baseBranch = (args.baseBranch ?? '').trim() || repo.defaultBranch
+      const branch = sanitizeBranch(rawName)
       const worktreePath = worktreePathFor(repo.path, branch)
 
       try {
-        await addWorktree(repo.path, branch, args.baseBranch, worktreePath)
+        await addWorktree(repo.path, branch, baseBranch, worktreePath)
       } catch (err) {
         return { error: err instanceof Error ? err.message : String(err) }
       }
@@ -134,9 +151,9 @@ export function registerIpc(ctx: IpcContext): void {
         st.workspaces.push({
           id,
           repoId: repo.id,
-          name: args.name.trim() || branch,
+          name: rawName,
           branch,
-          baseBranch: args.baseBranch,
+          baseBranch,
           worktreePath,
           sessionId: null,
           permissionMode: settings.defaultPermissionMode,
@@ -253,4 +270,12 @@ export function registerIpc(ctx: IpcContext): void {
     store.update((st) => Object.assign(st.settings, patch))
     broadcastState()
   })
+
+  // ── 외부 연동 인증 ──────────────────────────────────────────────────────
+
+  ipcMain.handle(IPC.authGetStatus, () => getAuthStatus())
+  ipcMain.handle(IPC.authClaudeLogin, () => claudeLogin())
+  ipcMain.handle(IPC.authClaudeLogout, () => claudeLogout())
+  ipcMain.handle(IPC.authGithubLogin, () => githubLogin())
+  ipcMain.handle(IPC.authGithubLogout, () => githubLogout())
 }

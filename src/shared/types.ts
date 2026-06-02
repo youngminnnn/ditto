@@ -55,8 +55,6 @@ export interface Workspace {
 
 export interface AppSettings {
   defaultPermissionMode: PermissionMode
-  /** workspace 생성 직후 setupScript 를 자동 실행할지 */
-  autoRunSetup: boolean
   /** 사용할 모델 ID (예: "claude-opus-4-8[1m]"). */
   model: string | null
   /** 세션 응답이 완료되면 소리로 알림. */

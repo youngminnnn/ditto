@@ -28,11 +28,11 @@ export default function Modal({
       onMouseDown={onClose}
     >
       <div
-        className="no-drag bg-[#15171c] border border-[#23262d] rounded-xl shadow-2xl max-w-[92vw]"
+        className="no-drag bg-[#15171c] border border-[#23262d] rounded-xl shadow-2xl max-w-[92vw] max-h-[88vh] flex flex-col"
         style={{ width }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 h-12 border-b border-[#23262d]">
+        <div className="shrink-0 flex items-center justify-between px-4 h-12 border-b border-[#23262d]">
           <h3 className="text-[13px] font-semibold text-neutral-100">{title}</h3>
           <button
             onClick={onClose}
@@ -41,9 +41,11 @@ export default function Modal({
             <X size={15} />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-4 overflow-y-auto">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 px-4 py-3 border-t border-[#23262d]">{footer}</div>
+          <div className="shrink-0 flex justify-end gap-2 px-4 py-3 border-t border-[#23262d]">
+            {footer}
+          </div>
         )}
       </div>
     </div>

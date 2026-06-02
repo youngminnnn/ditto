@@ -9,7 +9,6 @@ import type { PermissionMode } from '@shared/types'
 export default function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const settings = useStore((s) => s.app!.settings)
   const [mode, setMode] = useState<PermissionMode>(settings.defaultPermissionMode)
-  const [autoRunSetup, setAutoRunSetup] = useState(settings.autoRunSetup)
   const [manualWorkspaceSetup, setManualWorkspaceSetup] = useState(settings.manualWorkspaceSetup)
   const [soundOnComplete, setSoundOnComplete] = useState(settings.soundOnComplete)
   const [model, setModel] = useState(settings.model ?? MODEL_OPTIONS[0].id)
@@ -17,7 +16,6 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   const save = async (): Promise<void> => {
     await window.api.settings.update({
       defaultPermissionMode: mode,
-      autoRunSetup,
       manualWorkspaceSetup,
       soundOnComplete,
       model
@@ -41,7 +39,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
         </>
       }
     >
-      <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+      <div className="space-y-5">
         <Section title="Integrations">
           <IntegrationsPanel />
         </Section>
@@ -59,18 +57,6 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               <span className="block text-[11px] text-neutral-600">
                 Off: auto-generate a name and branch from the repo&rsquo;s default branch (main).
               </span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoRunSetup}
-              onChange={(e) => setAutoRunSetup(e.target.checked)}
-              className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
-            />
-            <span className="text-[12.5px] text-neutral-300">
-              Run setup script when a workspace is created
             </span>
           </label>
 

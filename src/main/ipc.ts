@@ -15,7 +15,7 @@ import {
   worktreePathFor
 } from './git'
 import { generateWorkspaceName } from './names'
-import { getPrStatus } from './github'
+import { getPrStatusByUrl, getPrStatusByBranch, repoSlug, findPrUrl } from './github'
 import {
   getAuthStatus,
   claudeLogin,
@@ -172,8 +172,8 @@ export function registerIpc(ctx: IpcContext): void {
       )
       broadcastState()
 
-      // 셋업 스크립트 자동 실행 (설정 ON + 명령 존재 시).
-      if (settings.autoRunSetup && repo.setupScript.trim()) {
+      // 셋업 스크립트가 설정돼 있으면 생성 직후 실행.
+      if (repo.setupScript.trim()) {
         ctx.scripts.run(id, 'setup', repo.setupScript, worktreePath)
       }
 
@@ -318,7 +318,19 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(IPC.prStatus, async (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws || ws.archived) return null
-    return getPrStatus(ws.worktreePath, ws.branch).catch(() => null)
+
+    // 1) 대화 기록에서 에이전트가 남긴 PR URL 을 찾아 그 URL 로 조회 (브랜치명과 무관).
+    const slug = await repoSlug(ws.worktreePath).catch(() => null)
+    const transcript = getTranscripts().load(workspaceId)
+    const text = transcript.map((it) => ('text' in it ? it.text : '')).join('\n')
+    const prUrl = findPrUrl(text, slug)
+    if (prUrl) {
+      const byUrl = await getPrStatusByUrl(prUrl).catch(() => null)
+      if (byUrl) return byUrl
+    }
+
+    // 2) 폴백: 워크스페이스 브랜치명으로 (브랜치 == PR head 인 일반적인 경우).
+    return getPrStatusByBranch(ws.worktreePath, ws.branch).catch(() => null)
   })
 
   ipcMain.handle(IPC.openExternal, (_e, url: string) => {

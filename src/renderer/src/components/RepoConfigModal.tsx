@@ -76,7 +76,7 @@ export default function RepoConfigModal({
             placeholder="e.g. npm install"
           />
           <p className="mt-1.5 text-[11px] text-neutral-600">
-            Runs once right after a workspace is created (when auto-run is enabled in Settings).
+            Runs once right after a workspace is created (if set).
           </p>
         </div>
 

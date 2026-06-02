@@ -13,7 +13,6 @@ function normalizeMode(mode: unknown): PermissionMode {
 
 const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'default',
-  autoRunSetup: true,
   model: DEFAULT_MODEL,
   soundOnComplete: true,
   manualWorkspaceSetup: false,

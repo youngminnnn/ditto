@@ -103,6 +103,7 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
   const selectedId = useStore((s) => s.selectedWorkspaceId)
   const select = useStore((s) => s.selectWorkspace)
   const git = useStore((s) => s.gitStatus[workspace.id])
+  const unread = useStore((s) => s.unread[workspace.id])
 
   const active = workspace.id === selectedId
 
@@ -141,6 +142,12 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
           )}
         </div>
       </div>
+      {unread && !active && (
+        <span
+          className="h-2 w-2 rounded-full bg-blue-500 shrink-0 group-hover/ws:hidden"
+          title="Completed response — unread"
+        />
+      )}
       <button
         onClick={archive}
         className="opacity-0 group-hover/ws:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200 shrink-0"

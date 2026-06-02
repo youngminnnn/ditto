@@ -22,6 +22,8 @@ export interface Repo {
   setupScript: string
   /** 개발 서버 실행 명령 (예: "npm run dev"). 비어 있으면 미실행. */
   devScript: string
+  /** workspace 아카이브 시 worktree 에서 실행하는 정리 명령. 비어 있으면 미실행. */
+  archiveScript: string
   addedAt: number
 }
 
@@ -55,8 +57,10 @@ export interface AppSettings {
   defaultPermissionMode: PermissionMode
   /** workspace 생성 직후 setupScript 를 자동 실행할지 */
   autoRunSetup: boolean
-  /** 사용할 모델. null 이면 CLI 기본값. */
+  /** 사용할 모델 ID (예: "claude-opus-4-8[1m]"). */
   model: string | null
+  /** 세션 응답이 완료되면 소리로 알림. */
+  soundOnComplete: boolean
   /**
    * true 면 새 workspace 생성 시 이름·베이스 브랜치를 직접 입력하는 모달을 띄운다.
    * false(기본) 면 이름을 자동 생성하고 베이스는 리포 기본 브랜치(main/origin)로 즉시 만든다.
@@ -183,6 +187,8 @@ export const IPC = {
   scriptStop: 'script:stop',
   scriptGetStatus: 'script:getStatus',
   gitStatus: 'git:status',
+  prStatus: 'pr:status',
+  openExternal: 'shell:openExternal',
   settingsUpdate: 'settings:update',
   authGetStatus: 'auth:getStatus',
   authClaudeLogin: 'auth:claudeLogin',
@@ -227,6 +233,15 @@ export interface GithubAuthStatus {
 export interface AuthStatus {
   claude: ClaudeAuthStatus
   github: GithubAuthStatus
+}
+
+// ── GitHub PR 상태 (workspace 브랜치 기준) ───────────────────────────────
+
+export interface PrStatus {
+  number: number
+  url: string
+  /** 표시용 라벨: Draft / Review required / Changes requested / Ready to merge / Open / Merged / Closed */
+  label: string
 }
 
 export interface ChatEnvelope {

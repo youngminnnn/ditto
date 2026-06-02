@@ -64,6 +64,36 @@ export class ScriptRunner {
     })
   }
 
+  /**
+   * 일회성 명령을 실행하고 종료까지 기다린다(아카이브 스크립트 등).
+   * timeout 초과 시 종료를 강제하고 resolve 한다 — 아카이브가 무한정 멈추지 않게.
+   */
+  runOnce(command: string, cwd: string, timeoutMs = 120_000): Promise<void> {
+    if (!command.trim()) return Promise.resolve()
+    return new Promise((resolve) => {
+      const shell = process.env.SHELL || '/bin/zsh'
+      const proc = spawn(shell, ['-lc', command], { cwd })
+      let done = false
+      const finish = (): void => {
+        if (done) return
+        done = true
+        resolve()
+      }
+      const timer = setTimeout(() => {
+        if (!proc.killed) proc.kill('SIGTERM')
+        finish()
+      }, timeoutMs)
+      proc.on('error', () => {
+        clearTimeout(timer)
+        finish()
+      })
+      proc.on('close', () => {
+        clearTimeout(timer)
+        finish()
+      })
+    })
+  }
+
   stop(workspaceId: string, kind: ScriptKind): void {
     const entry = this.running.get(this.key(workspaceId, kind))
     if (entry && entry.proc.exitCode === null && !entry.proc.killed) {

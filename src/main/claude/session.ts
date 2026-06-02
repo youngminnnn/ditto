@@ -121,6 +121,12 @@ export class ClaudeSession {
     input: Record<string, unknown>,
     options: { title?: string; displayName?: string; decisionReason?: string }
   ): Promise<PermissionResult> => {
+    // auto 모드: 분류기가 대부분 자동 처리하지만, 위험으로 분류돼 ask 경로로 넘어온 호출도
+    // 사용자에게 묻지 않고 자동 승인한다(auto = "묻지 마" 라는 사용자 기대에 맞춤).
+    if (this.deps.permissionMode === 'auto') {
+      return { behavior: 'allow', updatedInput: input }
+    }
+
     const decision = await this.deps.requestPermission({
       toolName,
       title: options.title,

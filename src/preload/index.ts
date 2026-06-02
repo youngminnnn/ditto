@@ -51,6 +51,12 @@ const api: DittoApi = {
     status: (workspaceId) => ipcRenderer.invoke(IPC.gitStatus, workspaceId)
   },
 
+  pr: {
+    status: (workspaceId) => ipcRenderer.invoke(IPC.prStatus, workspaceId)
+  },
+
+  openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
+
   settings: {
     update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch)
   },

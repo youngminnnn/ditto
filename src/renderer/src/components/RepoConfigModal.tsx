@@ -14,9 +14,15 @@ export default function RepoConfigModal({
   const [name, setName] = useState(repo.name)
   const [setupScript, setSetup] = useState(repo.setupScript)
   const [devScript, setDev] = useState(repo.devScript)
+  const [archiveScript, setArchive] = useState(repo.archiveScript)
 
   const save = async (): Promise<void> => {
-    await window.api.repo.update(repoId, { name: name.trim() || repo.name, setupScript, devScript })
+    await window.api.repo.update(repoId, {
+      name: name.trim() || repo.name,
+      setupScript,
+      devScript,
+      archiveScript
+    })
     onClose()
   }
 
@@ -84,6 +90,19 @@ export default function RepoConfigModal({
           />
           <p className="mt-1.5 text-[11px] text-neutral-600">
             Dev server command you start/stop from the scripts panel.
+          </p>
+        </div>
+
+        <div>
+          <label className={labelClass}>Archive script</label>
+          <input
+            className={inputClass + ' font-mono'}
+            value={archiveScript}
+            onChange={(e) => setArchive(e.target.value)}
+            placeholder="e.g. docker compose down"
+          />
+          <p className="mt-1.5 text-[11px] text-neutral-600">
+            Runs in the worktree when a workspace is archived (before the worktree is removed).
           </p>
         </div>
       </div>

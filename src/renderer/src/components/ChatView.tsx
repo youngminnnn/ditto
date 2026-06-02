@@ -1,8 +1,18 @@
 import { useState } from 'react'
-import { GitBranch, FolderOpen, Code2, Terminal, Archive, RefreshCw, Cpu } from 'lucide-react'
+import {
+  GitBranch,
+  FolderOpen,
+  Code2,
+  Terminal,
+  Archive,
+  RefreshCw,
+  Cpu,
+  GitPullRequest,
+  ExternalLink
+} from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
-import { displayModelName } from '../lib/format'
+import { modelLabel } from '../lib/models'
 import MessageList from './MessageList'
 import Composer from './Composer'
 import ScriptPanel from './ScriptPanel'
@@ -12,12 +22,14 @@ import type { PermissionMode, Workspace } from '@shared/types'
 export default function ChatView({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const [showScripts, setShowScripts] = useState(false)
   const git = useStore((s) => s.gitStatus[workspace.id])
+  const pr = useStore((s) => s.prStatus[workspace.id])
   const refreshGit = useStore((s) => s.refreshGit)
+  const refreshPr = useStore((s) => s.refreshPr)
   const settingsModel = useStore((s) => s.app!.settings.model)
   const permissions = useStore((s) => s.permissions)
   const pending = permissions.find((p) => p.workspaceId === workspace.id) ?? null
 
-  const model = displayModelName(workspace.lastModel, settingsModel)
+  const model = modelLabel(workspace.lastModel ?? settingsModel)
 
   const archiveWorkspace = async (): Promise<void> => {
     const ok = window.confirm(
@@ -50,9 +62,12 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
               </span>
             )}
             <button
-              onClick={() => void refreshGit(workspace.id)}
+              onClick={() => {
+                void refreshGit(workspace.id)
+                void refreshPr(workspace.id)
+              }}
               className="text-neutral-600 hover:text-neutral-300"
-              title="Refresh git status"
+              title="Refresh git & PR status"
             >
               <RefreshCw size={10} />
             </button>
@@ -60,6 +75,19 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
         </div>
 
         <div className="flex-1" />
+
+        {pr && (
+          <button
+            onClick={() => void window.api.openExternal(pr.url)}
+            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[#15171c] border border-[#23262d] text-neutral-300 hover:border-[#384050]"
+            title="Open pull request in browser"
+          >
+            <GitPullRequest size={12} className="text-violet-400" />
+            <span className="text-neutral-400">#{pr.number}</span>
+            <span>{pr.label}</span>
+            <ExternalLink size={10} className="text-neutral-500" />
+          </button>
+        )}
 
         <span
           className="flex items-center gap-1 text-[11px] text-neutral-500 px-1.5"

@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import Modal, { inputClass, labelClass, primaryBtn, ghostBtn } from './Modal'
 import IntegrationsPanel from './IntegrationsPanel'
 import { PERMISSION_ORDER, PERMISSION_LABELS, PERMISSION_DESCRIPTIONS } from '../lib/permission'
+import { MODEL_OPTIONS } from '../lib/models'
 import type { PermissionMode } from '@shared/types'
 
 export default function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -10,14 +11,16 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   const [mode, setMode] = useState<PermissionMode>(settings.defaultPermissionMode)
   const [autoRunSetup, setAutoRunSetup] = useState(settings.autoRunSetup)
   const [manualWorkspaceSetup, setManualWorkspaceSetup] = useState(settings.manualWorkspaceSetup)
-  const [model, setModel] = useState(settings.model ?? '')
+  const [soundOnComplete, setSoundOnComplete] = useState(settings.soundOnComplete)
+  const [model, setModel] = useState(settings.model ?? MODEL_OPTIONS[0].id)
 
   const save = async (): Promise<void> => {
     await window.api.settings.update({
       defaultPermissionMode: mode,
       autoRunSetup,
       manualWorkspaceSetup,
-      model: model.trim() || null
+      soundOnComplete,
+      model
     })
     onClose()
   }
@@ -70,6 +73,18 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               Run setup script when a workspace is created
             </span>
           </label>
+
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={soundOnComplete}
+              onChange={(e) => setSoundOnComplete(e.target.checked)}
+              className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
+            />
+            <span className="text-[12.5px] text-neutral-300">
+              Play a sound when a session response completes
+            </span>
+          </label>
         </Section>
 
         <Section title="Agent">
@@ -98,16 +113,17 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               value={model}
               onChange={(e) => setModel(e.target.value)}
             >
-              <option value="">Default (CLI default)</option>
-              <option value="opus">Opus</option>
-              <option value="sonnet">Sonnet</option>
-              <option value="haiku">Haiku</option>
-              {model && !['opus', 'sonnet', 'haiku'].includes(model) && (
+              {MODEL_OPTIONS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+              {!MODEL_OPTIONS.some((m) => m.id === model) && (
                 <option value={model}>{model}</option>
               )}
             </select>
             <p className="mt-1.5 text-[11px] text-neutral-600">
-              Applies to new sessions. The exact model is shown in each session header.
+              Applies to new sessions. The model is shown in each session header.
             </p>
           </div>
         </Section>

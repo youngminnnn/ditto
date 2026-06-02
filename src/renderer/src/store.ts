@@ -6,10 +6,12 @@ import type {
   ChatItem,
   GitStatus,
   PermissionRequest,
+  PrStatus,
   ScriptKind,
   ScriptStatus,
   Workspace
 } from '@shared/types'
+import { playNotification } from './lib/sound'
 
 export const scriptKey = (workspaceId: string, kind: ScriptKind): string => `${workspaceId}:${kind}`
 
@@ -22,15 +24,20 @@ interface UIState {
   scriptOutput: Record<string, string>
   scriptStatus: Record<string, ScriptStatus[]>
   gitStatus: Record<string, GitStatus | null>
+  prStatus: Record<string, PrStatus | null>
   permissions: PermissionRequest[]
   authStatus: AuthStatus | null
+  /** 응답이 완료됐지만 사용자가 아직 보지 않은 workspace. */
+  unread: Record<string, boolean>
 
   init: () => Promise<void>
   selectWorkspace: (id: string | null) => Promise<void>
   refreshGit: (workspaceId: string) => Promise<void>
+  refreshPr: (workspaceId: string) => Promise<void>
   refreshScriptStatus: (workspaceId: string) => Promise<void>
   refreshAuth: () => Promise<void>
   dismissPermission: (requestId: string) => void
+  nextUnreadId: () => string | null
 }
 
 let initialized = false
@@ -52,8 +59,10 @@ export const useStore = create<UIState>((set, get) => ({
   scriptOutput: {},
   scriptStatus: {},
   gitStatus: {},
+  prStatus: {},
   permissions: [],
   authStatus: null,
+  unread: {},
 
   init: async () => {
     if (initialized) return
@@ -71,6 +80,15 @@ export const useStore = create<UIState>((set, get) => ({
 
       if (event.type === 'item') {
         set({ transcripts: { ...transcripts, [workspaceId]: upsertItem(items, event.item) } })
+
+        // 응답 완료: 알림음 + 현재 보고 있지 않은 세션이면 미확인 표시.
+        if (event.item.type === 'result') {
+          const s = get()
+          if (s.app?.settings.soundOnComplete) playNotification()
+          if (workspaceId !== s.selectedWorkspaceId) {
+            set({ unread: { ...s.unread, [workspaceId]: true } })
+          }
+        }
       } else if (event.type === 'delta') {
         const idx = items.findIndex((i) => i.id === event.id)
         let next: ChatItem[]
@@ -121,7 +139,13 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   selectWorkspace: async (id) => {
-    set({ selectedWorkspaceId: id })
+    // 선택 시 미확인 표시 해제.
+    set((s) => {
+      if (!id || !s.unread[id]) return { selectedWorkspaceId: id }
+      const unread = { ...s.unread }
+      delete unread[id]
+      return { selectedWorkspaceId: id, unread }
+    })
     if (!id) return
 
     if (!get().loadedTranscripts[id]) {
@@ -132,12 +156,18 @@ export const useStore = create<UIState>((set, get) => ({
       }))
     }
     void get().refreshGit(id)
+    void get().refreshPr(id)
     void get().refreshScriptStatus(id)
   },
 
   refreshGit: async (workspaceId) => {
     const status = await window.api.git.status(workspaceId)
     set((s) => ({ gitStatus: { ...s.gitStatus, [workspaceId]: status } }))
+  },
+
+  refreshPr: async (workspaceId) => {
+    const status = await window.api.pr.status(workspaceId)
+    set((s) => ({ prStatus: { ...s.prStatus, [workspaceId]: status } }))
   },
 
   refreshScriptStatus: async (workspaceId) => {
@@ -156,6 +186,14 @@ export const useStore = create<UIState>((set, get) => ({
 
   dismissPermission: (requestId) => {
     set({ permissions: get().permissions.filter((p) => p.requestId !== requestId) })
+  },
+
+  /** 미확인 세션 중 선택 후보 하나(사이드바 순서 기준 첫 항목). */
+  nextUnreadId: () => {
+    const s = get()
+    const order = s.app?.workspaces ?? []
+    const found = order.find((w) => s.unread[w.id] && w.id !== s.selectedWorkspaceId)
+    return found?.id ?? null
   }
 }))
 

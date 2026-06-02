@@ -1,7 +1,9 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AppState, AppSettings, PermissionMode, Workspace } from '@shared/types'
+import type { AppState, AppSettings, PermissionMode, Repo, Workspace } from '@shared/types'
+
+const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
@@ -12,7 +14,8 @@ function normalizeMode(mode: unknown): PermissionMode {
 const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'acceptEdits',
   autoRunSetup: true,
-  model: null,
+  model: DEFAULT_MODEL,
+  soundOnComplete: true,
   manualWorkspaceSetup: false,
   onboarded: false
 }
@@ -45,6 +48,8 @@ class Store {
       const raw = JSON.parse(readFileSync(this.filePath, 'utf-8')) as Partial<AppState>
       const settings = { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) }
       settings.defaultPermissionMode = normalizeMode(settings.defaultPermissionMode)
+      // 옛 스키마: model=null('default') 은 더 이상 노출하지 않으므로 기본 모델로 환산.
+      settings.model = settings.model ?? DEFAULT_MODEL
       // 옛 스키마(archived/lastModel 누락, bypassPermissions 모드)를 정규화한다.
       const workspaces = (raw.workspaces ?? []).map(
         (w): Workspace => ({
@@ -54,7 +59,9 @@ class Store {
           archived: w.archived ?? false
         })
       )
-      return { repos: raw.repos ?? [], workspaces, settings }
+      // 옛 리포에 archiveScript 가 없으면 빈 문자열로 보강.
+      const repos = (raw.repos ?? []).map((r): Repo => ({ ...r, archiveScript: r.archiveScript ?? '' }))
+      return { repos, workspaces, settings }
     } catch {
       // 손상된 설정 파일은 빈 상태로 시작 (앱 기동을 막지 않는다).
       return structuredClone(EMPTY_STATE)

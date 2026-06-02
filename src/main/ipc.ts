@@ -15,6 +15,7 @@ import {
   worktreePathFor
 } from './git'
 import { generateWorkspaceName } from './names'
+import { getPrStatus } from './github'
 import {
   getAuthStatus,
   claudeLogin,
@@ -79,6 +80,7 @@ export function registerIpc(ctx: IpcContext): void {
       defaultBranch,
       setupScript: '',
       devScript: '',
+      archiveScript: '',
       addedAt: Date.now()
     }
     store.update((st) => st.repos.push(repo))
@@ -88,7 +90,11 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle(
     IPC.repoUpdate,
-    (_e, repoId: string, patch: Partial<Pick<Repo, 'name' | 'setupScript' | 'devScript'>>) => {
+    (
+      _e,
+      repoId: string,
+      patch: Partial<Pick<Repo, 'name' | 'setupScript' | 'devScript' | 'archiveScript'>>
+    ) => {
       store.update((st) => {
         const repo = st.repos.find((r) => r.id === repoId)
         if (repo) Object.assign(repo, patch)
@@ -184,6 +190,10 @@ export function registerIpc(ctx: IpcContext): void {
 
     ctx.sessions.dispose(workspaceId)
     ctx.scripts.disposeWorkspace(workspaceId)
+    // 아카이브 스크립트는 worktree 가 아직 살아 있을 때 실행한다.
+    if (repo?.archiveScript.trim()) {
+      await ctx.scripts.runOnce(repo.archiveScript, ws.worktreePath)
+    }
     if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, false)
 
     store.update((st) => {
@@ -303,6 +313,16 @@ export function registerIpc(ctx: IpcContext): void {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return null
     return getStatus(ws.worktreePath, ws.baseBranch).catch(() => null)
+  })
+
+  ipcMain.handle(IPC.prStatus, async (_e, workspaceId: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return null
+    return getPrStatus(ws.worktreePath, ws.branch).catch(() => null)
+  })
+
+  ipcMain.handle(IPC.openExternal, (_e, url: string) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
   })
 
   // ── 설정 ───────────────────────────────────────────────────────────────

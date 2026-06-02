@@ -9,6 +9,7 @@ import type {
   PermissionDecision,
   PermissionMode,
   PermissionRequest,
+  PrStatus,
   Repo,
   ScriptExitEvent,
   ScriptKind,
@@ -27,7 +28,7 @@ export interface DittoApi {
     add(): Promise<{ repo?: Repo; error?: string }>
     update(
       repoId: string,
-      patch: Partial<Pick<Repo, 'name' | 'setupScript' | 'devScript'>>
+      patch: Partial<Pick<Repo, 'name' | 'setupScript' | 'devScript' | 'archiveScript'>>
     ): Promise<void>
     remove(repoId: string): Promise<void>
     listBranches(repoId: string): Promise<string[]>
@@ -62,6 +63,12 @@ export interface DittoApi {
   git: {
     status(workspaceId: string): Promise<GitStatus | null>
   }
+
+  pr: {
+    status(workspaceId: string): Promise<PrStatus | null>
+  }
+
+  openExternal(url: string): Promise<void>
 
   settings: {
     update(patch: Partial<AppSettings>): Promise<void>

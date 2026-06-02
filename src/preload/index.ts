@@ -20,6 +20,8 @@ const api: DittoApi = {
 
   workspace: {
     create: (args) => ipcRenderer.invoke(IPC.workspaceCreate, args),
+    archive: (workspaceId) => ipcRenderer.invoke(IPC.workspaceArchive, workspaceId),
+    unarchive: (workspaceId) => ipcRenderer.invoke(IPC.workspaceUnarchive, workspaceId),
     remove: (workspaceId, deleteBranch) =>
       ipcRenderer.invoke(IPC.workspaceRemove, workspaceId, deleteBranch),
     setPermissionMode: (workspaceId, mode) =>

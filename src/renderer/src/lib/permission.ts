@@ -1,26 +1,35 @@
 import type { PermissionMode } from '@shared/types'
 
-/** Shift+Tab 순환 순서 및 드롭다운 표시 순서. */
-export const PERMISSION_ORDER: PermissionMode[] = [
-  'default',
-  'acceptEdits',
-  'plan',
-  'bypassPermissions'
-]
+/**
+ * Claude Code 와 동일한 권한 모드 명칭·순환·푸터 문구.
+ * Shift+Tab 순환 순서: default → accept edits → plan → auto.
+ */
+export const PERMISSION_ORDER: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto']
 
+/** 드롭다운/설정 표시용 명칭 (Claude Code 노출 명칭). */
 export const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  default: 'Ask each time',
-  acceptEdits: 'Auto-accept edits',
+  default: 'Default',
+  acceptEdits: 'Accept edits',
   plan: 'Plan mode',
-  bypassPermissions: 'Accept all'
+  auto: 'Auto mode'
 }
 
-/** 권한 모드 한 줄 설명 (설정 화면용). */
 export const PERMISSION_DESCRIPTIONS: Record<PermissionMode, string> = {
-  default: 'Prompt before every tool use',
-  acceptEdits: 'Auto-approve file edits, ask for the rest',
+  default: 'Ask before every tool use',
+  acceptEdits: 'Auto-accept file edits, ask for the rest',
   plan: 'Read-only — plan without executing',
-  bypassPermissions: 'Run every tool without asking'
+  auto: 'A classifier approves/denies automatically'
+}
+
+/**
+ * 입력창 아래 푸터. Claude Code 스타일(예: `⏵⏵ accept edits on`).
+ * default 모드는 별도 배너 없이 단축키 힌트만 보여준다.
+ */
+export const PERMISSION_FOOTER: Record<PermissionMode, { symbol: string; text: string } | null> = {
+  default: null,
+  acceptEdits: { symbol: '⏵⏵', text: 'accept edits on' },
+  plan: { symbol: '⏸', text: 'plan mode on' },
+  auto: { symbol: '⏵⏵', text: 'auto mode on' }
 }
 
 export function nextPermissionMode(mode: PermissionMode): PermissionMode {

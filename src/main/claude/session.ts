@@ -13,6 +13,8 @@ export interface SessionDeps {
   cwd: string
   model: string | null
   permissionMode: PermissionMode
+  /** 이전 실행에서 이어갈 Claude 세션 ID. 없으면 새 세션. */
+  resumeSessionId: string | null
   emit: (event: ChatEvent) => void
   persist: (item: ChatItem) => void
   requestPermission: (
@@ -90,9 +92,8 @@ export class ClaudeSession {
           includePartialMessages: true,
           permissionMode: this.deps.permissionMode,
           ...(this.deps.model ? { model: this.deps.model } : {}),
-          ...(this.deps.permissionMode === 'bypassPermissions'
-            ? { allowDangerouslySkipPermissions: true }
-            : {}),
+          // 이전 세션 ID 가 있으면 디스크에서 대화 맥락을 복원한다(과거 메시지는 재방출되지 않음).
+          ...(this.deps.resumeSessionId ? { resume: this.deps.resumeSessionId } : {}),
           canUseTool: this.canUseTool
         }
       })
@@ -162,7 +163,7 @@ export class ClaudeSession {
   private handleSystem(msg: Extract<SDKMessage, { type: 'system' }>): void {
     if (msg.subtype === 'init') {
       this.deps.onSessionId(msg.session_id)
-      this.deps.emit({ type: 'session', sessionId: msg.session_id })
+      this.deps.emit({ type: 'session', sessionId: msg.session_id, model: msg.model })
     } else if (msg.subtype === 'permission_denied') {
       this.emitItem({
         id: `denied:${msg.tool_use_id}`,

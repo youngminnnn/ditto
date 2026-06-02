@@ -4,8 +4,9 @@
  */
 
 // ── Claude Code 권한 모드 ───────────────────────────────────────────────
-// SDK 의 PermissionMode 중 이 앱이 UI 로 노출하는 부분집합.
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+// Claude Code 가 Shift+Tab 으로 순환하는 모드와 동일하게 노출한다
+// (default → accept edits → plan → auto).
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto'
 
 // ── 도메인 엔티티 ────────────────────────────────────────────────────────
 
@@ -42,6 +43,10 @@ export interface Workspace {
   sessionId: string | null
   permissionMode: PermissionMode
   status: WorkspaceStatus
+  /** init 메시지에서 확인된 실제 모델명(예: "claude-opus-4-8[1m]"). 표시용. */
+  lastModel: string | null
+  /** 아카이브되면 사이드바 기본 목록에서 숨기고 worktree 를 제거한다(브랜치·기록은 유지). */
+  archived: boolean
   createdAt: number
   lastActiveAt: number
 }
@@ -97,8 +102,8 @@ export type ChatEvent =
   | { type: 'delta'; id: string; itemType: 'assistant' | 'thinking'; text: string }
   /** workspace 실행 상태 변화. */
   | { type: 'status'; status: WorkspaceStatus }
-  /** 세션 ID 확정/갱신. */
-  | { type: 'session'; sessionId: string }
+  /** 세션 ID·모델 확정/갱신 (init 메시지 기준). */
+  | { type: 'session'; sessionId: string; model?: string }
 
 // ── 권한 프롬프트 (canUseTool → UI) ──────────────────────────────────────
 
@@ -164,6 +169,8 @@ export const IPC = {
   repoUpdate: 'repo:update',
   repoListBranches: 'repo:listBranches',
   workspaceCreate: 'workspace:create',
+  workspaceArchive: 'workspace:archive',
+  workspaceUnarchive: 'workspace:unarchive',
   workspaceRemove: 'workspace:remove',
   workspaceSetPermissionMode: 'workspace:setPermissionMode',
   workspaceOpenInEditor: 'workspace:openInEditor',

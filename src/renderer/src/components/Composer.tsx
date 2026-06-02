@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, Square } from 'lucide-react'
-import { PERMISSION_LABELS } from '../lib/permission'
+import { PERMISSION_FOOTER } from '../lib/permission'
 import type { Workspace } from '@shared/types'
 
 export default function Composer({ workspace }: { workspace: Workspace }): React.JSX.Element {
@@ -62,9 +62,20 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           </button>
         )}
       </div>
-      <div className="max-w-3xl mx-auto mt-1.5 px-1 flex items-center gap-1.5 text-[10.5px] text-neutral-600">
-        <kbd className="px-1 py-0.5 rounded bg-[#15171c] border border-[#23262d] font-sans">⇧⇥</kbd>
-        <span>{PERMISSION_LABELS[workspace.permissionMode]}</span>
+      <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px]">
+        {(() => {
+          const footer = PERMISSION_FOOTER[workspace.permissionMode]
+          const accent =
+            workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-amber-400'
+          return footer ? (
+            <span className={accent}>
+              {footer.symbol} {footer.text}{' '}
+              <span className="text-neutral-600">(shift+tab to cycle)</span>
+            </span>
+          ) : (
+            <span className="text-neutral-600">shift+tab to cycle permission modes</span>
+          )
+        })()}
       </div>
     </div>
   )

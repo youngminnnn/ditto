@@ -158,6 +158,8 @@ export function registerIpc(ctx: IpcContext): void {
           sessionId: null,
           permissionMode: settings.defaultPermissionMode,
           status: 'idle',
+          lastModel: null,
+          archived: false,
           createdAt: Date.now(),
           lastActiveAt: Date.now()
         })
@@ -172,6 +174,47 @@ export function registerIpc(ctx: IpcContext): void {
       return { workspaceId: id }
     }
   )
+
+  // 아카이브: 세션·스크립트를 정리하고 worktree 디렉토리를 제거하되 브랜치·대화 기록·세션 ID 는
+  // 유지한다 (언아카이브 시 worktree 를 다시 만들고 같은 세션을 이어갈 수 있다).
+  ipcMain.handle(IPC.workspaceArchive, async (_e, workspaceId: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return
+    const repo = repoFor(ws.repoId)
+
+    ctx.sessions.dispose(workspaceId)
+    ctx.scripts.disposeWorkspace(workspaceId)
+    if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, false)
+
+    store.update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) {
+        w.archived = true
+        w.status = 'idle'
+      }
+    })
+    broadcastState()
+  })
+
+  // 언아카이브: 브랜치로부터 worktree 를 복원한다.
+  ipcMain.handle(IPC.workspaceUnarchive, async (_e, workspaceId: string): Promise<{ error?: string }> => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return { error: 'Workspace not found.' }
+    const repo = repoFor(ws.repoId)
+    if (!repo) return { error: 'Repository not found.' }
+
+    try {
+      await addWorktree(repo.path, ws.branch, ws.baseBranch, ws.worktreePath)
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+    store.update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) w.archived = false
+    })
+    broadcastState()
+    return {}
+  })
 
   ipcMain.handle(
     IPC.workspaceRemove,

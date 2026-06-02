@@ -87,8 +87,12 @@ export const useStore = create<UIState>((set, get) => ({
         set({ transcripts: { ...transcripts, [workspaceId]: next } })
       } else if (event.type === 'status' || event.type === 'session') {
         patchWorkspace(set, get, workspaceId, (w) => {
-          if (event.type === 'status') w.status = event.status
-          else w.sessionId = event.sessionId
+          if (event.type === 'status') {
+            w.status = event.status
+          } else {
+            w.sessionId = event.sessionId
+            if (event.model) w.lastModel = event.model
+          }
         })
       }
     })

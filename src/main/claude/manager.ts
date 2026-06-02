@@ -39,6 +39,7 @@ export class SessionManager {
       cwd: ws.worktreePath,
       model: settings.model,
       permissionMode: ws.permissionMode,
+      resumeSessionId: ws.sessionId,
       emit: (event) => this.emit(workspaceId, event),
       persist: (item) => getTranscripts().upsert(workspaceId, item),
       requestPermission: (req) => this.requestPermission(workspaceId, req),
@@ -90,7 +91,7 @@ export class SessionManager {
   // ── 내부 ───────────────────────────────────────────────────────────────
 
   private emit(workspaceId: string, event: ChatEvent): void {
-    // 상태 변화는 store 에도 반영해 재시작/새 창에서도 사이드바가 일치하도록 한다.
+    // 상태·모델 변화는 store 에도 반영해 재시작/새 창에서도 사이드바가 일치하도록 한다.
     if (event.type === 'status') {
       getStore().update((st) => {
         const w = st.workspaces.find((x) => x.id === workspaceId)
@@ -98,6 +99,11 @@ export class SessionManager {
           w.status = event.status
           w.lastActiveAt = Date.now()
         }
+      })
+    } else if (event.type === 'session' && event.model) {
+      getStore().update((st) => {
+        const w = st.workspaces.find((x) => x.id === workspaceId)
+        if (w) w.lastModel = event.model ?? w.lastModel
       })
     }
     this.dispatch(IPC.evtChat, { workspaceId, event })

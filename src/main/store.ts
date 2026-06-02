@@ -1,7 +1,13 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AppState, AppSettings } from '@shared/types'
+import type { AppState, AppSettings, PermissionMode, Workspace } from '@shared/types'
+
+/** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
+function normalizeMode(mode: unknown): PermissionMode {
+  if (mode === 'default' || mode === 'acceptEdits' || mode === 'plan' || mode === 'auto') return mode
+  return 'acceptEdits'
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'acceptEdits',
@@ -37,11 +43,18 @@ class Store {
     if (!existsSync(this.filePath)) return structuredClone(EMPTY_STATE)
     try {
       const raw = JSON.parse(readFileSync(this.filePath, 'utf-8')) as Partial<AppState>
-      return {
-        repos: raw.repos ?? [],
-        workspaces: raw.workspaces ?? [],
-        settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) }
-      }
+      const settings = { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) }
+      settings.defaultPermissionMode = normalizeMode(settings.defaultPermissionMode)
+      // 옛 스키마(archived/lastModel 누락, bypassPermissions 모드)를 정규화한다.
+      const workspaces = (raw.workspaces ?? []).map(
+        (w): Workspace => ({
+          ...w,
+          permissionMode: normalizeMode(w.permissionMode),
+          lastModel: w.lastModel ?? null,
+          archived: w.archived ?? false
+        })
+      )
+      return { repos: raw.repos ?? [], workspaces, settings }
     } catch {
       // 손상된 설정 파일은 빈 상태로 시작 (앱 기동을 막지 않는다).
       return structuredClone(EMPTY_STATE)

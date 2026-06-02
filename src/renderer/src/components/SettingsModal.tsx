@@ -92,13 +92,23 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
           </div>
 
           <div>
-            <label className={labelClass}>Model (leave blank for the CLI default)</label>
-            <input
-              className={inputClass + ' font-mono'}
+            <label className={labelClass}>Model</label>
+            <select
+              className={inputClass}
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="e.g. claude-opus-4-8 / claude-sonnet-4-6"
-            />
+            >
+              <option value="">Default (CLI default)</option>
+              <option value="opus">Opus</option>
+              <option value="sonnet">Sonnet</option>
+              <option value="haiku">Haiku</option>
+              {model && !['opus', 'sonnet', 'haiku'].includes(model) && (
+                <option value={model}>{model}</option>
+              )}
+            </select>
+            <p className="mt-1.5 text-[11px] text-neutral-600">
+              Applies to new sessions. The exact model is shown in each session header.
+            </p>
           </div>
         </Section>
       </div>

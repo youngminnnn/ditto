@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { GitBranch, FolderOpen, Code2, Terminal, Trash2, RefreshCw } from 'lucide-react'
+import { GitBranch, FolderOpen, Code2, Terminal, Archive, RefreshCw, Cpu } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
+import { displayModelName } from '../lib/format'
 import MessageList from './MessageList'
 import Composer from './Composer'
 import ScriptPanel from './ScriptPanel'
@@ -12,15 +13,18 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   const [showScripts, setShowScripts] = useState(false)
   const git = useStore((s) => s.gitStatus[workspace.id])
   const refreshGit = useStore((s) => s.refreshGit)
+  const settingsModel = useStore((s) => s.app!.settings.model)
   const permissions = useStore((s) => s.permissions)
   const pending = permissions.find((p) => p.workspaceId === workspace.id) ?? null
 
-  const removeWorkspace = async (): Promise<void> => {
+  const model = displayModelName(workspace.lastModel, settingsModel)
+
+  const archiveWorkspace = async (): Promise<void> => {
     const ok = window.confirm(
-      `Delete workspace "${workspace.name}"?\nIts worktree directory will be removed. (The branch is kept.)`
+      `Archive workspace "${workspace.name}"?\nIts worktree directory will be removed (branch & history kept). You can unarchive it later.`
     )
     if (!ok) return
-    await window.api.workspace.remove(workspace.id, false)
+    await window.api.workspace.archive(workspace.id)
     useStore.getState().selectWorkspace(null)
   }
 
@@ -57,6 +61,14 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
         <div className="flex-1" />
 
+        <span
+          className="flex items-center gap-1 text-[11px] text-neutral-500 px-1.5"
+          title="Model for this session"
+        >
+          <Cpu size={12} />
+          {model}
+        </span>
+
         <select
           value={workspace.permissionMode}
           onChange={(e) => setMode(e.target.value as PermissionMode)}
@@ -85,8 +97,8 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
         >
           <FolderOpen size={15} />
         </HeaderButton>
-        <HeaderButton title="Delete workspace" onClick={removeWorkspace} danger>
-          <Trash2 size={15} />
+        <HeaderButton title="Archive workspace" onClick={archiveWorkspace} danger>
+          <Archive size={15} />
         </HeaderButton>
       </div>
 

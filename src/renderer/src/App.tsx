@@ -44,7 +44,7 @@ export default function App(): React.JSX.Element {
     return <div className="h-full grid place-items-center text-neutral-500">Loading…</div>
   }
 
-  const selected = app.workspaces.find((w) => w.id === selectedId) ?? null
+  const selected = app.workspaces.find((w) => w.id === selectedId && !w.archived) ?? null
 
   // 새 workspace 만들기: 수동 설정이면 모달, 아니면 즉시 자동 생성.
   const handleNewWorkspace = async (repoId: string): Promise<void> => {

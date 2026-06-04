@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'node:path'
 import { SessionManager } from './claude/manager'
 import { ScriptRunner } from './scripts'
@@ -15,6 +15,27 @@ function dispatch(channel: string, payload: unknown): void {
 
 const sessions = new SessionManager(dispatch, () => mainWindow)
 const scripts = new ScriptRunner(dispatch)
+
+/**
+ * 프로덕션에서만 엄격한 Content-Security-Policy 를 응답 헤더로 주입한다.
+ * dev(Vite/React HMR)는 인라인 프리앰블 스크립트 + localhost websocket 이 필요하므로
+ * index.html 의 완화된 meta CSP 를 그대로 쓰고 여기서는 아무것도 하지 않는다.
+ * 프로덕션 번들은 인라인 스크립트·원격 연결을 쓰지 않으므로 script-src 를 'self' 로 좁히고
+ * 'unsafe-inline'/ws/localhost 를 제거한다. meta 와 헤더가 함께 적용되면 더 엄격한 쪽이 이긴다.
+ */
+function applyContentSecurityPolicy(): void {
+  if (process.env['ELECTRON_RENDERER_URL']) return
+
+  const policy =
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+    "connect-src 'self'; img-src 'self' data:; font-src 'self' data:"
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] }
+    })
+  })
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -65,6 +86,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  applyContentSecurityPolicy()
   registerIpc({ sessions, scripts, getWindow: () => mainWindow })
   createWindow()
   console.log('[ditto] main ready')

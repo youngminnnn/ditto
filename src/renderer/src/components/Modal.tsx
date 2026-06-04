@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
+import { useStore } from '../store'
 
 export default function Modal({
   title,
@@ -16,7 +17,8 @@ export default function Modal({
 }): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      // 위에 confirm 대화상자가 떠 있으면 Escape 는 그쪽이 처리한다(하위 모달까지 닫히지 않게).
+      if (e.key === 'Escape' && !useStore.getState().confirmState) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

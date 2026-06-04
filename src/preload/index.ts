@@ -26,6 +26,8 @@ const api: DittoApi = {
       ipcRenderer.invoke(IPC.workspaceRemove, workspaceId, deleteBranch),
     setPermissionMode: (workspaceId, mode) =>
       ipcRenderer.invoke(IPC.workspaceSetPermissionMode, workspaceId, mode),
+    setModel: (workspaceId, model) => ipcRenderer.invoke(IPC.workspaceSetModel, workspaceId, model),
+    rename: (workspaceId, name) => ipcRenderer.invoke(IPC.workspaceRename, workspaceId, name),
     revealInFinder: (workspaceId) => ipcRenderer.invoke(IPC.workspaceRevealInFinder, workspaceId),
     openInEditor: (workspaceId) => ipcRenderer.invoke(IPC.workspaceOpenInEditor, workspaceId)
   },
@@ -48,11 +50,13 @@ const api: DittoApi = {
   },
 
   git: {
-    status: (workspaceId) => ipcRenderer.invoke(IPC.gitStatus, workspaceId)
+    status: (workspaceId) => ipcRenderer.invoke(IPC.gitStatus, workspaceId),
+    diff: (workspaceId) => ipcRenderer.invoke(IPC.gitDiff, workspaceId)
   },
 
   pr: {
-    status: (workspaceId) => ipcRenderer.invoke(IPC.prStatus, workspaceId)
+    status: (workspaceId) => ipcRenderer.invoke(IPC.prStatus, workspaceId),
+    create: (workspaceId) => ipcRenderer.invoke(IPC.prCreate, workspaceId)
   },
 
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
@@ -73,7 +77,8 @@ const api: DittoApi = {
   onPermission: (cb) => subscribe(IPC.evtPermission, cb),
   onScriptOutput: (cb) => subscribe(IPC.evtScriptOutput, cb),
   onScriptExit: (cb) => subscribe(IPC.evtScriptExit, cb),
-  onState: (cb) => subscribe(IPC.evtState, cb)
+  onState: (cb) => subscribe(IPC.evtState, cb),
+  onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb)
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -29,6 +29,16 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* 키보드 포커스 가시성 (마우스 클릭에는 적용되지 않음) */
+button:focus-visible,
+[role='button']:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid #4b88f5;
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
 /* 얇은 스크롤바 */
 ::-webkit-scrollbar {
   width: 9px;

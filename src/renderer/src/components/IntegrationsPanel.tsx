@@ -1,14 +1,37 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Check, Loader2, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
+import { ClaudeMark, GithubMark } from './BrandIcons'
 
 export default function IntegrationsPanel(): React.JSX.Element {
   const auth = useStore((s) => s.authStatus)
   const refreshAuth = useStore((s) => s.refreshAuth)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     void refreshAuth()
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, [refreshAuth])
+
+  // 로그인은 Terminal 에서 진행되므로, 트리거 후 인증 상태를 폴링해 자동 반영한다.
+  // 상태가 바뀌면(로그인/로그아웃 감지) 즉시 멈추고, 최대 60초까지만 시도한다.
+  const pollUntilChange = (): void => {
+    if (pollRef.current) clearInterval(pollRef.current)
+    const before = JSON.stringify(useStore.getState().authStatus)
+    let ticks = 0
+    const stop = (): void => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    pollRef.current = setInterval(() => {
+      ticks++
+      void refreshAuth()
+      const changed = JSON.stringify(useStore.getState().authStatus) !== before
+      if (changed || ticks >= 20) stop()
+    }, 3000)
+  }
 
   const claude = auth?.claude
   const github = auth?.github
@@ -17,7 +40,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
     <div className="space-y-3">
       <IntegrationRow
         name="Claude Code"
-        logo="✶"
+        icon={<ClaudeMark size={18} />}
         loading={!auth}
         connected={!!claude?.loggedIn}
         detail={
@@ -25,13 +48,16 @@ export default function IntegrationsPanel(): React.JSX.Element {
             ? [claude.email, claude.orgName].filter(Boolean).join(' · ') || 'Signed in'
             : 'Sign in to run Claude Code agents'
         }
-        onConnect={() => void window.api.auth.claudeLogin()}
+        onConnect={() => {
+          void window.api.auth.claudeLogin()
+          pollUntilChange()
+        }}
         onDisconnect={() => void window.api.auth.claudeLogout().then(() => refreshAuth())}
       />
 
       <IntegrationRow
         name="GitHub"
-        logo=""
+        icon={<GithubMark size={17} />}
         loading={!auth}
         connected={!!github?.loggedIn}
         detail={
@@ -39,13 +65,19 @@ export default function IntegrationsPanel(): React.JSX.Element {
             ? `@${github.account ?? '?'}${github.protocol ? ` · ${github.protocol}` : ''}`
             : 'Connect to push branches and open PRs'
         }
-        onConnect={() => void window.api.auth.githubLogin()}
-        onDisconnect={() => void window.api.auth.githubLogout()}
+        onConnect={() => {
+          void window.api.auth.githubLogin()
+          pollUntilChange()
+        }}
+        onDisconnect={() => {
+          void window.api.auth.githubLogout()
+          pollUntilChange()
+        }}
       />
 
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[11px] text-neutral-600 leading-relaxed pr-3">
-          Sign-in opens your Terminal to finish the flow. Click Refresh when done.
+        <p className="text-[11px] text-neutral-500 leading-relaxed pr-3">
+          Sign-in opens your Terminal to finish the flow. Status refreshes automatically — or click Refresh.
         </p>
         <button
           onClick={() => void refreshAuth()}
@@ -60,7 +92,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
 
 function IntegrationRow({
   name,
-  logo,
+  icon,
   detail,
   connected,
   loading,
@@ -68,7 +100,7 @@ function IntegrationRow({
   onDisconnect
 }: {
   name: string
-  logo: string
+  icon: React.ReactNode
   detail: string
   connected: boolean
   loading: boolean
@@ -77,8 +109,8 @@ function IntegrationRow({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-3 bg-[#0d0e11] border border-[#23262d] rounded-lg px-3.5 py-3">
-      <div className="h-8 w-8 grid place-items-center rounded-lg bg-[#1c1f25] text-neutral-300 text-base shrink-0">
-        {logo || name[0]}
+      <div className="h-8 w-8 grid place-items-center rounded-lg bg-[#1c1f25] text-neutral-300 shrink-0">
+        {icon}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-100">

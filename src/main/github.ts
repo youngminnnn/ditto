@@ -21,14 +21,16 @@ interface GhPr {
 function runLoginShell(
   command: string,
   cwd?: string
-): Promise<{ stdout: string; code: number | null }> {
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve) => {
     const shell = process.env.SHELL || '/bin/zsh'
     const proc = spawn(shell, ['-lc', command], cwd ? { cwd } : {})
     let stdout = ''
+    let stderr = ''
     proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
-    proc.on('error', () => resolve({ stdout, code: 1 }))
-    proc.on('close', (code) => resolve({ stdout, code }))
+    proc.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
+    proc.on('error', () => resolve({ stdout, stderr, code: 1 }))
+    proc.on('close', (code) => resolve({ stdout, stderr, code }))
   })
 }
 
@@ -69,6 +71,21 @@ export function getPrStatusByUrl(url: string): Promise<PrStatus | null> {
 
 export function getPrStatusByBranch(worktreePath: string, branch: string): Promise<PrStatus | null> {
   return queryPr(branch, worktreePath)
+}
+
+/**
+ * GitHub PR 작성 화면을 브라우저로 연다(`gh pr create --web --fill`).
+ * 실제 생성은 사용자가 브라우저에서 확정하므로 앱이 PR 을 바로 만들지 않는다.
+ * 현재 브랜치가 리모트에 push 돼 있지 않거나 커밋이 없으면 gh 가 에러를 내며,
+ * 그 메시지를 그대로 돌려준다.
+ */
+export async function createPrWeb(worktreePath: string): Promise<{ error?: string }> {
+  const { stderr, code } = await runLoginShell('gh pr create --web --fill', worktreePath)
+  if (code !== 0) {
+    const msg = stderr.trim().split('\n').filter(Boolean).pop()
+    return { error: msg || 'Failed to open the PR creation page.' }
+  }
+  return {}
 }
 
 /** worktree origin 리모트에서 owner/repo 슬러그를 추출한다. */

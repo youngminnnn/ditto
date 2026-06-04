@@ -10,6 +10,24 @@ interface Running {
 }
 
 /**
+ * 프로세스 그룹 전체를 종료한다. detached 로 spawn 한 자식은 자신이 그룹 리더이므로,
+ * 음수 pid 로 시그널을 보내면 자식이 띄운 손자(dev 서버의 node/vite 등)까지 함께 정리된다.
+ * 그룹 종료가 불가능하면 자식 프로세스 하나만이라도 종료한다.
+ */
+function killProcessGroup(proc: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
+  if (proc.pid === undefined || proc.exitCode !== null || proc.killed) return
+  try {
+    process.kill(-proc.pid, signal)
+  } catch {
+    try {
+      proc.kill(signal)
+    } catch {
+      // 이미 종료됨.
+    }
+  }
+}
+
+/**
  * workspace 별 setup/dev 스크립트를 실행하고 출력을 renderer 로 스트리밍한다.
  * (workspaceId, kind) 당 프로세스 1개. dev 서버처럼 장수명 프로세스를 띄울 수 있다.
  *
@@ -30,7 +48,8 @@ export class ScriptRunner {
     this.stop(workspaceId, kind)
 
     const shell = process.env.SHELL || '/bin/zsh'
-    const proc = spawn(shell, ['-lc', command], { cwd })
+    // detached 로 새 프로세스 그룹을 만든다 — 중지 시 자식이 띄운 손자까지 그룹 단위로 정리한다.
+    const proc = spawn(shell, ['-lc', command], { cwd, detached: true })
     this.running.set(this.key(workspaceId, kind), { proc, exitCode: null })
 
     proc.stdout?.on('data', (data: Buffer) => {
@@ -72,7 +91,7 @@ export class ScriptRunner {
     if (!command.trim()) return Promise.resolve()
     return new Promise((resolve) => {
       const shell = process.env.SHELL || '/bin/zsh'
-      const proc = spawn(shell, ['-lc', command], { cwd })
+      const proc = spawn(shell, ['-lc', command], { cwd, detached: true })
       let done = false
       const finish = (): void => {
         if (done) return
@@ -80,7 +99,7 @@ export class ScriptRunner {
         resolve()
       }
       const timer = setTimeout(() => {
-        if (!proc.killed) proc.kill('SIGTERM')
+        killProcessGroup(proc)
         finish()
       }, timeoutMs)
       proc.on('error', () => {
@@ -96,10 +115,7 @@ export class ScriptRunner {
 
   stop(workspaceId: string, kind: ScriptKind): void {
     const entry = this.running.get(this.key(workspaceId, kind))
-    if (entry && entry.proc.exitCode === null && !entry.proc.killed) {
-      // 자식까지 정리하려면 프로세스 그룹 종료가 이상적이지만, v1 은 단순 종료로 둔다.
-      entry.proc.kill('SIGTERM')
-    }
+    if (entry) killProcessGroup(entry.proc)
     this.running.delete(this.key(workspaceId, kind))
   }
 
@@ -121,9 +137,7 @@ export class ScriptRunner {
   }
 
   disposeAll(): void {
-    for (const { proc } of this.running.values()) {
-      if (proc.exitCode === null && !proc.killed) proc.kill('SIGTERM')
-    }
+    for (const { proc } of this.running.values()) killProcessGroup(proc)
     this.running.clear()
   }
 }

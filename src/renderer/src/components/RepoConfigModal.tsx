@@ -26,14 +26,19 @@ export default function RepoConfigModal({
     onClose()
   }
 
+  const confirm = useStore((s) => s.confirm)
+
   const removeRepo = async (): Promise<void> => {
     const wsCount = app.workspaces.filter((w) => w.repoId === repoId).length
-    const ok = window.confirm(
-      `Remove repository "${repo.name}"?` +
-        (wsCount > 0
-          ? `\n${wsCount} workspace(s) and their worktree directories will also be removed. (Branches are kept.)`
-          : '')
-    )
+    const ok = await confirm({
+      title: `Remove repository "${repo.name}"?`,
+      body:
+        wsCount > 0
+          ? `${wsCount} workspace(s) and their worktree directories will also be removed. (Branches are kept.)`
+          : undefined,
+      confirmLabel: 'Remove repo',
+      danger: true
+    })
     if (!ok) return
     await window.api.repo.remove(repoId)
     onClose()

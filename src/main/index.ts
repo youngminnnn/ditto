@@ -13,7 +13,7 @@ function dispatch(channel: string, payload: unknown): void {
   }
 }
 
-const sessions = new SessionManager(dispatch)
+const sessions = new SessionManager(dispatch, () => mainWindow)
 const scripts = new ScriptRunner(dispatch)
 
 function createWindow(): void {

@@ -8,7 +8,8 @@ import {
   Archive,
   ArchiveRestore,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  ShieldQuestion
 } from 'lucide-react'
 import { useStore } from '../store'
 import type { Workspace } from '@shared/types'
@@ -21,10 +22,11 @@ export default function Sidebar({
   onConfigRepo: (repoId: string) => void
 }): React.JSX.Element {
   const app = useStore((s) => s.app)!
+  const pushToast = useStore((s) => s.pushToast)
 
   const addRepo = async (): Promise<void> => {
     const res = await window.api.repo.add()
-    if (res.error) window.alert(res.error)
+    if (res.error) pushToast('error', res.error)
   }
 
   return (
@@ -44,7 +46,7 @@ export default function Sidebar({
 
       <div className="flex-1 overflow-y-auto px-2 pb-4">
         {app.repos.length === 0 && (
-          <p className="px-3 py-8 text-xs text-neutral-600 text-center leading-relaxed">
+          <p className="px-3 py-8 text-xs text-neutral-500 text-center leading-relaxed">
             No repositories yet.
             <br />
             Use the + button above to add a git repo.
@@ -55,6 +57,7 @@ export default function Sidebar({
           const all = app.workspaces.filter((w) => w.repoId === repo.id)
           const active = all.filter((w) => !w.archived)
           const archived = all.filter((w) => w.archived)
+          const runningCount = active.filter((w) => w.status === 'running').length
           return (
             <div key={repo.id} className="mb-3">
               <div className="group flex items-center gap-1.5 px-2 py-1.5 rounded-md">
@@ -65,6 +68,15 @@ export default function Sidebar({
                 >
                   {repo.name}
                 </span>
+                {runningCount > 0 && (
+                  <span
+                    className="flex items-center gap-1 text-[10px] text-blue-400/80 shrink-0"
+                    title={`${runningCount} running`}
+                  >
+                    <Loader2 size={10} className="animate-spin" />
+                    {runningCount}
+                  </span>
+                )}
                 <button
                   onClick={() => onConfigRepo(repo.id)}
                   className="h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
@@ -104,14 +116,21 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
   const select = useStore((s) => s.selectWorkspace)
   const git = useStore((s) => s.gitStatus[workspace.id])
   const unread = useStore((s) => s.unread[workspace.id])
+  const confirm = useStore((s) => s.confirm)
+  const awaitingPermission = useStore((s) =>
+    s.permissions.some((p) => p.workspaceId === workspace.id)
+  )
 
   const active = workspace.id === selectedId
 
   const archive = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
-    const ok = window.confirm(
-      `Archive "${workspace.name}"?\nIts worktree directory will be removed (branch & history kept). You can unarchive it later.`
-    )
+    const ok = await confirm({
+      title: `Archive "${workspace.name}"?`,
+      body: 'Its worktree directory will be removed (branch & history kept). You can unarchive it later.',
+      confirmLabel: 'Archive',
+      danger: true
+    })
     if (!ok) return
     await window.api.workspace.archive(workspace.id)
     if (active) void select(null)
@@ -119,22 +138,26 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => void select(workspace.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          void select(workspace.id)
+        }
+      }}
       className={
-        'group/ws w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer ' +
+        'group/ws w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#384050] ' +
         (active ? 'bg-[#1b1f27]' : 'hover:bg-[#15171c]')
       }
     >
-      <StatusDot status={workspace.status} />
+      <StatusDot status={workspace.status} awaitingPermission={awaitingPermission} />
       <div className="flex-1 min-w-0">
-        <div
-          className={
-            'truncate text-[12.5px] ' + (active ? 'text-neutral-100' : 'text-neutral-300')
-          }
-        >
+        <div className={'truncate text-[12.5px] ' + (active ? 'text-neutral-100' : 'text-neutral-300')}>
           {workspace.name}
         </div>
-        <div className="flex items-center gap-1 text-[10.5px] text-neutral-600 truncate">
+        <div className="flex items-center gap-1 text-[10.5px] text-neutral-500 truncate">
           <GitBranch size={10} className="shrink-0" />
           <span className="truncate">{workspace.branch}</span>
           {git && git.changedFiles > 0 && (
@@ -142,7 +165,12 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
           )}
         </div>
       </div>
-      {unread && !active && (
+      {awaitingPermission && !active && (
+        <span className="text-amber-400 shrink-0 group-hover/ws:hidden" title="Waiting for your permission">
+          <ShieldQuestion size={13} />
+        </span>
+      )}
+      {unread && !active && !awaitingPermission && (
         <span
           className="h-2 w-2 rounded-full bg-blue-500 shrink-0 group-hover/ws:hidden"
           title="Completed response — unread"
@@ -184,17 +212,22 @@ function ArchivedSection({ workspaces }: { workspaces: Workspace[] }): React.JSX
 
 function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const select = useStore((s) => s.selectWorkspace)
+  const confirm = useStore((s) => s.confirm)
+  const pushToast = useStore((s) => s.pushToast)
 
   const unarchive = async (): Promise<void> => {
     const res = await window.api.workspace.unarchive(workspace.id)
-    if (res.error) window.alert(res.error)
+    if (res.error) pushToast('error', res.error)
     else void select(workspace.id)
   }
 
   const remove = async (): Promise<void> => {
-    const ok = window.confirm(
-      `Permanently delete "${workspace.name}"? This removes its history and cannot be undone. (The branch is kept.)`
-    )
+    const ok = await confirm({
+      title: `Permanently delete "${workspace.name}"?`,
+      body: 'This removes its history and cannot be undone. (The branch is kept.)',
+      confirmLabel: 'Delete',
+      danger: true
+    })
     if (!ok) return
     await window.api.workspace.remove(workspace.id, false)
   }
@@ -222,7 +255,16 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
   )
 }
 
-function StatusDot({ status }: { status: Workspace['status'] }): React.JSX.Element {
+function StatusDot({
+  status,
+  awaitingPermission
+}: {
+  status: Workspace['status']
+  awaitingPermission: boolean
+}): React.JSX.Element {
+  if (awaitingPermission) {
+    return <ShieldQuestion size={13} className="text-amber-400 shrink-0" />
+  }
   if (status === 'running') {
     return <Loader2 size={13} className="text-blue-400 animate-spin shrink-0" />
   }

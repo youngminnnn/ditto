@@ -1,11 +1,12 @@
 import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { exec } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { getStore } from './store'
 import { getTranscripts } from './transcripts'
 import {
   addWorktree,
   detectDefaultBranch,
+  getDiff,
   getStatus,
   isGitRepo,
   listBranches,
@@ -15,7 +16,13 @@ import {
   worktreePathFor
 } from './git'
 import { generateWorkspaceName } from './names'
-import { getPrStatusByUrl, getPrStatusByBranch, repoSlug, findPrUrl } from './github'
+import {
+  getPrStatusByUrl,
+  getPrStatusByBranch,
+  createPrWeb,
+  repoSlug,
+  findPrUrl
+} from './github'
 import {
   getAuthStatus,
   claudeLogin,
@@ -163,6 +170,7 @@ export function registerIpc(ctx: IpcContext): void {
           worktreePath,
           sessionId: null,
           permissionMode: settings.defaultPermissionMode,
+          model: null,
           status: 'idle',
           lastModel: null,
           archived: false,
@@ -253,6 +261,21 @@ export function registerIpc(ctx: IpcContext): void {
     }
   )
 
+  ipcMain.handle(IPC.workspaceSetModel, (_e, workspaceId: string, model: string | null) => {
+    ctx.sessions.setModel(workspaceId, model)
+    broadcastState()
+  })
+
+  ipcMain.handle(IPC.workspaceRename, (_e, workspaceId: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    store.update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) w.name = trimmed
+    })
+    broadcastState()
+  })
+
   ipcMain.handle(IPC.workspaceRevealInFinder, (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (ws) shell.openPath(ws.worktreePath)
@@ -261,9 +284,15 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(IPC.workspaceOpenInEditor, (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return
+
     // VS Code 의 `code` CLI 를 best-effort 로 호출, 실패하면 Finder 로 폴백.
-    exec(`code "${ws.worktreePath}"`, (err) => {
-      if (err) shell.openPath(ws.worktreePath)
+    // 경로는 positional 인자($1)로 넘겨 셸 보간을 거치지 않는다 — 리포 폴더명에
+    // 셸 메타문자가 섞여도 명령으로 해석되지 않는다. PATH 확보를 위해 로그인 셸은 유지.
+    const loginShell = process.env.SHELL || '/bin/zsh'
+    const proc = spawn(loginShell, ['-lc', 'code "$1"', loginShell, ws.worktreePath])
+    proc.on('error', () => shell.openPath(ws.worktreePath))
+    proc.on('exit', (code) => {
+      if (code !== 0) shell.openPath(ws.worktreePath)
     })
   })
 
@@ -315,6 +344,12 @@ export function registerIpc(ctx: IpcContext): void {
     return getStatus(ws.worktreePath, ws.baseBranch).catch(() => null)
   })
 
+  ipcMain.handle(IPC.gitDiff, async (_e, workspaceId: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return null
+    return getDiff(ws.worktreePath, ws.baseBranch).catch(() => null)
+  })
+
   ipcMain.handle(IPC.prStatus, async (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws || ws.archived) return null
@@ -331,6 +366,14 @@ export function registerIpc(ctx: IpcContext): void {
 
     // 2) 폴백: 워크스페이스 브랜치명으로 (브랜치 == PR head 인 일반적인 경우).
     return getPrStatusByBranch(ws.worktreePath, ws.branch).catch(() => null)
+  })
+
+  ipcMain.handle(IPC.prCreate, async (_e, workspaceId: string): Promise<{ error?: string }> => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return { error: 'Workspace not found.' }
+    return createPrWeb(ws.worktreePath).catch((err) => ({
+      error: err instanceof Error ? err.message : String(err)
+    }))
   })
 
   ipcMain.handle(IPC.openExternal, (_e, url: string) => {

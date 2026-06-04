@@ -109,7 +109,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               )}
             </select>
             <p className="mt-1.5 text-[11px] text-neutral-600">
-              Applies to new sessions. The model is shown in each session header.
+              Default for new workspaces. Each workspace can override this from its header dropdown.
             </p>
           </div>
         </Section>

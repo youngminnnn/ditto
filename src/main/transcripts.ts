@@ -1,6 +1,7 @@
 import { app } from 'electron'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { writeFileAtomic } from './fsutil'
 import type { ChatItem } from '@shared/types'
 
 /**
@@ -38,7 +39,7 @@ class TranscriptStore {
 
   private persist(workspaceId: string): void {
     const items = this.cache.get(workspaceId) ?? []
-    writeFileSync(this.fileFor(workspaceId), JSON.stringify(items), 'utf-8')
+    writeFileAtomic(this.fileFor(workspaceId), JSON.stringify(items))
   }
 
   /** id 가 이미 있으면 교체, 없으면 추가. */

@@ -11,3 +11,14 @@ export function sanitizePreview(name: string): string {
     .replace(/\/{2,}/g, '/')
   return slug || 'workspace'
 }
+
+/** epoch ms 를 로컬 시:분 으로(메시지 hover 표시용). */
+export function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+
+/** 누적 비용(USD)을 표시 문자열로. 0 이면 빈 문자열. */
+export function formatCost(usd: number): string {
+  if (!usd) return ''
+  return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
+}

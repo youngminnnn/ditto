@@ -1,6 +1,7 @@
 import { app } from 'electron'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { writeFileAtomic } from './fsutil'
 import type { AppState, AppSettings, PermissionMode, Repo, Workspace } from '@shared/types'
 
 const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
@@ -54,6 +55,8 @@ class Store {
         (w): Workspace => ({
           ...w,
           permissionMode: normalizeMode(w.permissionMode),
+          // 옛 스키마: per-workspace 모델 오버라이드가 없으면 전역 설정을 따른다(null).
+          model: w.model ?? null,
           lastModel: w.lastModel ?? null,
           archived: w.archived ?? false
         })
@@ -68,7 +71,7 @@ class Store {
   }
 
   private persist(): void {
-    writeFileSync(this.filePath, JSON.stringify(this.state, null, 2), 'utf-8')
+    writeFileAtomic(this.filePath, JSON.stringify(this.state, null, 2))
   }
 
   getState(): AppState {

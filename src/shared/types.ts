@@ -45,6 +45,8 @@ export interface Workspace {
   sessionId: string | null
   permissionMode: PermissionMode
   status: WorkspaceStatus
+  /** 이 workspace 전용 모델 오버라이드. null 이면 전역 설정(AppSettings.model) 을 따른다. */
+  model: string | null
   /** init 메시지에서 확인된 실제 모델명(예: "claude-opus-4-8[1m]"). 표시용. */
   lastModel: string | null
   /** 아카이브되면 사이드바 기본 목록에서 숨기고 worktree 를 제거한다(브랜치·기록은 유지). */
@@ -161,6 +163,27 @@ export interface GitStatus {
   changedFiles: number
 }
 
+// ── git diff (변경 검토용) ───────────────────────────────────────────────
+
+export type FileDiffStatus = 'added' | 'modified' | 'deleted' | 'renamed'
+
+/** 파일 1개의 변경 요약 + 통합 diff 본문. */
+export interface FileDiff {
+  path: string
+  status: FileDiffStatus
+  additions: number
+  deletions: number
+  /** 이 파일의 통합 diff 본문(헤더 포함). 바이너리는 빈 문자열. */
+  patch: string
+  binary: boolean
+}
+
+/** base 브랜치 대비 workspace 의 전체 변경(커밋 + 미커밋). */
+export interface WorkspaceDiff {
+  baseBranch: string
+  files: FileDiff[]
+}
+
 // ── IPC 채널 이름 ────────────────────────────────────────────────────────
 
 export const IPC = {
@@ -175,6 +198,8 @@ export const IPC = {
   workspaceUnarchive: 'workspace:unarchive',
   workspaceRemove: 'workspace:remove',
   workspaceSetPermissionMode: 'workspace:setPermissionMode',
+  workspaceSetModel: 'workspace:setModel',
+  workspaceRename: 'workspace:rename',
   workspaceOpenInEditor: 'workspace:openInEditor',
   workspaceRevealInFinder: 'workspace:revealInFinder',
   chatSend: 'chat:send',
@@ -185,7 +210,9 @@ export const IPC = {
   scriptStop: 'script:stop',
   scriptGetStatus: 'script:getStatus',
   gitStatus: 'git:status',
+  gitDiff: 'git:diff',
   prStatus: 'pr:status',
+  prCreate: 'pr:create',
   openExternal: 'shell:openExternal',
   settingsUpdate: 'settings:update',
   authGetStatus: 'auth:getStatus',
@@ -199,7 +226,9 @@ export const IPC = {
   evtPermission: 'evt:permission',
   evtScriptOutput: 'evt:scriptOutput',
   evtScriptExit: 'evt:scriptExit',
-  evtState: 'evt:state'
+  evtState: 'evt:state',
+  /** OS 알림 클릭 등으로 특정 workspace 를 선택하도록 renderer 에 요청. */
+  evtSelectWorkspace: 'evt:selectWorkspace'
 } as const
 
 // ── IPC 페이로드 타입 ────────────────────────────────────────────────────

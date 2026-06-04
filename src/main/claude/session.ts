@@ -42,6 +42,8 @@ export class ClaudeSession {
   private input = new AsyncQueue<SDKUserMessage>()
   private q: Query | null = null
   private currentApiMsgId: string | null = null
+  /** 사용자가 "always allow" 한 도구 이름. 이 세션 동안 다시 묻지 않는다. */
+  private alwaysAllow = new Set<string>()
 
   constructor(private deps: SessionDeps) {}
 
@@ -127,6 +129,11 @@ export class ClaudeSession {
       return { behavior: 'allow', updatedInput: input }
     }
 
+    // 사용자가 이 세션에서 항상 허용하기로 한 도구는 다시 묻지 않는다.
+    if (this.alwaysAllow.has(toolName)) {
+      return { behavior: 'allow', updatedInput: input }
+    }
+
     const decision = await this.deps.requestPermission({
       toolName,
       title: options.title,
@@ -137,7 +144,10 @@ export class ClaudeSession {
 
     // allow 분기는 런타임 스키마상 updatedInput(record) 이 필수다(.d.ts 에는 optional 로
     // 표기돼 있으나 CLI 브리지의 Zod 검증은 필수). 원래 입력을 그대로 돌려준다.
-    if (decision.behavior === 'allow') return { behavior: 'allow', updatedInput: input }
+    if (decision.behavior === 'allow') {
+      if (decision.rememberForSession) this.alwaysAllow.add(toolName)
+      return { behavior: 'allow', updatedInput: input }
+    }
     return { behavior: 'deny', message: 'User denied permission' }
   }
 

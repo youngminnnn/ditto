@@ -14,7 +14,8 @@ import type {
   ScriptExitEvent,
   ScriptKind,
   ScriptOutputEvent,
-  ScriptStatus
+  ScriptStatus,
+  WorkspaceDiff
 } from './types'
 
 /**
@@ -40,6 +41,8 @@ export interface DittoApi {
     unarchive(workspaceId: string): Promise<{ error?: string }>
     remove(workspaceId: string, deleteBranch: boolean): Promise<void>
     setPermissionMode(workspaceId: string, mode: PermissionMode): Promise<void>
+    setModel(workspaceId: string, model: string | null): Promise<void>
+    rename(workspaceId: string, name: string): Promise<void>
     revealInFinder(workspaceId: string): Promise<void>
     openInEditor(workspaceId: string): Promise<void>
   }
@@ -62,10 +65,13 @@ export interface DittoApi {
 
   git: {
     status(workspaceId: string): Promise<GitStatus | null>
+    diff(workspaceId: string): Promise<WorkspaceDiff | null>
   }
 
   pr: {
     status(workspaceId: string): Promise<PrStatus | null>
+    /** GitHub PR 작성 화면을 브라우저로 연다(`gh pr create --web`). 에러 시 문자열 반환. */
+    create(workspaceId: string): Promise<{ error?: string }>
   }
 
   openExternal(url: string): Promise<void>
@@ -88,4 +94,6 @@ export interface DittoApi {
   onScriptOutput(cb: (e: ScriptOutputEvent) => void): () => void
   onScriptExit(cb: (e: ScriptExitEvent) => void): () => void
   onState(cb: (state: AppState) => void): () => void
+  /** OS 알림 클릭 시 main 이 보내는 workspace 선택 요청. */
+  onSelectWorkspace(cb: (workspaceId: string) => void): () => void
 }

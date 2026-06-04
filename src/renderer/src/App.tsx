@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { useStore } from './store'
 import { nextPermissionMode } from './lib/permission'
 import TitleBar from './components/TitleBar'
@@ -9,12 +10,16 @@ import SettingsModal from './components/SettingsModal'
 import NewWorkspaceModal from './components/NewWorkspaceModal'
 import RepoConfigModal from './components/RepoConfigModal'
 import OnboardingModal from './components/OnboardingModal'
+import Toaster from './components/Toaster'
+import ConfirmDialog from './components/ConfirmDialog'
+import Logo from './components/Logo'
 
 export default function App(): React.JSX.Element {
   const ready = useStore((s) => s.ready)
   const init = useStore((s) => s.init)
   const app = useStore((s) => s.app)
   const selectedId = useStore((s) => s.selectedWorkspaceId)
+  const authStatus = useStore((s) => s.authStatus)
 
   const [showSettings, setShowSettings] = useState(false)
   const [newWsRepoId, setNewWsRepoId] = useState<string | null>(null)
@@ -26,25 +31,56 @@ export default function App(): React.JSX.Element {
 
   const anyModalOpen = showSettings || newWsRepoId !== null || configRepoId !== null
 
-  // Claude Code 처럼 Shift+Tab 으로 선택된 workspace 의 권한 모드를 순환한다.
+  // 키보드: ⇧⇥ 권한 모드 순환, ⌘1–9 워크스페이스 선택, ⌘[ / ⌘] 이전/다음.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Tab' || !e.shiftKey || anyModalOpen) return
       const st = useStore.getState()
-      const ws = st.app?.workspaces.find((w) => w.id === st.selectedWorkspaceId)
-      if (!ws) return
-      e.preventDefault()
-      void window.api.workspace.setPermissionMode(ws.id, nextPermissionMode(ws.permissionMode))
+      // 모달이나 confirm 대화상자가 떠 있으면 전역 단축키를 막는다.
+      if (anyModalOpen || st.confirmState) return
+
+      if (e.key === 'Tab' && e.shiftKey) {
+        const ws = st.app?.workspaces.find((w) => w.id === st.selectedWorkspaceId)
+        if (!ws) return
+        e.preventDefault()
+        void window.api.workspace.setPermissionMode(ws.id, nextPermissionMode(ws.permissionMode))
+        return
+      }
+
+      if (!e.metaKey) return
+      const list = (st.app?.workspaces ?? []).filter((w) => !w.archived)
+      if (!list.length) return
+
+      if (e.key >= '1' && e.key <= '9') {
+        const idx = Number(e.key) - 1
+        if (idx < list.length) {
+          e.preventDefault()
+          void st.selectWorkspace(list[idx].id)
+        }
+      } else if (e.key === '[' || e.key === ']') {
+        e.preventDefault()
+        const cur = list.findIndex((w) => w.id === st.selectedWorkspaceId)
+        const delta = e.key === ']' ? 1 : -1
+        const next = cur < 0 ? 0 : (cur + delta + list.length) % list.length
+        void st.selectWorkspace(list[next].id)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [anyModalOpen])
 
   if (!ready || !app) {
-    return <div className="h-full grid place-items-center text-neutral-500">Loading…</div>
+    return (
+      <div className="h-full grid place-items-center bg-[#0b0c0e]">
+        <div className="flex flex-col items-center gap-3 text-neutral-500">
+          <Logo size={40} />
+          <span className="text-[12px]">Loading…</span>
+        </div>
+      </div>
+    )
   }
 
   const selected = app.workspaces.find((w) => w.id === selectedId && !w.archived) ?? null
+  const claudeMissing = app.settings.onboarded && authStatus !== null && !authStatus.claude.loggedIn
 
   // 새 workspace 만들기: 수동 설정이면 모달, 아니면 즉시 자동 생성.
   const handleNewWorkspace = async (repoId: string): Promise<void> => {
@@ -53,13 +89,29 @@ export default function App(): React.JSX.Element {
       return
     }
     const res = await window.api.workspace.create({ repoId })
-    if (res.error) window.alert(res.error)
-    else if (res.workspaceId) void useStore.getState().selectWorkspace(res.workspaceId)
+    const st = useStore.getState()
+    if (res.error) st.pushToast('error', res.error)
+    else if (res.workspaceId) {
+      void st.selectWorkspace(res.workspaceId)
+      const ws = (await window.api.getState()).workspaces.find((w) => w.id === res.workspaceId)
+      if (ws) st.pushToast('success', `Created workspace “${ws.name}” on ${ws.branch}`)
+    }
   }
 
   return (
     <div className="h-full flex flex-col bg-[#0b0c0e]">
       <TitleBar onOpenSettings={() => setShowSettings(true)} />
+
+      {claudeMissing && (
+        <button
+          onClick={() => setShowSettings(true)}
+          className="no-drag shrink-0 flex items-center justify-center gap-2 h-8 bg-amber-500/10 border-b border-amber-500/25 text-[12px] text-amber-300 hover:bg-amber-500/15"
+        >
+          <AlertTriangle size={13} />
+          You&rsquo;re not signed in to Claude Code. Agents won&rsquo;t run until you connect — click to open Settings.
+        </button>
+      )}
+
       <div className="flex-1 flex min-h-0">
         <Sidebar onNewWorkspace={handleNewWorkspace} onConfigRepo={setConfigRepoId} />
         <div className="flex-1 min-w-0 border-l border-[#1c1f25]">
@@ -71,12 +123,11 @@ export default function App(): React.JSX.Element {
         <OnboardingModal onDone={() => void window.api.settings.update({ onboarded: true })} />
       )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
-      {newWsRepoId && (
-        <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />
-      )}
-      {configRepoId && (
-        <RepoConfigModal repoId={configRepoId} onClose={() => setConfigRepoId(null)} />
-      )}
+      {newWsRepoId && <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />}
+      {configRepoId && <RepoConfigModal repoId={configRepoId} onClose={() => setConfigRepoId(null)} />}
+
+      <Toaster />
+      <ConfirmDialog />
     </div>
   )
 }

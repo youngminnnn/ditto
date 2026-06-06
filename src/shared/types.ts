@@ -55,6 +55,12 @@ export interface Workspace {
   lastActiveAt: number
 }
 
+/**
+ * 약관·개인정보처리방침의 현재 버전. 문서를 사용자 권리에 영향을 주도록 개정하면 1 올린다.
+ * settings.acceptedTermsVersion 이 이 값과 다르면 온보딩에서 재동의를 요구한다.
+ */
+export const CURRENT_TERMS_VERSION = 1
+
 export interface AppSettings {
   defaultPermissionMode: PermissionMode
   /** 사용할 모델 ID (예: "claude-opus-4-8[1m]"). */
@@ -68,6 +74,11 @@ export interface AppSettings {
   manualWorkspaceSetup: boolean
   /** 최초 실행 온보딩(Claude/GitHub 연동 안내)을 완료했는지. */
   onboarded: boolean
+  /**
+   * 사용자가 동의한 약관·개인정보처리방침 버전. 미동의면 null.
+   * CURRENT_TERMS_VERSION 과 다르면 온보딩 첫 단계에서 (재)동의를 요구한다.
+   */
+  acceptedTermsVersion: number | null
 }
 
 export interface AppState {

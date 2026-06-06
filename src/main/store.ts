@@ -23,7 +23,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   model: DEFAULT_MODEL,
   soundOnComplete: true,
   manualWorkspaceSetup: false,
-  onboarded: false
+  onboarded: false,
+  // 미동의(null) 로 시작 — 기존 사용자도 load 의 기본값 병합으로 null 이 되어 (재)동의를 요구한다.
+  acceptedTermsVersion: null
 }
 
 const EMPTY_STATE: AppState = {

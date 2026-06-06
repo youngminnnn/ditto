@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { CURRENT_TERMS_VERSION } from '@shared/types'
 import { useStore } from './store'
 import { nextPermissionMode } from './lib/permission'
 import TitleBar from './components/TitleBar'
@@ -29,7 +30,11 @@ export default function App(): React.JSX.Element {
     void init()
   }, [init])
 
-  const anyModalOpen = showSettings || newWsRepoId !== null || configRepoId !== null
+  // 온보딩(약관 동의·계정 연결) 모달이 떠 있는 동안에는 전역 단축키도 막아, 동의 전 앱 조작을 차단한다.
+  const onboardingOpen =
+    !!app && (!app.settings.onboarded || app.settings.acceptedTermsVersion !== CURRENT_TERMS_VERSION)
+  const anyModalOpen =
+    showSettings || newWsRepoId !== null || configRepoId !== null || onboardingOpen
 
   // 키보드: ⇧⇥ 권한 모드 순환, ⌘1–9 워크스페이스 선택, ⌘[ / ⌘] 이전/다음.
   useEffect(() => {
@@ -82,6 +87,10 @@ export default function App(): React.JSX.Element {
   const selected = app.workspaces.find((w) => w.id === selectedId && !w.archived) ?? null
   const claudeMissing = app.settings.onboarded && authStatus !== null && !authStatus.claude.loggedIn
 
+  // 약관 미동의(또는 버전 불일치)면 동의 단계부터, 계정 연결이 안 끝났으면 연동 단계를 띄운다.
+  const needsConsent = app.settings.acceptedTermsVersion !== CURRENT_TERMS_VERSION
+  const needsOnboarding = !app.settings.onboarded
+
   // 새 workspace 만들기: 수동 설정이면 모달, 아니면 즉시 자동 생성.
   const handleNewWorkspace = async (repoId: string): Promise<void> => {
     if (app.settings.manualWorkspaceSetup) {
@@ -119,8 +128,8 @@ export default function App(): React.JSX.Element {
         </div>
       </div>
 
-      {!app.settings.onboarded && (
-        <OnboardingModal onDone={() => void window.api.settings.update({ onboarded: true })} />
+      {(needsConsent || needsOnboarding) && (
+        <OnboardingModal needsConsent={needsConsent} needsOnboarding={needsOnboarding} />
       )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {newWsRepoId && <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />}

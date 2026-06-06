@@ -31,12 +31,21 @@ function openInTerminal(command: string): void {
   spawn('osascript', ['-e', script])
 }
 
+/** CLI 가 PATH 에 있는지 확인한다. 미설치와 "설치됐지만 미로그인"을 구분하기 위함이다. */
+async function isInstalled(command: 'claude' | 'gh'): Promise<boolean> {
+  const { code } = await runLoginShell(`command -v ${command}`)
+  return code === 0
+}
+
 async function getClaudeStatus(): Promise<ClaudeAuthStatus> {
+  if (!(await isInstalled('claude'))) return { installed: false, loggedIn: false }
+
   const { stdout, code } = await runLoginShell('claude auth status --json')
-  if (code !== 0) return { loggedIn: false }
+  if (code !== 0) return { installed: true, loggedIn: false }
   try {
     const json = JSON.parse(stdout.trim()) as Record<string, unknown>
     return {
+      installed: true,
       loggedIn: Boolean(json.loggedIn),
       email: json.email as string | undefined,
       orgName: json.orgName as string | undefined,
@@ -44,17 +53,19 @@ async function getClaudeStatus(): Promise<ClaudeAuthStatus> {
       authMethod: json.authMethod as string | undefined
     }
   } catch {
-    return { loggedIn: false }
+    return { installed: true, loggedIn: false }
   }
 }
 
 async function getGithubStatus(): Promise<GithubAuthStatus> {
+  if (!(await isInstalled('gh'))) return { installed: false, loggedIn: false }
+
   const { stdout, stderr, code } = await runLoginShell('gh auth status')
-  if (code !== 0) return { loggedIn: false }
+  if (code !== 0) return { installed: true, loggedIn: false }
   const out = `${stdout}\n${stderr}`
   const account = out.match(/Logged in to \S+ account (\S+)/)?.[1]
   const protocol = out.match(/Git operations protocol:\s*(\S+)/)?.[1]
-  return { loggedIn: true, account, protocol }
+  return { installed: true, loggedIn: true, account, protocol }
 }
 
 export async function getAuthStatus(): Promise<AuthStatus> {

@@ -239,7 +239,12 @@ export const useStore = create<UIState>((set, get) => ({
       const status = await window.api.auth.getStatus()
       set({ authStatus: status })
     } catch {
-      set({ authStatus: { claude: { loggedIn: false }, github: { loggedIn: false } } })
+      set({
+        authStatus: {
+          claude: { installed: false, loggedIn: false },
+          github: { installed: false, loggedIn: false }
+        }
+      })
     }
   },
 

@@ -42,11 +42,15 @@ export default function IntegrationsPanel(): React.JSX.Element {
         name="Claude Code"
         icon={<ClaudeMark size={18} />}
         loading={!auth}
+        installed={!!claude?.installed}
+        installUrl="https://claude.com/claude-code"
         connected={!!claude?.loggedIn}
         detail={
-          claude?.loggedIn
-            ? [claude.email, claude.orgName].filter(Boolean).join(' · ') || 'Signed in'
-            : 'Sign in to run Claude Code agents'
+          !claude?.installed
+            ? 'Not installed — install Claude Code to continue'
+            : claude.loggedIn
+              ? [claude.email, claude.orgName].filter(Boolean).join(' · ') || 'Signed in'
+              : 'Sign in to run Claude Code agents'
         }
         onConnect={() => {
           void window.api.auth.claudeLogin()
@@ -59,11 +63,15 @@ export default function IntegrationsPanel(): React.JSX.Element {
         name="GitHub"
         icon={<GithubMark size={17} />}
         loading={!auth}
+        installed={!!github?.installed}
+        installUrl="https://cli.github.com"
         connected={!!github?.loggedIn}
         detail={
-          github?.loggedIn
-            ? `@${github.account ?? '?'}${github.protocol ? ` · ${github.protocol}` : ''}`
-            : 'Connect to push branches and open PRs'
+          !github?.installed
+            ? 'Not installed — the GitHub CLI (gh) is optional, for PRs'
+            : github.loggedIn
+              ? `@${github.account ?? '?'}${github.protocol ? ` · ${github.protocol}` : ''}`
+              : 'Connect to push branches and open PRs'
         }
         onConnect={() => {
           void window.api.auth.githubLogin()
@@ -96,6 +104,8 @@ function IntegrationRow({
   detail,
   connected,
   loading,
+  installed,
+  installUrl,
   onConnect,
   onDisconnect
 }: {
@@ -104,6 +114,8 @@ function IntegrationRow({
   detail: string
   connected: boolean
   loading: boolean
+  installed: boolean
+  installUrl: string
   onConnect: () => void
   onDisconnect: () => void
 }): React.JSX.Element {
@@ -121,6 +133,13 @@ function IntegrationRow({
       </div>
       {loading ? (
         <Loader2 size={15} className="text-neutral-500 animate-spin" />
+      ) : !installed ? (
+        <button
+          onClick={() => void window.api.openExternal(installUrl)}
+          className="text-[12px] px-3 py-1.5 rounded-lg bg-[#1c1f25] text-neutral-200 font-medium hover:bg-[#23262d]"
+        >
+          Install
+        </button>
       ) : connected ? (
         <div className="flex gap-1.5">
           <button

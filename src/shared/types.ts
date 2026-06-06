@@ -255,6 +255,8 @@ export interface CreateWorkspaceArgs {
 // ── 외부 연동 인증 상태 (Claude / GitHub) ────────────────────────────────
 
 export interface ClaudeAuthStatus {
+  /** `claude` CLI 가 PATH 에 설치돼 있는지. 미설치면 loggedIn 도 항상 false. */
+  installed: boolean
   loggedIn: boolean
   email?: string
   orgName?: string
@@ -263,6 +265,8 @@ export interface ClaudeAuthStatus {
 }
 
 export interface GithubAuthStatus {
+  /** `gh` CLI 가 PATH 에 설치돼 있는지. 미설치면 loggedIn 도 항상 false. */
+  installed: boolean
   loggedIn: boolean
   account?: string
   protocol?: string

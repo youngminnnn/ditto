@@ -25,7 +25,15 @@ function runLoginShell(
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve) => {
     const shell = process.env.SHELL || '/bin/zsh'
-    const proc = spawn(shell, ['-lc', command], cwd ? { cwd } : {})
+    // gh 는 GITHUB_TOKEN/GH_TOKEN 이 있으면 keyring 로그인보다 우선해 그 토큰을 쓴다.
+    // 앱이 dev 터미널·에이전트 환경에서 떠 이 변수를 물려받으면, SSO 미인증 토큰이
+    // 정상 로그인 자격증명을 가려 모든 gh 조회가 조직 SAML 에러로 실패한다 → PR 이
+    // 있어도 못 찾고 "Create PR" 이 계속 뜬다. 이 변수만 비워 gh 가 본래 자격증명
+    // 체인(keyring 등)을 쓰게 한다.
+    const env = { ...process.env }
+    delete env.GITHUB_TOKEN
+    delete env.GH_TOKEN
+    const proc = spawn(shell, ['-lc', command], { ...(cwd ? { cwd } : {}), env })
     let stdout = ''
     let stderr = ''
     proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { CURRENT_TERMS_VERSION } from '@shared/types'
 import { useStore } from './store'
@@ -6,6 +6,8 @@ import { nextPermissionMode } from './lib/permission'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
+import WorkArea from './components/WorkArea'
+import Splitter from './components/Splitter'
 import EmptyState from './components/EmptyState'
 import SettingsModal from './components/SettingsModal'
 import NewWorkspaceModal from './components/NewWorkspaceModal'
@@ -21,6 +23,9 @@ export default function App(): React.JSX.Element {
   const app = useStore((s) => s.app)
   const selectedId = useStore((s) => s.selectedWorkspaceId)
   const authStatus = useStore((s) => s.authStatus)
+  const rightWidth = useStore((s) => s.rightWidth)
+  const setRightWidth = useStore((s) => s.setRightWidth)
+  const rightBase = useRef(rightWidth)
 
   const [showSettings, setShowSettings] = useState(false)
   const [newWsRepoId, setNewWsRepoId] = useState<string | null>(null)
@@ -123,8 +128,28 @@ export default function App(): React.JSX.Element {
 
       <div className="flex-1 flex min-h-0">
         <Sidebar onNewWorkspace={handleNewWorkspace} onConfigRepo={setConfigRepoId} />
-        <div className="flex-1 min-w-0 border-l border-[#1c1f25]">
-          {selected ? <ChatView key={selected.id} workspace={selected} /> : <EmptyState />}
+        <div className="flex-1 min-w-0 border-l border-[#1c1f25] flex">
+          {selected ? (
+            <>
+              <div className="flex-1 min-w-0">
+                <ChatView key={selected.id} workspace={selected} />
+              </div>
+              <Splitter
+                axis="x"
+                onStart={() => (rightBase.current = useStore.getState().rightWidth)}
+                // 분할바를 오른쪽으로 끌면(dx>0) 우측 패널이 좁아진다.
+                onDelta={(dx) => setRightWidth(rightBase.current - dx)}
+              />
+              <div
+                style={{ width: rightWidth }}
+                className="shrink-0 border-l border-[#1c1f25] min-w-0"
+              >
+                <WorkArea key={selected.id} workspace={selected} />
+              </div>
+            </>
+          ) : (
+            <EmptyState />
+          )}
         </div>
       </div>
 

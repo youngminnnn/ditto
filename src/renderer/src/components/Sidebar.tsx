@@ -115,6 +115,7 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
   const selectedId = useStore((s) => s.selectedWorkspaceId)
   const select = useStore((s) => s.selectWorkspace)
   const git = useStore((s) => s.gitStatus[workspace.id])
+  const pr = useStore((s) => s.prStatus[workspace.id])
   const unread = useStore((s) => s.unread[workspace.id])
   const confirm = useStore((s) => s.confirm)
   const awaitingPermission = useStore((s) =>
@@ -122,6 +123,8 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
   )
 
   const active = workspace.id === selectedId
+  // PR 이 있으면 표시 이름을 PR 제목으로(없으면 workspace 이름). PR 제목이 바뀌면 자동 반영된다.
+  const displayName = pr?.title || workspace.name
 
   const archive = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
@@ -154,8 +157,11 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
     >
       <StatusDot status={workspace.status} awaitingPermission={awaitingPermission} />
       <div className="flex-1 min-w-0">
-        <div className={'truncate text-[12.5px] ' + (active ? 'text-neutral-100' : 'text-neutral-300')}>
-          {workspace.name}
+        <div
+          className={'truncate text-[12.5px] ' + (active ? 'text-neutral-100' : 'text-neutral-300')}
+          title={displayName}
+        >
+          {displayName}
         </div>
         <div className="flex items-center gap-1 text-[10.5px] text-neutral-500 truncate">
           <GitBranch size={10} className="shrink-0" />

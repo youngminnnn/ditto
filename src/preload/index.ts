@@ -56,7 +56,32 @@ const api: DittoApi = {
 
   pr: {
     status: (workspaceId) => ipcRenderer.invoke(IPC.prStatus, workspaceId),
-    create: (workspaceId) => ipcRenderer.invoke(IPC.prCreate, workspaceId)
+    create: (workspaceId) => ipcRenderer.invoke(IPC.prCreate, workspaceId),
+    checks: (workspaceId) => ipcRenderer.invoke(IPC.prChecks, workspaceId)
+  },
+
+  fs: {
+    list: (workspaceId, relPath) => ipcRenderer.invoke(IPC.fsList, workspaceId, relPath),
+    read: (workspaceId, relPath) => ipcRenderer.invoke(IPC.fsRead, workspaceId, relPath)
+  },
+
+  commands: {
+    list: (workspaceId) => ipcRenderer.invoke(IPC.commandsList, workspaceId)
+  },
+
+  terminal: {
+    start: (workspaceId, cols, rows) =>
+      ipcRenderer.invoke(IPC.terminalStart, workspaceId, cols, rows),
+    input: (workspaceId, data) => ipcRenderer.invoke(IPC.terminalInput, workspaceId, data),
+    resize: (workspaceId, cols, rows) =>
+      ipcRenderer.invoke(IPC.terminalResize, workspaceId, cols, rows),
+    kill: (workspaceId) => ipcRenderer.invoke(IPC.terminalKill, workspaceId),
+    onData: (cb) => subscribe(IPC.evtTerminalData, cb),
+    onExit: (cb) => subscribe(IPC.evtTerminalExit, cb)
+  },
+
+  app: {
+    setBadgeCount: (count) => ipcRenderer.invoke(IPC.appSetBadge, count)
   },
 
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),

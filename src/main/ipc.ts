@@ -1,8 +1,10 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
+import { ipcMain, app, dialog, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { getStore } from './store'
 import { getTranscripts } from './transcripts'
+import { listDir, readFileInRoot } from './fsbrowse'
+import { listSlashCommands } from './claude/commands'
 import {
   addWorktree,
   detectDefaultBranch,
@@ -16,13 +18,7 @@ import {
   worktreePathFor
 } from './git'
 import { generateWorkspaceName } from './names'
-import {
-  getPrStatusByUrl,
-  getPrStatusByBranch,
-  createPrWeb,
-  repoSlug,
-  findPrUrl
-} from './github'
+import { getPrStatus, getPrChecks, createPrWeb } from './github'
 import {
   getAuthStatus,
   claudeLogin,
@@ -41,10 +37,12 @@ import type {
 } from '@shared/types'
 import type { SessionManager } from './claude/manager'
 import type { ScriptRunner } from './scripts'
+import type { TerminalManager } from './terminal'
 
 interface IpcContext {
   sessions: SessionManager
   scripts: ScriptRunner
+  terminals: TerminalManager
   getWindow: () => BrowserWindow | null
 }
 
@@ -116,6 +114,7 @@ export function registerIpc(ctx: IpcContext): void {
     for (const ws of workspaces) {
       ctx.sessions.dispose(ws.id)
       ctx.scripts.disposeWorkspace(ws.id)
+      ctx.terminals.disposeWorkspace(ws.id)
       getTranscripts().remove(ws.id)
       if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, false)
     }
@@ -198,6 +197,7 @@ export function registerIpc(ctx: IpcContext): void {
 
     ctx.sessions.dispose(workspaceId)
     ctx.scripts.disposeWorkspace(workspaceId)
+    ctx.terminals.disposeWorkspace(workspaceId)
     // 아카이브 스크립트는 worktree 가 아직 살아 있을 때 실행한다.
     if (repo?.archiveScript.trim()) {
       await ctx.scripts.runOnce(repo.archiveScript, ws.worktreePath)
@@ -243,6 +243,7 @@ export function registerIpc(ctx: IpcContext): void {
 
       ctx.sessions.dispose(workspaceId)
       ctx.scripts.disposeWorkspace(workspaceId)
+      ctx.terminals.disposeWorkspace(workspaceId)
       getTranscripts().remove(workspaceId)
       if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, deleteBranch)
 
@@ -353,19 +354,8 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(IPC.prStatus, async (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws || ws.archived) return null
-
-    // 1) 대화 기록에서 에이전트가 남긴 PR URL 을 찾아 그 URL 로 조회 (브랜치명과 무관).
-    const slug = await repoSlug(ws.worktreePath).catch(() => null)
-    const transcript = getTranscripts().load(workspaceId)
-    const text = transcript.map((it) => ('text' in it ? it.text : '')).join('\n')
-    const prUrl = findPrUrl(text, slug)
-    if (prUrl) {
-      const byUrl = await getPrStatusByUrl(prUrl).catch(() => null)
-      if (byUrl) return byUrl
-    }
-
-    // 2) 폴백: 워크스페이스 브랜치명으로 (브랜치 == PR head 인 일반적인 경우).
-    return getPrStatusByBranch(ws.worktreePath, ws.branch).catch(() => null)
+    // worktree 의 현재 브랜치에 연결된 PR (gh 가 현재 브랜치로 자동 조회).
+    return getPrStatus(ws.worktreePath).catch(() => null)
   })
 
   ipcMain.handle(IPC.prCreate, async (_e, workspaceId: string): Promise<{ error?: string }> => {
@@ -376,8 +366,67 @@ export function registerIpc(ctx: IpcContext): void {
     }))
   })
 
+  // PR 의 CI 체크. prStatus 와 동일하게 worktree 의 현재 브랜치 PR 을 기준으로 한다.
+  ipcMain.handle(IPC.prChecks, async (_e, workspaceId: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return null
+    return getPrChecks(ws.worktreePath).catch(() => null)
+  })
+
   ipcMain.handle(IPC.openExternal, (_e, url: string) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
+  })
+
+  // ── 파일 브라우저 (All files 탭) ─────────────────────────────────────────
+
+  ipcMain.handle(IPC.fsList, (_e, workspaceId: string, relPath: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return []
+    return listDir(ws.worktreePath, relPath ?? '').catch(() => [])
+  })
+
+  ipcMain.handle(IPC.fsRead, (_e, workspaceId: string, relPath: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return null
+    return readFileInRoot(ws.worktreePath, relPath).catch(() => null)
+  })
+
+  // ── 슬래시 명령 목록 (입력창 자동완성) ───────────────────────────────────
+
+  ipcMain.handle(IPC.commandsList, (_e, workspaceId: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return []
+    return listSlashCommands(ws.worktreePath).catch(() => [])
+  })
+
+  // ── 인터랙티브 터미널 (worktree PTY) ─────────────────────────────────────
+
+  ipcMain.handle(
+    IPC.terminalStart,
+    (_e, workspaceId: string, cols: number, rows: number) => {
+      const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+      if (!ws || ws.archived) return
+      ctx.terminals.start(workspaceId, ws.worktreePath, cols, rows)
+    }
+  )
+
+  ipcMain.handle(IPC.terminalInput, (_e, workspaceId: string, data: string) => {
+    ctx.terminals.write(workspaceId, data)
+  })
+
+  ipcMain.handle(IPC.terminalResize, (_e, workspaceId: string, cols: number, rows: number) => {
+    ctx.terminals.resize(workspaceId, cols, rows)
+  })
+
+  ipcMain.handle(IPC.terminalKill, (_e, workspaceId: string) => {
+    ctx.terminals.disposeWorkspace(workspaceId)
+  })
+
+  // ── Dock 미확인 배지 ─────────────────────────────────────────────────────
+
+  ipcMain.handle(IPC.appSetBadge, (_e, count: number) => {
+    // macOS Dock 빨간 배지. 0 이면 자동으로 지워진다. (다른 OS 는 no-op)
+    app.setBadgeCount(Math.max(0, Math.floor(count)))
   })
 
   // ── 설정 ───────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ export default function EmptyState(): React.JSX.Element {
   const running = active.filter((w) => w.status === 'running').length
 
   return (
-    <div className="h-full grid place-items-center text-center px-8">
+    <div className="h-full w-full grid place-items-center text-center px-8">
       <div className="max-w-sm">
         <div className="mb-4 flex justify-center">
           <Logo size={56} />

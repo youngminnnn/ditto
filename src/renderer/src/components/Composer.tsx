@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
-import { Send, Square } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Send, Square, Terminal as TerminalIcon } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
-import type { ChatItem, Workspace } from '@shared/types'
+import type { ChatItem, SlashCommandInfo, Workspace } from '@shared/types'
 
 export default function Composer({ workspace }: { workspace: Workspace }): React.JSX.Element {
   // 초안은 store 에 보관해 workspace 전환에도 살아남는다(작성 중 메시지 분실 방지).
@@ -14,6 +14,11 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   const historyIdx = useRef(-1)
   const running = workspace.status === 'running'
 
+  // 슬래시 명령 자동완성: 명령 목록(워크스페이스당 1회 조회)과 메뉴 선택 인덱스.
+  const [commands, setCommands] = useState<SlashCommandInfo[] | null>(null)
+  const [loadingCommands, setLoadingCommands] = useState(false)
+  const [menuIdx, setMenuIdx] = useState(0)
+
   const setText = (v: string): void => setDraft(workspace.id, v)
 
   // textarea 높이 자동 조절.
@@ -24,6 +29,43 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
   }, [text])
 
+  // 입력이 "/명령이름" 단계(아직 공백 없음)인지. 이때만 자동완성 메뉴를 띄운다.
+  const slashQuery = useMemo(() => {
+    const m = /^\/(\S*)$/.exec(text)
+    return m ? m[1] : null
+  }, [text])
+
+  // 슬래시 모드 진입 시 명령 목록을 lazy 하게 조회한다.
+  useEffect(() => {
+    if (slashQuery === null || commands !== null || loadingCommands) return
+    setLoadingCommands(true)
+    void window.api.commands.list(workspace.id).then((list) => {
+      setCommands(list)
+      setLoadingCommands(false)
+    })
+  }, [slashQuery, commands, loadingCommands, workspace.id])
+
+  // 접두사 우선, 없으면 부분일치로 필터링. 접두사 매치를 위로 올린다.
+  const matches = useMemo(() => {
+    if (slashQuery === null || !commands) return []
+    const q = slashQuery.toLowerCase()
+    const scored = commands
+      .map((c) => {
+        const name = c.name.toLowerCase()
+        const rank = name.startsWith(q) ? 0 : name.includes(q) ? 1 : 2
+        return { c, rank }
+      })
+      .filter((x) => x.rank < 2)
+      .sort((a, b) => a.rank - b.rank || a.c.name.localeCompare(b.c.name))
+    return scored.map((x) => x.c)
+  }, [slashQuery, commands])
+
+  const menuOpen = slashQuery !== null && (loadingCommands || matches.length > 0)
+
+  useEffect(() => {
+    setMenuIdx(0)
+  }, [slashQuery])
+
   const send = (): void => {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -33,10 +75,45 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     historyIdx.current = -1
   }
 
+  /** 선택한 슬래시 명령을 입력창에 채운다(인자를 이어 쓸 수 있도록 공백을 붙이고 포커스 유지). */
+  const acceptCommand = (cmd: SlashCommandInfo): void => {
+    setText(`/${cmd.name} `)
+    historyIdx.current = -1
+    taRef.current?.focus()
+  }
+
   const userMessages = (): string[] =>
     items.filter((i): i is Extract<ChatItem, { type: 'user' }> => i.type === 'user').map((i) => i.text)
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    // 슬래시 메뉴가 열려 있으면 방향키/Enter/Tab 을 메뉴 조작에 먼저 쓴다.
+    if (menuOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        if (matches.length) setMenuIdx((i) => (i + 1) % matches.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (matches.length) setMenuIdx((i) => (i - 1 + matches.length) % matches.length)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        // 명령 입력을 비워 메뉴를 닫는다.
+        setText('')
+        return
+      }
+      if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing) {
+        const cmd = matches[menuIdx]
+        if (cmd) {
+          e.preventDefault()
+          acceptCommand(cmd)
+          return
+        }
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       send()
@@ -66,40 +143,51 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
 
   return (
     <div className="shrink-0 px-4 py-3 border-t border-[#1c1f25]">
-      <div className="max-w-3xl mx-auto flex items-end gap-2 bg-[#15171c] border border-[#23262d] rounded-xl px-3 py-2 focus-within:border-[#384050] transition-colors">
-        <textarea
-          ref={taRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            historyIdx.current = -1
-          }}
-          onKeyDown={onKeyDown}
-          rows={1}
-          placeholder={
-            running
-              ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
-              : 'Message Claude Code…  (Enter to send · Shift+Enter for newline)'
-          }
-          className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
-        />
-        {running && (
-          <button
-            onClick={() => void window.api.chat.interrupt(workspace.id)}
-            title="Stop the current turn"
-            className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
-          >
-            <Square size={15} fill="currentColor" />
-          </button>
+      <div className="max-w-3xl mx-auto relative">
+        {menuOpen && (
+          <SlashMenu
+            matches={matches}
+            loading={loadingCommands && matches.length === 0}
+            selectedIdx={menuIdx}
+            onHover={setMenuIdx}
+            onPick={acceptCommand}
+          />
         )}
-        <button
-          onClick={send}
-          disabled={!text.trim()}
-          title={running ? 'Queue message' : 'Send'}
-          className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[#23262d] disabled:text-neutral-600 hover:bg-blue-500"
-        >
-          <Send size={15} />
-        </button>
+        <div className="flex items-end gap-2 bg-[#15171c] border border-[#23262d] rounded-xl px-3 py-2 focus-within:border-[#384050] transition-colors">
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              historyIdx.current = -1
+            }}
+            onKeyDown={onKeyDown}
+            rows={1}
+            placeholder={
+              running
+                ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
+                : 'Message Claude Code…  (Enter to send · / for commands)'
+            }
+            className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
+          />
+          {running && (
+            <button
+              onClick={() => void window.api.chat.interrupt(workspace.id)}
+              title="Stop the current turn"
+              className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
+            >
+              <Square size={15} fill="currentColor" />
+            </button>
+          )}
+          <button
+            onClick={send}
+            disabled={!text.trim()}
+            title={running ? 'Queue message' : 'Send'}
+            className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[#23262d] disabled:text-neutral-600 hover:bg-blue-500"
+          >
+            <Send size={15} />
+          </button>
+        </div>
       </div>
       <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px]">
         {(() => {
@@ -115,6 +203,57 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           )
         })()}
       </div>
+    </div>
+  )
+}
+
+/** 입력창 위에 뜨는 슬래시 명령 자동완성 목록(Claude Code 스타일). */
+function SlashMenu({
+  matches,
+  loading,
+  selectedIdx,
+  onHover,
+  onPick
+}: {
+  matches: SlashCommandInfo[]
+  loading: boolean
+  selectedIdx: number
+  onHover: (idx: number) => void
+  onPick: (cmd: SlashCommandInfo) => void
+}): React.JSX.Element {
+  return (
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-72 overflow-y-auto rounded-xl border border-[#23262d] bg-[#101216] shadow-2xl py-1 z-20">
+      {loading ? (
+        <div className="px-3 py-2 text-[12px] text-neutral-500">Loading commands…</div>
+      ) : (
+        matches.map((cmd, i) => {
+          const active = i === selectedIdx
+          return (
+            <button
+              key={cmd.name}
+              onMouseEnter={() => onHover(i)}
+              onMouseDown={(e) => {
+                // textarea 가 blur 되지 않도록 기본 동작을 막고 직접 처리.
+                e.preventDefault()
+                onPick(cmd)
+              }}
+              className={
+                'w-full flex items-baseline gap-2 px-3 py-1.5 text-left ' +
+                (active ? 'bg-[#1b1f27]' : 'hover:bg-[#15171c]')
+              }
+            >
+              <TerminalIcon size={12} className="text-violet-400 shrink-0 translate-y-0.5" />
+              <span className="text-[12.5px] font-medium text-neutral-100 shrink-0">/{cmd.name}</span>
+              {cmd.argumentHint && (
+                <span className="text-[11px] text-neutral-500 shrink-0">{cmd.argumentHint}</span>
+              )}
+              {cmd.description && (
+                <span className="text-[11px] text-neutral-500 truncate">{cmd.description}</span>
+              )}
+            </button>
+          )
+        })
+      )}
     </div>
   )
 }

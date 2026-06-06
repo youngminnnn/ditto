@@ -224,6 +224,7 @@ export const IPC = {
   gitDiff: 'git:diff',
   prStatus: 'pr:status',
   prCreate: 'pr:create',
+  prChecks: 'pr:checks',
   openExternal: 'shell:openExternal',
   settingsUpdate: 'settings:update',
   authGetStatus: 'auth:getStatus',
@@ -231,6 +232,18 @@ export const IPC = {
   authClaudeLogout: 'auth:claudeLogout',
   authGithubLogin: 'auth:githubLogin',
   authGithubLogout: 'auth:githubLogout',
+  // 슬래시 명령 목록 (입력창 자동완성)
+  commandsList: 'commands:list',
+  // 파일 브라우저 (All files 탭)
+  fsList: 'fs:list',
+  fsRead: 'fs:read',
+  // 인터랙티브 터미널 (worktree PTY)
+  terminalStart: 'terminal:start',
+  terminalInput: 'terminal:input',
+  terminalResize: 'terminal:resize',
+  terminalKill: 'terminal:kill',
+  // Dock 미확인 배지
+  appSetBadge: 'app:setBadge',
 
   // 단방향 이벤트 (main.send → renderer.on)
   evtChat: 'evt:chat',
@@ -239,7 +252,11 @@ export const IPC = {
   evtScriptExit: 'evt:scriptExit',
   evtState: 'evt:state',
   /** OS 알림 클릭 등으로 특정 workspace 를 선택하도록 renderer 에 요청. */
-  evtSelectWorkspace: 'evt:selectWorkspace'
+  evtSelectWorkspace: 'evt:selectWorkspace',
+  /** 터미널 PTY 출력 스트림. */
+  evtTerminalData: 'evt:terminalData',
+  /** 터미널 PTY 종료. */
+  evtTerminalExit: 'evt:terminalExit'
 } as const
 
 // ── IPC 페이로드 타입 ────────────────────────────────────────────────────
@@ -282,8 +299,70 @@ export interface AuthStatus {
 export interface PrStatus {
   number: number
   url: string
+  /** PR 제목. workspace 표시 이름의 기본값으로 쓴다(없으면 workspace.name). */
+  title: string
   /** 표시용 라벨: Draft / Review required / Changes requested / Ready to merge / Open / Merged / Closed */
   label: string
+}
+
+// ── PR/CI 체크 상태 (Check 탭) ───────────────────────────────────────────
+
+export type PrCheckState = 'success' | 'failure' | 'pending' | 'skipped' | 'neutral'
+
+export interface PrCheck {
+  name: string
+  state: PrCheckState
+  /** 워크플로/체크 상세 페이지 URL (있으면). */
+  url?: string
+}
+
+export interface PrChecks {
+  prNumber: number
+  prUrl: string
+  checks: PrCheck[]
+}
+
+// ── 슬래시 명령 (입력창 자동완성) ─────────────────────────────────────────
+
+/** Claude Code 가 지원하는 슬래시 명령/스킬 1개 (/btw, /insights, 사용자 스킬 등). */
+export interface SlashCommandInfo {
+  /** 앞의 '/' 를 뺀 이름 */
+  name: string
+  description: string
+  /** 인자 힌트 (예: "<file>"). */
+  argumentHint?: string
+}
+
+// ── 파일 브라우저 (All files 탭) ──────────────────────────────────────────
+
+/** worktree 내 디렉토리 1개의 항목. path 는 worktree 루트 기준 상대 경로. */
+export interface DirEntry {
+  name: string
+  path: string
+  isDir: boolean
+}
+
+export interface FileContent {
+  path: string
+  text: string
+  /** maxBytes 초과로 잘렸으면 true. */
+  truncated: boolean
+  /** 바이너리(또는 표시 불가)면 본문 없이 true. */
+  binary: boolean
+}
+
+// ── 인터랙티브 터미널 (worktree PTY) ──────────────────────────────────────
+
+export interface TerminalDataEvent {
+  workspaceId: string
+  data: string
+  /** true 면 재부착 시 누적 버퍼 재생 — 수신 측은 화면을 비우고 data 로 다시 채운다. */
+  reset?: boolean
+}
+
+export interface TerminalExitEvent {
+  workspaceId: string
+  code: number | null
 }
 
 export interface ChatEnvelope {

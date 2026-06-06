@@ -54,6 +54,10 @@ interface UIState {
   scrollPositions: Record<string, number>
   /** workspace 별 스크립트 패널 열림 상태. */
   scriptPanelOpen: Record<string, boolean>
+  /** 우측 작업 패널(파일/변경/체크 + 터미널)의 너비(px). 세로 분할 드래그로 조절. */
+  rightWidth: number
+  /** 우하단 터미널이 우측 컬럼 높이에서 차지하는 비율(0~1). 기본 0.5. 가로 분할 드래그로 조절. */
+  terminalRatio: number
   toasts: Toast[]
   confirmState: ConfirmState | null
 
@@ -70,6 +74,8 @@ interface UIState {
   setDraft: (workspaceId: string, text: string) => void
   setScrollPosition: (workspaceId: string, top: number) => void
   setScriptPanelOpen: (workspaceId: string, open: boolean) => void
+  setRightWidth: (px: number) => void
+  setTerminalRatio: (ratio: number) => void
   pushToast: (kind: ToastKind, message: string) => void
   dismissToast: (id: string) => void
   confirm: (opts: ConfirmOptions) => Promise<boolean>
@@ -102,6 +108,8 @@ export const useStore = create<UIState>((set, get) => ({
   drafts: {},
   scrollPositions: {},
   scriptPanelOpen: {},
+  rightWidth: 460,
+  terminalRatio: 0.5,
   toasts: [],
   confirmState: null,
 
@@ -120,8 +128,26 @@ export const useStore = create<UIState>((set, get) => ({
       void get().selectWorkspace(workspaceId)
     })
 
-    // 창이 다시 활성화되면 인증 상태를 갱신한다(Terminal 로그인 완료 자동 반영).
-    window.addEventListener('focus', () => void get().refreshAuth())
+    // 창이 다시 활성화되면 인증 상태를 갱신하고(Terminal 로그인 완료 자동 반영),
+    // 지금 보고 있는 workspace 의 미확인 표시는 해제한다(사용자가 막 들여다봤으므로).
+    window.addEventListener('focus', () => {
+      void get().refreshAuth()
+      const s = get()
+      const sel = s.selectedWorkspaceId
+      if (sel && s.unread[sel]) {
+        const unread = { ...s.unread }
+        delete unread[sel]
+        set({ unread })
+      }
+    })
+
+    // 미확인 workspace 수를 macOS Dock 빨간 배지로 노출한다(선택/열람 시 자동 감소).
+    useStore.subscribe((state, prev) => {
+      if (state.unread !== prev.unread) {
+        const count = Object.values(state.unread).filter(Boolean).length
+        void window.api.app.setBadgeCount(count)
+      }
+    })
 
     window.api.onChat(({ workspaceId, event }: ChatEnvelope) => {
       const { transcripts } = get()
@@ -135,7 +161,9 @@ export const useStore = create<UIState>((set, get) => ({
         if (event.item.type === 'result') {
           const s = get()
           if (s.app?.settings.soundOnComplete) playNotification()
-          if (workspaceId !== s.selectedWorkspaceId) {
+          // 다른 workspace 의 완료, 또는 창이 비활성일 때 본 workspace 의 완료도 미확인으로 표시
+          // (자리를 비운 사이 끝난 작업을 Dock 배지·점프 버튼으로 알린다).
+          if (workspaceId !== s.selectedWorkspaceId || !document.hasFocus()) {
             set({ unread: { ...s.unread, [workspaceId]: true } })
           }
           void s.refreshGit(workspaceId)
@@ -276,6 +304,12 @@ export const useStore = create<UIState>((set, get) => ({
 
   setScriptPanelOpen: (workspaceId, open) =>
     set((s) => ({ scriptPanelOpen: { ...s.scriptPanelOpen, [workspaceId]: open } })),
+
+  // 우측 패널 너비 — 대화/터미널이 너무 좁아지지 않도록 양끝을 클램프한다.
+  setRightWidth: (px) => set({ rightWidth: Math.max(320, Math.min(900, Math.round(px))) }),
+
+  // 터미널 비율 — 패널/터미널 어느 쪽도 사라지지 않도록 0.15~0.85 로 클램프한다.
+  setTerminalRatio: (ratio) => set({ terminalRatio: Math.max(0.15, Math.min(0.85, ratio)) }),
 
   pushToast: (kind, message) => {
     const id = `toast:${++toastSeq}`

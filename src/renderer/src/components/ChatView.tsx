@@ -117,10 +117,10 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           ) : (
             <div
               className="text-[13px] font-semibold text-neutral-100 truncate cursor-text"
-              title="Double-click to rename"
+              title={pr?.title ? `${pr.title}\n(double-click to rename “${workspace.name}”)` : 'Double-click to rename'}
               onDoubleClick={() => setEditingName(workspace.name)}
             >
-              {workspace.name}
+              {pr?.title || workspace.name}
             </div>
           )}
           <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">

@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'node:path'
 import { SessionManager } from './claude/manager'
 import { ScriptRunner } from './scripts'
+import { TerminalManager } from './terminal'
 import { registerIpc } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
@@ -15,6 +16,7 @@ function dispatch(channel: string, payload: unknown): void {
 
 const sessions = new SessionManager(dispatch, () => mainWindow)
 const scripts = new ScriptRunner(dispatch)
+const terminals = new TerminalManager(dispatch)
 
 /**
  * 프로덕션에서만 엄격한 Content-Security-Policy 를 응답 헤더로 주입한다.
@@ -87,7 +89,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   applyContentSecurityPolicy()
-  registerIpc({ sessions, scripts, getWindow: () => mainWindow })
+  registerIpc({ sessions, scripts, terminals, getWindow: () => mainWindow })
   createWindow()
   console.log('[ditto] main ready')
 
@@ -103,4 +105,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   sessions.disposeAll()
   scripts.disposeAll()
+  terminals.disposeAll()
 })

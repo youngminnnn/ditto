@@ -1,18 +1,19 @@
 import { spawn } from 'node:child_process'
-import type { PrStatus } from '@shared/types'
+import type { PrCheck, PrCheckState, PrChecks, PrStatus } from '@shared/types'
 
 /**
  * GitHub PR 상태를 gh CLI 로 조회한다.
  *
- * workspace 브랜치명이 PR 의 head 브랜치와 다른 경우가 흔하다 — 에이전트가 별도 명명 규칙
- * (PFM-xxxx 등) 으로 새 브랜치를 만들어 PR 을 열기 때문. 그래서 우선 대화 기록에서 에이전트가
- * 남긴 PR URL 을 찾아 그 URL 로 조회하고(브랜치명 무관), 못 찾으면 워크스페이스 브랜치명으로
- * 폴백한다. gh 는 homebrew 경로라 GUI 앱 PATH 에 없으므로 로그인 셸로 실행한다.
+ * 조회 기준은 workspace worktree 의 "현재 브랜치" 다 — worktree cwd 에서 인자 없이
+ * `gh pr view` 를 실행하면 gh 가 현재 브랜치에 연결된 PR 을 찾아준다. 대화 기록에서 URL 을
+ * 긁는 방식은 무관한 PR(다른 리포·예전 PR)을 잘못 집을 수 있어 쓰지 않는다.
+ * gh 는 homebrew 경로라 GUI 앱 PATH 에 없으므로 로그인 셸로 실행한다.
  */
 
 interface GhPr {
   number: number
   url: string
+  title: string
   state: string // OPEN | CLOSED | MERGED
   isDraft: boolean
   reviewDecision: string // REVIEW_REQUIRED | CHANGES_REQUESTED | APPROVED | ''
@@ -50,27 +51,104 @@ function labelFor(pr: GhPr): string {
   }
 }
 
-/** branch 이름 또는 PR URL 로 상태를 조회한다. */
-async function queryPr(arg: string, cwd?: string): Promise<PrStatus | null> {
+/** worktree 의 현재 브랜치에 연결된 PR 상태를 조회한다(인자 없는 `gh pr view`). */
+export async function getPrStatus(worktreePath: string): Promise<PrStatus | null> {
   const { stdout, code } = await runLoginShell(
-    `gh pr view ${JSON.stringify(arg)} --json number,url,state,isDraft,reviewDecision`,
-    cwd
+    `gh pr view --json number,url,title,state,isDraft,reviewDecision`,
+    worktreePath
   )
   if (code !== 0) return null
   try {
     const pr = JSON.parse(stdout.trim()) as GhPr
-    return { number: pr.number, url: pr.url, label: labelFor(pr) }
+    return { number: pr.number, url: pr.url, title: pr.title ?? '', label: labelFor(pr) }
   } catch {
     return null
   }
 }
 
-export function getPrStatusByUrl(url: string): Promise<PrStatus | null> {
-  return queryPr(url)
+// ── PR/CI 체크 (Check 탭) ──────────────────────────────────────────────────
+
+/** GitHub statusCheckRollup 항목. CheckRun(워크플로) 과 StatusContext(레거시 status) 두 모양이 섞여 온다. */
+interface RollupItem {
+  __typename?: string
+  // CheckRun
+  name?: string
+  status?: string // QUEUED | IN_PROGRESS | COMPLETED | WAITING | PENDING | REQUESTED
+  conclusion?: string // SUCCESS | FAILURE | NEUTRAL | CANCELLED | SKIPPED | TIMED_OUT | ...
+  detailsUrl?: string
+  workflowName?: string
+  // StatusContext
+  context?: string
+  state?: string // SUCCESS | FAILURE | ERROR | PENDING | EXPECTED
+  targetUrl?: string
 }
 
-export function getPrStatusByBranch(worktreePath: string, branch: string): Promise<PrStatus | null> {
-  return queryPr(branch, worktreePath)
+function mapCheckRun(item: RollupItem): PrCheckState {
+  if (item.status && item.status !== 'COMPLETED') return 'pending'
+  switch (item.conclusion) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILURE':
+    case 'TIMED_OUT':
+    case 'STARTUP_FAILURE':
+    case 'ACTION_REQUIRED':
+      return 'failure'
+    case 'SKIPPED':
+      return 'skipped'
+    default:
+      return 'neutral'
+  }
+}
+
+function mapStatusContext(state: string | undefined): PrCheckState {
+  switch (state) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILURE':
+    case 'ERROR':
+      return 'failure'
+    case 'PENDING':
+    case 'EXPECTED':
+      return 'pending'
+    default:
+      return 'neutral'
+  }
+}
+
+function toCheck(item: RollupItem): PrCheck | null {
+  if (item.__typename === 'StatusContext') {
+    if (!item.context) return null
+    return { name: item.context, state: mapStatusContext(item.state), url: item.targetUrl || undefined }
+  }
+  // CheckRun (기본). name 앞에 워크플로명을 붙여 동명 잡(job)을 구분한다.
+  if (!item.name) return null
+  const label = item.workflowName ? `${item.workflowName} / ${item.name}` : item.name
+  return { name: label, state: mapCheckRun(item), url: item.detailsUrl || undefined }
+}
+
+/**
+ * worktree 의 현재 브랜치에 연결된 PR 의 CI 체크 롤업을 조회한다.
+ * `gh pr view --json statusCheckRollup` 한 번으로 PR 번호·URL·체크 목록을 함께 받는다.
+ */
+export async function getPrChecks(worktreePath: string): Promise<PrChecks | null> {
+  const { stdout, code } = await runLoginShell(
+    `gh pr view --json number,url,statusCheckRollup`,
+    worktreePath
+  )
+  if (code !== 0) return null
+  try {
+    const pr = JSON.parse(stdout.trim()) as {
+      number: number
+      url: string
+      statusCheckRollup?: RollupItem[]
+    }
+    const checks = (pr.statusCheckRollup ?? [])
+      .map(toCheck)
+      .filter((c): c is PrCheck => c !== null)
+    return { prNumber: pr.number, prUrl: pr.url, checks }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -86,23 +164,4 @@ export async function createPrWeb(worktreePath: string): Promise<{ error?: strin
     return { error: msg || 'Failed to open the PR creation page.' }
   }
   return {}
-}
-
-/** worktree origin 리모트에서 owner/repo 슬러그를 추출한다. */
-export async function repoSlug(worktreePath: string): Promise<string | null> {
-  const { stdout, code } = await runLoginShell('git remote get-url origin', worktreePath)
-  if (code !== 0) return null
-  const m = stdout.trim().match(/github\.com[:/]([^/]+\/[^/.\s]+?)(?:\.git)?$/)
-  return m ? m[1] : null
-}
-
-/** 텍스트에서 마지막 GitHub PR URL 을 찾는다. slug 가 주어지면 해당 리포의 PR 로 한정. */
-export function findPrUrl(text: string, slug: string | null): string | null {
-  const re = /https:\/\/github\.com\/([^/\s)]+\/[^/\s)]+)\/pull\/(\d+)/g
-  let last: string | null = null
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    if (!slug || m[1] === slug) last = `https://github.com/${m[1]}/pull/${m[2]}`
-  }
-  return last
 }

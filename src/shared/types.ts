@@ -255,6 +255,8 @@ export const IPC = {
   evtSelectWorkspace: 'evt:selectWorkspace',
   /** main 창이 포커스를 얻었을 때의 알림 — 보고 있는 workspace 의 미확인 표시 해제 트리거. */
   evtWindowFocus: 'evt:windowFocus',
+  /** main 창이 포커스를 잃었을 때의 알림 — 이후 완료를 미확인(Dock 배지)으로 잡는 신뢰 신호. */
+  evtWindowBlur: 'evt:windowBlur',
   /** 터미널 PTY 출력 스트림. */
   evtTerminalData: 'evt:terminalData',
   /** 터미널 PTY 종료. */

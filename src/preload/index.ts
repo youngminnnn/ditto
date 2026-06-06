@@ -104,7 +104,8 @@ const api: DittoApi = {
   onScriptExit: (cb) => subscribe(IPC.evtScriptExit, cb),
   onState: (cb) => subscribe(IPC.evtState, cb),
   onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb),
-  onWindowFocus: (cb) => subscribe(IPC.evtWindowFocus, () => cb())
+  onWindowFocus: (cb) => subscribe(IPC.evtWindowFocus, () => cb()),
+  onWindowBlur: (cb) => subscribe(IPC.evtWindowBlur, () => cb())
 }
 
 contextBridge.exposeInMainWorld('api', api)

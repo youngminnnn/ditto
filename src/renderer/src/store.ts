@@ -101,6 +101,10 @@ interface UIState {
 
 let initialized = false
 
+// 창 포커스 상태(완료를 미확인으로 잡을지 판단용). DOM 의 document.hasFocus() 는 Dock 클릭·앱
+// 전환 시 신뢰할 수 없어, main 의 권위 있는 focus/blur 이벤트로 갱신한다. 시작 시 포커스 가정.
+let windowFocused = true
+
 function upsertItem(items: ChatItem[], item: ChatItem): ChatItem[] {
   const idx = items.findIndex((i) => i.id === item.id)
   if (idx === -1) return [...items, item]
@@ -171,10 +175,20 @@ export const useStore = create<UIState>((set, get) => ({
     // 창이 다시 활성화되면 인증 상태를 갱신하고(Terminal 로그인 완료 자동 반영) 미확인 표시를 해제한다.
     // main 의 'focus' 이벤트가 신뢰 가능한 트리거이고, DOM 의 window 'focus' 는 보조로 함께 둔다
     // (Dock 클릭·앱 전환 시 DOM 이벤트가 누락되어 배지가 안 사라지던 문제를 막는다).
-    window.api.onWindowFocus(clearSelectedUnread)
+    window.api.onWindowFocus(() => {
+      windowFocused = true
+      clearSelectedUnread()
+    })
+    window.api.onWindowBlur(() => {
+      windowFocused = false
+    })
     window.addEventListener('focus', () => {
+      windowFocused = true
       void get().refreshAuth()
       clearSelectedUnread()
+    })
+    window.addEventListener('blur', () => {
+      windowFocused = false
     })
 
     // 미확인 workspace 수를 macOS Dock 빨간 배지로 노출한다(선택/열람 시 자동 감소).
@@ -199,7 +213,7 @@ export const useStore = create<UIState>((set, get) => ({
           if (s.app?.settings.soundOnComplete) playNotification()
           // 다른 workspace 의 완료, 또는 창이 비활성일 때 본 workspace 의 완료도 미확인으로 표시
           // (자리를 비운 사이 끝난 작업을 Dock 배지·점프 버튼으로 알린다).
-          if (workspaceId !== s.selectedWorkspaceId || !document.hasFocus()) {
+          if (workspaceId !== s.selectedWorkspaceId || !windowFocused) {
             set({ unread: { ...s.unread, [workspaceId]: true } })
           }
           void s.refreshGit(workspaceId)

@@ -135,4 +135,6 @@ export interface DittoApi {
   onSelectWorkspace(cb: (workspaceId: string) => void): () => void
   /** main 창이 포커스를 얻었을 때의 알림(미확인 표시 해제 트리거). */
   onWindowFocus(cb: () => void): () => void
+  /** main 창이 포커스를 잃었을 때의 알림(이후 완료를 미확인으로 잡는 신뢰 신호). */
+  onWindowBlur(cb: () => void): () => void
 }

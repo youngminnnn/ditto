@@ -8,7 +8,7 @@
 
 - **Repository** — git 리포를 연결한다(메인 체크아웃).
 - **Workspace** — 작업 1개 = 전용 git worktree + 브랜치 + Claude Code 세션 1개.
-  worktree 는 리포의 형제 디렉토리 `<repo>-worktrees/<branch>` 에 생성된다.
+  worktree 는 `~/ditto/workspaces/<repo>/<branch>` 에 생성된다.
 - 각 workspace 의 세션은 **독립적·병렬**로 실행된다. 한 workspace 에서 에이전트가
   돌아가는 동안 다른 workspace 를 열어 작업할 수 있다.
 - **Setup / Dev 스크립트** — 리포 단위로 지정(`npm install`, `npm run dev` 등). setup 은

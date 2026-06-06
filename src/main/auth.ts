@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import type { AuthStatus, ClaudeAuthStatus, GithubAuthStatus } from '@shared/types'
+import { log } from './logger'
 
 /**
  * Claude / GitHub CLI 연동 상태를 조회하고 로그인·로그아웃을 트리거한다.
@@ -20,7 +21,10 @@ function runLoginShell(
     let stderr = ''
     proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
     proc.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
-    proc.on('error', () => resolve({ stdout, stderr, code: 1 }))
+    proc.on('error', (err) => {
+      log.error(`auth: failed to spawn login shell (${shell})`, err)
+      resolve({ stdout, stderr, code: 1 })
+    })
     proc.on('close', (code) => resolve({ stdout, stderr, code }))
   })
 }
@@ -31,9 +35,22 @@ function openInTerminal(command: string): void {
   spawn('osascript', ['-e', script])
 }
 
+// 미탐지 진단을 명령당 1회만 남기기 위한 가드(인증 폴링이 짧은 주기로 반복 호출하므로).
+const diagnosed = new Set<string>()
+
 /** CLI 가 PATH 에 있는지 확인한다. 미설치와 "설치됐지만 미로그인"을 구분하기 위함이다. */
 async function isInstalled(command: 'claude' | 'gh'): Promise<boolean> {
   const { code } = await runLoginShell(`command -v ${command}`)
+
+  // 미탐지 시 진단 정보를 1회 기록한다 — GUI 로 띄운 앱의 PATH 에 CLI 가 안 잡혀
+  // "설치됐는데 미설치로 보이는" 흔한 사례를 로그로 가려내기 위함이다.
+  if (code !== 0 && !diagnosed.has(command)) {
+    diagnosed.add(command)
+    const shell = process.env.SHELL || '/bin/zsh'
+    const { stdout: path } = await runLoginShell('echo "$PATH"')
+    log.warn(`auth: ${command} not found via ${shell} -lc; PATH=${path.trim()}`)
+  }
+
   return code === 0
 }
 

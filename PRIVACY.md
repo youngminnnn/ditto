@@ -40,6 +40,7 @@ directory (`~/Library/Application Support/Ditto/`):
 - App settings (connected repositories, workspaces, preferences) — `ditto.json`
 - Conversation transcripts — `transcripts/*.jsonl`
 - Git worktrees created for your workspaces — `worktrees/`
+- Diagnostic logs (errors and CLI detection) — `logs/main.log`
 
 These files are not uploaded anywhere by Ditto. You can delete a workspace from
 within the app, or remove the user‑data directory to erase all local data.

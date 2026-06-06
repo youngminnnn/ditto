@@ -91,7 +91,8 @@ src/
 │   ├── fsutil.ts    # 원자적 파일 쓰기 (temp + rename)
 │   ├── git.ts       # worktree / 브랜치 / 상태
 │   ├── github.ts    # gh CLI 기반 PR 상태/생성
-│   ├── auth.ts      # claude/gh 설치·로그인 상태
+│   ├── auth.ts      # claude/gh 설치·로그인 상태 (미탐지 시 PATH 진단 로그)
+│   ├── logger.ts    # main 프로세스 파일 로깅 (userData/logs/main.log)
 │   ├── scripts.ts   # setup/dev 스크립트 실행기 (프로세스 그룹 종료)
 │   └── claude/
 │       ├── session.ts   # Agent SDK streaming-input 세션 래퍼
@@ -132,7 +133,7 @@ src/
      **공개 접근 가능한 실제 문서 URL**로 교체(private repo 링크는 일반 사용자가 못 본다).
    - 두 문서의 `Contact` 정보, `package.json` 의 `author` 등 메타데이터 채우기.
    - 약관/개인정보처리방침 법무 검토.
-4. **(선택)** universal(arm64 + x64) 빌드, 파일 로깅·CLI 미설치 진단 강화.
+4. **(선택)** universal(arm64 + x64) 빌드. (파일 로깅·CLI 미설치 진단은 적용 완료.)
 
 ## 라이선스
 

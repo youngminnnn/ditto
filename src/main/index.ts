@@ -5,8 +5,13 @@ import { SessionManager } from './claude/manager'
 import { ScriptRunner } from './scripts'
 import { TerminalManager } from './terminal'
 import { registerIpc } from './ipc'
+import { log } from './logger'
 
 let mainWindow: BrowserWindow | null = null
+
+// 배포 빌드는 콘솔이 보이지 않으므로, 처리되지 않은 오류를 파일 로그로 남겨 진단 가능하게 한다.
+process.on('uncaughtException', (err) => log.error('uncaughtException', err))
+process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason))
 
 /** 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용). */
 function dispatch(channel: string, payload: unknown): void {
@@ -65,7 +70,7 @@ function createWindow(): void {
   mainWindow.on('focus', () => mainWindow?.webContents.send(IPC.evtWindowFocus))
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
-    console.error(`[ditto] renderer load failed: ${code} ${desc}`)
+    log.error(`renderer load failed: ${code} ${desc}`)
   })
 
   // 외부 링크(window.open / target=_blank)는 기본 브라우저로.
@@ -96,7 +101,7 @@ app.whenReady().then(() => {
   applyContentSecurityPolicy()
   registerIpc({ sessions, scripts, terminals, getWindow: () => mainWindow })
   createWindow()
-  console.log('[ditto] main ready')
+  log.info('main ready')
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

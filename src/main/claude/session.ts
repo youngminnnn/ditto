@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Query, SDKMessage, SDKUserMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
+import { resolveClaudeExecutable } from './executable'
 import type {
   ChatItem,
   ChatEvent,
@@ -24,6 +25,10 @@ export interface SessionDeps {
 }
 
 type Block = { type: string; [k: string]: unknown }
+
+// 패키징 빌드에서 SDK 가 app.asar 안 경로로 CLI 를 spawn 해 ENOTDIR 로 실패하지 않도록,
+// app.asar.unpacked 의 실제 바이너리 경로를 1회 계산해 둔다(dev 에서는 null → SDK 기본값).
+const claudeExecutable = resolveClaudeExecutable()
 
 /**
  * 하나의 workspace 에 묶인 단일 Claude Code 세션.
@@ -93,6 +98,7 @@ export class ClaudeSession {
           cwd: this.deps.cwd,
           includePartialMessages: true,
           permissionMode: this.deps.permissionMode,
+          ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
           ...(this.deps.model ? { model: this.deps.model } : {}),
           // 이전 세션 ID 가 있으면 디스크에서 대화 맥락을 복원한다(과거 메시지는 재방출되지 않음).
           ...(this.deps.resumeSessionId ? { resume: this.deps.resumeSessionId } : {}),

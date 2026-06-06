@@ -19,6 +19,7 @@ import {
 } from './git'
 import { generateWorkspaceName } from './names'
 import { getPrStatus, getPrChecks, createPrWeb } from './github'
+import { log } from './logger'
 import {
   getAuthStatus,
   claudeLogin,
@@ -430,7 +431,10 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle(IPC.appSetBadge, (_e, count: number) => {
     // macOS Dock 빨간 배지. 0 이면 자동으로 지워진다. (다른 OS 는 no-op)
-    app.setBadgeCount(Math.max(0, Math.floor(count)))
+    const n = Math.max(0, Math.floor(count))
+    // 진단: 패키징 빌드에서 배지 미표시 원인(미호출 vs setBadgeCount 무효)을 로그로 가린다.
+    log.info(`badge: setBadgeCount(${n})`)
+    app.setBadgeCount(n)
   })
 
   // ── 설정 ───────────────────────────────────────────────────────────────

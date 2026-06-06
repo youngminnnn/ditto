@@ -59,4 +59,4 @@ continuing to use the app.
 
 ## Contact
 
-_TODO: add a contact address before public release._
+Questions about these terms can be sent to <youngmin3306@gmail.com>.

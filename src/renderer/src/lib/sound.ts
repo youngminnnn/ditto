@@ -1,8 +1,8 @@
 /**
  * 세션 응답 완료 알림음. 에셋 없이 Web Audio API 로 "ditto" 느낌의 2음 차임을 합성한다.
  *
- * "di-tto" 두 박을 살린 마림바 톤: 밝은 첫 음(A5) 뒤에 완전4도 아래(E5)가
- * 메아리처럼 작게 울려 "ditto = 반복" 의미와 발음의 하강 활음을 함께 표현한다.
+ * "di-tto" 두 박을 같은 F#5 로 짧게 두 번 울린다 — 밝은 첫 음 뒤에 같은 음이
+ * 메아리처럼 작게 이어져 "ditto = 반복" 을 표현한다.
  * 음색은 기본음 + 2·3배음을 더한 PeriodicWave 로 우드 말렛처럼 만든다.
  */
 let ctx: AudioContext | null = null
@@ -21,9 +21,9 @@ export function playNotification(): void {
     if (ctx.state === 'suspended') void ctx.resume()
     wave ??= marimbaWave(ctx)
     const now = ctx.currentTime
-    // di: 밝은 첫 음(A5). tto: 완전4도 아래(E5)가 0.7 배 크기의 echo 로 이어진다.
-    playTone(ctx, wave, 880, now, 0.18, 11, 0.2)
-    playTone(ctx, wave, 659, now + 0.17, 0.34, 7, 0.14)
+    // di: 밝은 첫 음(F#5). tto: 같은 F#5 가 더 작게(echo) 이어진다.
+    playTone(ctx, wave, 740, now, 0.18, 11, 0.2)
+    playTone(ctx, wave, 740, now + 0.13, 0.34, 7, 0.14)
   } catch {
     // 오디오 불가 환경은 조용히 무시.
   }

@@ -131,9 +131,7 @@ src/
 3. **배포 전 마무리** —
    - `PRIVACY.md`·`TERMS.md`·`OnboardingModal.tsx` 의 placeholder URL(`github.com/ditto-app/ditto`)을
      **공개 접근 가능한 실제 문서 URL**로 교체(private repo 링크는 일반 사용자가 못 본다).
-   - 두 문서의 `Contact` 정보, `package.json` 의 `author` 등 메타데이터 채우기.
    - 약관/개인정보처리방침 법무 검토.
-4. **(선택)** universal(arm64 + x64) 빌드. (파일 로깅·CLI 미설치 진단은 적용 완료.)
 
 ## 라이선스
 

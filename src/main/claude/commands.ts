@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
+import { resolveClaudeExecutable } from './executable'
 import type { SlashCommandInfo } from '@shared/types'
 
 /**
@@ -31,7 +32,13 @@ const FETCH_TIMEOUT_MS = 8000
 
 async function fetchCommands(cwd: string): Promise<SlashCommandInfo[]> {
   const input = new AsyncQueue<SDKUserMessage>()
-  const q = query({ prompt: input, options: { cwd } })
+  // session.ts 와 동일 — 패키징 빌드에서 app.asar 내부 경로로 CLI 를 spawn 해 ENOTDIR 로
+  // 실패하면 명령 목록이 빈 채로 와 자동완성이 안 뜨므로, unpacked 바이너리 경로를 명시한다.
+  const claudeExecutable = resolveClaudeExecutable()
+  const q = query({
+    prompt: input,
+    options: { cwd, ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}) }
+  })
   try {
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('supportedCommands timed out')), FETCH_TIMEOUT_MS)

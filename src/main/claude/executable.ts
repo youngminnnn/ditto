@@ -12,7 +12,15 @@ import { log } from '../logger'
  * 바이너리는 electron-builder 가 app.asar.unpacked 에 실제 파일로 풀어두므로, 그 경로를
  * 명시로 넘겨 우회한다. dev(asar 없음)에서는 null 을 돌려 SDK 기본값을 그대로 쓴다.
  */
+let cached: string | null | undefined
+
 export function resolveClaudeExecutable(): string | null {
+  if (cached !== undefined) return cached
+  cached = compute()
+  return cached
+}
+
+function compute(): string | null {
   if (!app.isPackaged) return null
 
   const pkg = `claude-agent-sdk-${process.platform}-${process.arch}`

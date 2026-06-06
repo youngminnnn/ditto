@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b1f27" />
+      <stop offset="1" stop-color="#0b0c0e" />
+    </linearGradient>
+    <linearGradient id="sym" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ea8fe" />
+      <stop offset="1" stop-color="#a78bfa" />
+    </linearGradient>
+  </defs>
+  <!-- macOS 아이콘 squircle 근사 배경 -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)" />
+  <!-- 겹쳐 쌓인 둥근 사각형 = 병렬 복제된 workspace (Logo 모티프) -->
+  <rect x="300" y="300" width="330" height="330" rx="96" fill="url(#sym)" opacity="0.35" />
+  <rect x="394" y="394" width="330" height="330" rx="96" fill="url(#sym)" />
+</svg>

@@ -27,7 +27,8 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": "dir"
+      "target": ["dmg", "zip"],
+      "icon": "build/icon.png"
     }
   },
   "devDependencies": {

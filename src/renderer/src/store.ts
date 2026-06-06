@@ -22,6 +22,14 @@ export interface Toast {
   message: string
 }
 
+/** 생성 중(아직 worktree 준비 전)인 workspace 의 사이드바 자리표시 행. 영속되지 않는 렌더러 전용 상태. */
+export interface PendingWorkspace {
+  id: string
+  repoId: string
+  /** 사용자가 입력한 이름. 자동 생성 모드면 빈 문자열(행에는 "Creating…" 만 표시). */
+  name: string
+}
+
 export interface ConfirmOptions {
   title: string
   body?: string
@@ -33,6 +41,7 @@ interface ConfirmState extends ConfirmOptions {
 }
 
 let toastSeq = 0
+let pendingSeq = 0
 
 interface UIState {
   ready: boolean
@@ -60,8 +69,16 @@ interface UIState {
   terminalRatio: number
   toasts: Toast[]
   confirmState: ConfirmState | null
+  /** 생성 중인 workspace 의 자리표시 행(repoId 로 사이드바에 배치). */
+  pending: PendingWorkspace[]
 
   init: () => Promise<void>
+  /** worktree 생성을 시작하고, 완료될 때까지 사이드바에 스피너 행을 즉시 띄운다. */
+  createWorkspace: (
+    repoId: string,
+    args?: { name?: string; baseBranch?: string },
+    displayName?: string
+  ) => Promise<void>
   selectWorkspace: (id: string | null) => Promise<void>
   refreshGit: (workspaceId: string) => Promise<void>
   refreshPr: (workspaceId: string) => Promise<void>
@@ -112,6 +129,7 @@ export const useStore = create<UIState>((set, get) => ({
   terminalRatio: 0.5,
   toasts: [],
   confirmState: null,
+  pending: [],
 
   init: async () => {
     if (initialized) return
@@ -223,6 +241,33 @@ export const useStore = create<UIState>((set, get) => ({
       })
       void get().refreshScriptStatus(workspaceId)
     })
+  },
+
+  createWorkspace: async (repoId, args, displayName) => {
+    // worktree 체크아웃(git)은 큰 리포에서 수 초가 걸리므로, 먼저 자리표시 행을 띄워
+    // 즉각적인 피드백을 주고 git 은 그동안 백그라운드로 진행한다. 완료 시 실제 행으로 교체된다.
+    const placeholderId = `pending:${++pendingSeq}`
+    set((s) => ({ pending: [...s.pending, { id: placeholderId, repoId, name: displayName ?? '' }] }))
+
+    let res: { workspaceId?: string; name?: string; branch?: string; error?: string }
+    try {
+      res = await window.api.workspace.create({ repoId, ...args })
+    } catch (err) {
+      res = { error: err instanceof Error ? err.message : String(err) }
+    }
+
+    set((s) => ({ pending: s.pending.filter((p) => p.id !== placeholderId) }))
+
+    if (res.error) {
+      get().pushToast('error', res.error)
+      return
+    }
+    if (res.workspaceId) {
+      void get().selectWorkspace(res.workspaceId)
+      if (res.name && res.branch) {
+        get().pushToast('success', `Created workspace “${res.name}” on ${res.branch}`)
+      }
+    }
   },
 
   selectWorkspace: async (id) => {

@@ -97,19 +97,13 @@ export default function App(): React.JSX.Element {
   const needsOnboarding = !app.settings.onboarded
 
   // 새 workspace 만들기: 수동 설정이면 모달, 아니면 즉시 자동 생성.
-  const handleNewWorkspace = async (repoId: string): Promise<void> => {
+  // 자동 생성은 사이드바에 스피너 행을 바로 띄우고 worktree 준비는 백그라운드로 진행한다.
+  const handleNewWorkspace = (repoId: string): void => {
     if (app.settings.manualWorkspaceSetup) {
       setNewWsRepoId(repoId)
       return
     }
-    const res = await window.api.workspace.create({ repoId })
-    const st = useStore.getState()
-    if (res.error) st.pushToast('error', res.error)
-    else if (res.workspaceId) {
-      void st.selectWorkspace(res.workspaceId)
-      const ws = (await window.api.getState()).workspaces.find((w) => w.id === res.workspaceId)
-      if (ws) st.pushToast('success', `Created workspace “${ws.name}” on ${ws.branch}`)
-    }
+    void useStore.getState().createWorkspace(repoId)
   }
 
   return (

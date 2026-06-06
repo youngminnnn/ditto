@@ -15,8 +15,6 @@ export default function NewWorkspaceModal({
   const [name, setName] = useState('')
   const [branches, setBranches] = useState<string[]>([repo.defaultBranch])
   const [base, setBase] = useState(repo.defaultBranch)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     void window.api.repo.listBranches(repoId).then((list) => {
@@ -27,17 +25,11 @@ export default function NewWorkspaceModal({
     })
   }, [repoId])
 
-  const create = async (): Promise<void> => {
-    if (!name.trim() || busy) return
-    setBusy(true)
-    setError(null)
-    const res = await window.api.workspace.create({ repoId, name: name.trim(), baseBranch: base })
-    setBusy(false)
-    if (res.error) {
-      setError(res.error)
-      return
-    }
-    if (res.workspaceId) void useStore.getState().selectWorkspace(res.workspaceId)
+  // 닫고 즉시 사이드바에 스피너 행을 띄운다(worktree 준비는 백그라운드). 실패는 토스트로 알린다.
+  const create = (): void => {
+    if (!name.trim()) return
+    const trimmed = name.trim()
+    void useStore.getState().createWorkspace(repoId, { name: trimmed, baseBranch: base }, trimmed)
     onClose()
   }
 
@@ -50,8 +42,8 @@ export default function NewWorkspaceModal({
           <button className={ghostBtn} onClick={onClose}>
             Cancel
           </button>
-          <button className={primaryBtn} onClick={create} disabled={!name.trim() || busy}>
-            {busy ? 'Creating…' : 'Create'}
+          <button className={primaryBtn} onClick={create} disabled={!name.trim()}>
+            Create
           </button>
         </>
       }
@@ -88,12 +80,6 @@ export default function NewWorkspaceModal({
             ))}
           </select>
         </div>
-
-        {error && (
-          <p className="text-[12px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 whitespace-pre-wrap">
-            {error}
-          </p>
-        )}
       </div>
     </Modal>
   )

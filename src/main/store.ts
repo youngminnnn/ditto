@@ -137,10 +137,9 @@ class Store {
   }
 
   /** mutator 로 state 를 변경하고 즉시 디스크에 기록한다. */
-  update(mutate: (state: AppState) => void): AppState {
+  update(mutate: (state: AppState) => void): void {
     mutate(this.state)
     this.persist()
-    return this.getState()
   }
 }
 

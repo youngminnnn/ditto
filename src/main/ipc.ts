@@ -135,7 +135,10 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle(
     IPC.workspaceCreate,
-    async (_e, args: CreateWorkspaceArgs): Promise<{ workspaceId?: string; error?: string }> => {
+    async (
+      _e,
+      args: CreateWorkspaceArgs
+    ): Promise<{ workspaceId?: string; name?: string; branch?: string; error?: string }> => {
       const repo = repoFor(args.repoId)
       if (!repo) return { error: 'Repository not found.' }
 
@@ -184,7 +187,8 @@ export function registerIpc(ctx: IpcContext): void {
         ctx.scripts.run(id, 'setup', repo.setupScript, worktreePath)
       }
 
-      return { workspaceId: id }
+      // name·branch 를 함께 반환해 호출 측이 별도 getState 왕복 없이 토스트를 만들 수 있게 한다.
+      return { workspaceId: id, name: rawName, branch }
     }
   )
 

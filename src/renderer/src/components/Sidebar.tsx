@@ -22,6 +22,7 @@ export default function Sidebar({
   onConfigRepo: (repoId: string) => void
 }): React.JSX.Element {
   const app = useStore((s) => s.app)!
+  const pending = useStore((s) => s.pending)
   const pushToast = useStore((s) => s.pushToast)
 
   const addRepo = async (): Promise<void> => {
@@ -57,6 +58,7 @@ export default function Sidebar({
           const all = app.workspaces.filter((w) => w.repoId === repo.id)
           const active = all.filter((w) => !w.archived)
           const archived = all.filter((w) => w.archived)
+          const repoPending = pending.filter((p) => p.repoId === repo.id)
           const runningCount = active.filter((w) => w.status === 'running').length
           return (
             <div key={repo.id} className="mb-3">
@@ -94,11 +96,14 @@ export default function Sidebar({
               </div>
 
               <div className="mt-0.5 space-y-0.5">
-                {active.length === 0 && (
+                {active.length === 0 && repoPending.length === 0 && (
                   <p className="px-3 py-1 text-[11px] text-neutral-600">No workspaces</p>
                 )}
                 {active.map((ws) => (
                   <WorkspaceRow key={ws.id} workspace={ws} />
+                ))}
+                {repoPending.map((p) => (
+                  <PendingRow key={p.id} name={p.name} />
                 ))}
               </div>
 
@@ -189,6 +194,19 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
       >
         <Archive size={13} />
       </button>
+    </div>
+  )
+}
+
+/** worktree 생성이 끝날 때까지 보여주는 비활성 자리표시 행. 완료되면 실제 WorkspaceRow 로 교체된다. */
+function PendingRow({ name }: { name: string }): React.JSX.Element {
+  return (
+    <div className="w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left opacity-70 select-none">
+      <Loader2 size={13} className="text-blue-400 animate-spin shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-[12.5px] text-neutral-300">{name || 'Creating…'}</div>
+        <div className="text-[10.5px] text-neutral-500 truncate">Setting up worktree…</div>
+      </div>
     </div>
   )
 }

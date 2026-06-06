@@ -42,7 +42,9 @@ export interface DittoApi {
   }
 
   workspace: {
-    create(args: CreateWorkspaceArgs): Promise<{ workspaceId?: string; error?: string }>
+    create(
+      args: CreateWorkspaceArgs
+    ): Promise<{ workspaceId?: string; name?: string; branch?: string; error?: string }>
     archive(workspaceId: string): Promise<void>
     unarchive(workspaceId: string): Promise<{ error?: string }>
     remove(workspaceId: string, deleteBranch: boolean): Promise<void>

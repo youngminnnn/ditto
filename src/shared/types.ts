@@ -253,6 +253,8 @@ export const IPC = {
   evtState: 'evt:state',
   /** OS 알림 클릭 등으로 특정 workspace 를 선택하도록 renderer 에 요청. */
   evtSelectWorkspace: 'evt:selectWorkspace',
+  /** main 창이 포커스를 얻었을 때의 알림 — 보고 있는 workspace 의 미확인 표시 해제 트리거. */
+  evtWindowFocus: 'evt:windowFocus',
   /** 터미널 PTY 출력 스트림. */
   evtTerminalData: 'evt:terminalData',
   /** 터미널 PTY 종료. */

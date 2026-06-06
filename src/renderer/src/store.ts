@@ -139,17 +139,26 @@ export const useStore = create<UIState>((set, get) => ({
     set({ app, ready: true })
     void get().refreshAuth()
 
-    window.api.onState((next) => set({ app: next }))
+    window.api.onState((next) => {
+      // 삭제·아카이브된 workspace 의 미확인 표시가 Dock 배지에 남지 않도록 정리한다
+      // (배지 카운트는 unread 변화에만 반응하므로, 사라진 workspace 의 항목을 여기서 제거해야 0 으로 떨어진다).
+      set((s) => {
+        const live = new Set(next.workspaces.filter((w) => !w.archived).map((w) => w.id))
+        const stale = Object.keys(s.unread).filter((id) => s.unread[id] && !live.has(id))
+        if (!stale.length) return { app: next }
+        const unread = { ...s.unread }
+        for (const id of stale) delete unread[id]
+        return { app: next, unread }
+      })
+    })
 
     // OS 알림 클릭 등으로 main 이 요청한 workspace 선택.
     window.api.onSelectWorkspace((workspaceId) => {
       void get().selectWorkspace(workspaceId)
     })
 
-    // 창이 다시 활성화되면 인증 상태를 갱신하고(Terminal 로그인 완료 자동 반영),
-    // 지금 보고 있는 workspace 의 미확인 표시는 해제한다(사용자가 막 들여다봤으므로).
-    window.addEventListener('focus', () => {
-      void get().refreshAuth()
+    // 지금 보고 있는 workspace 의 미확인 표시를 해제한다(사용자가 막 들여다봤으므로).
+    const clearSelectedUnread = (): void => {
       const s = get()
       const sel = s.selectedWorkspaceId
       if (sel && s.unread[sel]) {
@@ -157,6 +166,15 @@ export const useStore = create<UIState>((set, get) => ({
         delete unread[sel]
         set({ unread })
       }
+    }
+
+    // 창이 다시 활성화되면 인증 상태를 갱신하고(Terminal 로그인 완료 자동 반영) 미확인 표시를 해제한다.
+    // main 의 'focus' 이벤트가 신뢰 가능한 트리거이고, DOM 의 window 'focus' 는 보조로 함께 둔다
+    // (Dock 클릭·앱 전환 시 DOM 이벤트가 누락되어 배지가 안 사라지던 문제를 막는다).
+    window.api.onWindowFocus(clearSelectedUnread)
+    window.addEventListener('focus', () => {
+      void get().refreshAuth()
+      clearSelectedUnread()
     })
 
     // 미확인 workspace 수를 macOS Dock 빨간 배지로 노출한다(선택/열람 시 자동 감소).

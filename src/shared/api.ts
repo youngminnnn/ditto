@@ -133,4 +133,6 @@ export interface DittoApi {
   onState(cb: (state: AppState) => void): () => void
   /** OS 알림 클릭 시 main 이 보내는 workspace 선택 요청. */
   onSelectWorkspace(cb: (workspaceId: string) => void): () => void
+  /** main 창이 포커스를 얻었을 때의 알림(미확인 표시 해제 트리거). */
+  onWindowFocus(cb: () => void): () => void
 }

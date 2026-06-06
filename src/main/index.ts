@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'node:path'
+import { IPC } from '@shared/types'
 import { SessionManager } from './claude/manager'
 import { ScriptRunner } from './scripts'
 import { TerminalManager } from './terminal'
@@ -58,6 +59,10 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+
+  // 창이 포커스를 얻으면 renderer 가 보고 있는 workspace 의 미확인 표시를 해제하도록 알린다.
+  // DOM 의 window 'focus' 는 Dock 클릭·앱 전환 시 누락될 수 있어, main 의 신뢰 가능한 이벤트로 보완한다.
+  mainWindow.on('focus', () => mainWindow?.webContents.send(IPC.evtWindowFocus))
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
     console.error(`[ditto] renderer load failed: ${code} ${desc}`)

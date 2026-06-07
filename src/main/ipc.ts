@@ -19,7 +19,6 @@ import {
 } from './git'
 import { generateWorkspaceName } from './names'
 import { getPrStatus, getPrChecks, createPrWeb } from './github'
-import { log } from './logger'
 import {
   getAuthStatus,
   claudeLogin,
@@ -430,11 +429,11 @@ export function registerIpc(ctx: IpcContext): void {
   // ── Dock 미확인 배지 ─────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.appSetBadge, (_e, count: number) => {
-    // macOS Dock 빨간 배지. 0 이면 자동으로 지워진다. (다른 OS 는 no-op)
+    // 설치 빌드에서 app.setBadgeCount 는 Dock 배지를 그리지 않는 것으로 확인돼(실험: 같은
+    // 시점에 app.dock.setBadge 는 보이고 setBadgeCount 는 안 보임), NSDockTile 라벨을 직접
+    // 세팅한다. 0 이면 빈 문자열로 지운다. dock 은 macOS 전용이라 다른 OS 는 no-op.
     const n = Math.max(0, Math.floor(count))
-    // 진단: 패키징 빌드에서 배지 미표시 원인(미호출 vs setBadgeCount 무효)을 로그로 가린다.
-    log.info(`badge: setBadgeCount(${n})`)
-    app.setBadgeCount(n)
+    app.dock?.setBadge(n > 0 ? String(n) : '')
   })
 
   // ── 설정 ───────────────────────────────────────────────────────────────

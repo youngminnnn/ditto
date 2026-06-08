@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import type { PrCheck, PrCheckState, PrChecks, PrStatus } from '@shared/types'
+import type { PrCheck, PrCheckState, PrChecks, PrState, PrStatus } from '@shared/types'
 
 /**
  * GitHub PR 상태를 gh CLI 로 조회한다.
@@ -17,6 +17,7 @@ interface GhPr {
   state: string // OPEN | CLOSED | MERGED
   isDraft: boolean
   reviewDecision: string // REVIEW_REQUIRED | CHANGES_REQUESTED | APPROVED | ''
+  mergeable: string // MERGEABLE | CONFLICTING | UNKNOWN
 }
 
 function runLoginShell(
@@ -43,32 +44,51 @@ function runLoginShell(
   })
 }
 
-function labelFor(pr: GhPr): string {
-  if (pr.state === 'MERGED') return 'Merged'
-  if (pr.state === 'CLOSED') return 'Closed'
-  if (pr.isDraft) return 'Draft'
+/**
+ * PR 의 세분화된 상태를 도출한다.
+ * 종결 상태(merged/closed) → draft 순으로 먼저 거르고, 열린 PR 중에서는 병합 충돌을
+ * 리뷰 결정보다 우선한다 — 충돌은 리뷰 승인 여부와 무관하게 병합을 막는 실행 차단 요인이라
+ * 가장 먼저 드러나야 한다.
+ */
+function stateFor(pr: GhPr): PrState {
+  if (pr.state === 'MERGED') return 'merged'
+  if (pr.state === 'CLOSED') return 'closed'
+  if (pr.isDraft) return 'draft'
+  if (pr.mergeable === 'CONFLICTING') return 'conflict'
   switch (pr.reviewDecision) {
     case 'REVIEW_REQUIRED':
-      return 'Review required'
+      return 'review_required'
     case 'CHANGES_REQUESTED':
-      return 'Changes requested'
+      return 'changes_requested'
     case 'APPROVED':
-      return 'Ready to merge'
+      return 'approved'
     default:
-      return 'Open'
+      return 'open'
   }
+}
+
+const PR_LABELS: Record<PrState, string> = {
+  draft: 'Draft',
+  review_required: 'Review required',
+  changes_requested: 'Changes requested',
+  approved: 'Ready to merge',
+  conflict: 'Conflict',
+  open: 'Open',
+  merged: 'Merged',
+  closed: 'Closed'
 }
 
 /** worktree 의 현재 브랜치에 연결된 PR 상태를 조회한다(인자 없는 `gh pr view`). */
 export async function getPrStatus(worktreePath: string): Promise<PrStatus | null> {
   const { stdout, code } = await runLoginShell(
-    `gh pr view --json number,url,title,state,isDraft,reviewDecision`,
+    `gh pr view --json number,url,title,state,isDraft,reviewDecision,mergeable`,
     worktreePath
   )
   if (code !== 0) return null
   try {
     const pr = JSON.parse(stdout.trim()) as GhPr
-    return { number: pr.number, url: pr.url, title: pr.title ?? '', label: labelFor(pr) }
+    const state = stateFor(pr)
+    return { number: pr.number, url: pr.url, title: pr.title ?? '', state, label: PR_LABELS[state] }
   } catch {
     return null
   }

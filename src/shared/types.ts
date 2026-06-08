@@ -300,12 +300,28 @@ export interface AuthStatus {
 
 // ── GitHub PR 상태 (workspace 브랜치 기준) ───────────────────────────────
 
+/**
+ * PR 의 진행 상태. open 을 review_required/changes_requested/approved/conflict 로 세분화해
+ * 렌더러가 상태별 색·아이콘을 매핑할 수 있게 한다(label 문자열 파싱 대신 이 값으로 분기).
+ */
+export type PrState =
+  | 'draft'
+  | 'review_required'
+  | 'changes_requested'
+  | 'approved'
+  | 'conflict'
+  | 'open'
+  | 'merged'
+  | 'closed'
+
 export interface PrStatus {
   number: number
   url: string
   /** PR 제목. workspace 표시 이름의 기본값으로 쓴다(없으면 workspace.name). */
   title: string
-  /** 표시용 라벨: Draft / Review required / Changes requested / Ready to merge / Open / Merged / Closed */
+  /** 구조화된 상태값. 색·아이콘 매핑의 단일 출처. */
+  state: PrState
+  /** 표시용 라벨: Draft / Review required / Changes requested / Ready to merge / Conflict / Open / Merged / Closed */
   label: string
 }
 

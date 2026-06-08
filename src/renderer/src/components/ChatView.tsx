@@ -9,9 +9,17 @@ import {
   Cpu,
   GitPullRequest,
   GitPullRequestCreate,
+  GitPullRequestDraft,
+  GitPullRequestClosed,
+  GitMerge,
+  GitMergeConflict,
+  CircleCheck,
+  MessageSquareWarning,
+  Clock,
   ExternalLink,
   BellDot,
-  ShieldQuestion
+  ShieldQuestion,
+  type LucideIcon
 } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
@@ -22,7 +30,54 @@ import Composer from './Composer'
 import ScriptPanel from './ScriptPanel'
 import PermissionPrompt from './PermissionPrompt'
 import DiffModal from './DiffModal'
-import type { ChatItem, PermissionMode, Workspace } from '@shared/types'
+import type { ChatItem, PermissionMode, PrState, Workspace } from '@shared/types'
+
+/**
+ * PR 상태별 아이콘 + 색. Tailwind v4 는 동적으로 조합한 클래스명을 스캔하지 못하므로
+ * 상태마다 전체 클래스 문자열을 그대로 둔다(보간 금지).
+ */
+const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClass: string }> = {
+  draft: {
+    Icon: GitPullRequestDraft,
+    iconClass: 'text-neutral-400',
+    badgeClass: 'border-[#2a2e36] bg-[#15171c] text-neutral-300 hover:border-neutral-500'
+  },
+  review_required: {
+    Icon: Clock,
+    iconClass: 'text-amber-400',
+    badgeClass: 'border-amber-500/30 bg-amber-500/10 text-amber-200 hover:border-amber-500/60'
+  },
+  changes_requested: {
+    Icon: MessageSquareWarning,
+    iconClass: 'text-orange-400',
+    badgeClass: 'border-orange-500/30 bg-orange-500/10 text-orange-200 hover:border-orange-500/60'
+  },
+  approved: {
+    Icon: CircleCheck,
+    iconClass: 'text-emerald-400',
+    badgeClass: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/60'
+  },
+  conflict: {
+    Icon: GitMergeConflict,
+    iconClass: 'text-red-400',
+    badgeClass: 'border-red-500/30 bg-red-500/10 text-red-200 hover:border-red-500/60'
+  },
+  open: {
+    Icon: GitPullRequest,
+    iconClass: 'text-violet-400',
+    badgeClass: 'border-violet-500/30 bg-violet-500/10 text-violet-200 hover:border-violet-500/60'
+  },
+  merged: {
+    Icon: GitMerge,
+    iconClass: 'text-purple-400',
+    badgeClass: 'border-purple-500/30 bg-purple-500/10 text-purple-200 hover:border-purple-500/60'
+  },
+  closed: {
+    Icon: GitPullRequestClosed,
+    iconClass: 'text-neutral-500',
+    badgeClass: 'border-[#2a2e36] bg-[#15171c] text-neutral-400 hover:border-neutral-500'
+  }
+}
 
 export default function ChatView({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const showScripts = useStore((s) => s.scriptPanelOpen[workspace.id] ?? false)
@@ -154,31 +209,6 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
         <div className="flex-1" />
 
-        {pr ? (
-          <button
-            onClick={() => void window.api.openExternal(pr.url)}
-            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[#15171c] border border-[#23262d] text-neutral-300 hover:border-[#384050]"
-            title="Open pull request in browser"
-          >
-            <GitPullRequest size={12} className="text-violet-400" />
-            <span className="text-neutral-400">#{pr.number}</span>
-            <span>{pr.label}</span>
-            <ExternalLink size={10} className="text-neutral-500" />
-          </button>
-        ) : (
-          git &&
-          git.ahead > 0 && (
-            <button
-              onClick={createPr}
-              className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[#15171c] border border-[#23262d] text-neutral-300 hover:border-[#384050]"
-              title="Open a pull request for this branch"
-            >
-              <GitPullRequestCreate size={12} className="text-violet-400" />
-              Create PR
-            </button>
-          )
-        )}
-
         <span className="flex items-center gap-1 text-[11px] text-neutral-500 pl-1" title="Model for new turns">
           <Cpu size={12} />
         </span>
@@ -225,6 +255,40 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
         <HeaderButton title="Archive workspace" onClick={archiveWorkspace} danger>
           <Archive size={15} />
         </HeaderButton>
+
+        {/* PR 상태 + 링크: 헤더 우측 끝. 상태별 색·아이콘으로 한눈에 구분. */}
+        {(pr || (git && git.ahead > 0)) && (
+          <div className="flex items-center pl-2 ml-0.5 border-l border-[#1c1f25]">
+            {pr ? (
+              (() => {
+                const { Icon, iconClass, badgeClass } = PR_STYLE[pr.state]
+                return (
+                  <button
+                    onClick={() => void window.api.openExternal(pr.url)}
+                    className={
+                      'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border ' + badgeClass
+                    }
+                    title={`${pr.label} — open pull request #${pr.number} in browser`}
+                  >
+                    <Icon size={12} className={iconClass} />
+                    <span className="opacity-60">#{pr.number}</span>
+                    <span className="font-medium">{pr.label}</span>
+                    <ExternalLink size={10} className="opacity-50" />
+                  </button>
+                )
+              })()
+            ) : (
+              <button
+                onClick={createPr}
+                className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[#15171c] border border-[#23262d] text-neutral-300 hover:border-[#384050]"
+                title="Open a pull request for this branch"
+              >
+                <GitPullRequestCreate size={12} className="text-violet-400" />
+                Create PR
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 대화 */}

@@ -135,7 +135,16 @@ export interface PermissionRequest {
 }
 
 export type PermissionDecision =
-  | { behavior: 'allow'; rememberForSession?: boolean }
+  | {
+      behavior: 'allow'
+      rememberForSession?: boolean
+      /**
+       * 도구 입력에 합쳐 SDK 로 되돌려줄 값. AskUserQuestion 처럼 사용자의 응답을
+       * 입력에 주입해야 하는 도구에서 사용한다(예: { answers: { 질문: 선택 } }).
+       * 없으면 원래 입력을 그대로 사용한다.
+       */
+      updatedInput?: Record<string, unknown>
+    }
   | { behavior: 'deny' }
 
 // ── 스크립트 실행 (setup / dev) ──────────────────────────────────────────
@@ -252,6 +261,8 @@ export const IPC = {
   /** /btw 사이드 질문의 진행 상태(시작/타이핑/완료/오류). 트랜스크립트와 분리된 임시 스트림. */
   evtSideQuestion: 'evt:sideQuestion',
   evtPermission: 'evt:permission',
+  /** 응답받지 못한 채 무효가 된 권한 요청(세션 dispose 등) — renderer 가 해당 프롬프트를 제거. */
+  evtPermissionCancel: 'evt:permissionCancel',
   evtScriptOutput: 'evt:scriptOutput',
   evtScriptExit: 'evt:scriptExit',
   evtState: 'evt:state',

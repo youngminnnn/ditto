@@ -103,6 +103,7 @@ const api: DittoApi = {
   onChat: (cb) => subscribe(IPC.evtChat, cb),
   onSideQuestion: (cb) => subscribe(IPC.evtSideQuestion, cb),
   onPermission: (cb) => subscribe(IPC.evtPermission, cb),
+  onPermissionCancel: (cb) => subscribe(IPC.evtPermissionCancel, cb),
   onScriptOutput: (cb) => subscribe(IPC.evtScriptOutput, cb),
   onScriptExit: (cb) => subscribe(IPC.evtScriptExit, cb),
   onState: (cb) => subscribe(IPC.evtState, cb),

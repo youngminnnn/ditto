@@ -24,7 +24,12 @@ type Dispatch = (channel: string, payload: unknown) => void
  */
 export class SessionManager {
   private sessions = new Map<string, ClaudeSession>()
-  private pendingPermissions = new Map<string, (d: PermissionDecision) => void>()
+  // requestId → 해당 요청을 띄운 workspace + 응답 resolver. workspace 단위로 dispose 할 때
+  // 그 세션이 기다리던 요청만 골라 풀어 주기 위해 workspaceId 를 함께 들고 있는다.
+  private pendingPermissions = new Map<
+    string,
+    { workspaceId: string; resolve: (d: PermissionDecision) => void }
+  >()
 
   constructor(
     private dispatch: Dispatch,
@@ -128,20 +133,29 @@ export class SessionManager {
       session.dispose()
       this.sessions.delete(workspaceId)
     }
+
+    // 세션이 사라지면 그 세션이 기다리던 권한 요청은 응답받을 수 없으므로, deny 로 풀어
+    // 메인측 Promise 누수를 막고 renderer 의 stale 프롬프트도 제거한다.
+    for (const [requestId, entry] of this.pendingPermissions) {
+      if (entry.workspaceId !== workspaceId) continue
+      this.pendingPermissions.delete(requestId)
+      entry.resolve({ behavior: 'deny' })
+      this.dispatch(IPC.evtPermissionCancel, requestId)
+    }
   }
 
   disposeAll(): void {
     for (const session of this.sessions.values()) session.dispose()
     this.sessions.clear()
-    for (const resolve of this.pendingPermissions.values()) resolve({ behavior: 'deny' })
+    for (const { resolve } of this.pendingPermissions.values()) resolve({ behavior: 'deny' })
     this.pendingPermissions.clear()
   }
 
   respondPermission(requestId: string, decision: PermissionDecision): void {
-    const resolve = this.pendingPermissions.get(requestId)
-    if (resolve) {
+    const entry = this.pendingPermissions.get(requestId)
+    if (entry) {
       this.pendingPermissions.delete(requestId)
-      resolve(decision)
+      entry.resolve(decision)
     }
   }
 
@@ -188,7 +202,7 @@ export class SessionManager {
     // 백그라운드 세션이 권한 대기로 멈춘 것을 놓치지 않도록 비활성 창에서는 알린다.
     this.notify(workspaceId, `Needs permission: ${req.displayName ?? req.toolName}`, false)
     return new Promise<PermissionDecision>((resolve) => {
-      this.pendingPermissions.set(requestId, resolve)
+      this.pendingPermissions.set(requestId, { workspaceId, resolve })
       this.dispatch(IPC.evtPermission, full)
     })
   }

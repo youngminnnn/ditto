@@ -29,6 +29,7 @@ import MessageList from './MessageList'
 import Composer from './Composer'
 import ScriptPanel from './ScriptPanel'
 import PermissionPrompt from './PermissionPrompt'
+import QuestionPrompt from './QuestionPrompt'
 import DiffModal from './DiffModal'
 import type { ChatItem, PermissionMode, PrState, Workspace } from '@shared/types'
 
@@ -294,8 +295,13 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
       {/* 대화 */}
       <MessageList workspaceId={workspace.id} running={running} />
 
-      {/* 권한 프롬프트 */}
-      {pending && <PermissionPrompt request={pending} />}
+      {/* 권한 프롬프트 — AskUserQuestion 은 답을 받아야 하므로 질문 UI 로 분기 */}
+      {pending &&
+        (pending.toolName === 'AskUserQuestion' ? (
+          <QuestionPrompt key={pending.requestId} request={pending} />
+        ) : (
+          <PermissionPrompt request={pending} />
+        ))}
 
       {/* 입력창 바로 위: 다른 세션으로 점프(권한 대기 우선, 그다음 미확인 응답) */}
       {(pendingElsewhereCount > 0 || unreadCount > 0) && (

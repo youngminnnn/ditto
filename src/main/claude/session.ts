@@ -129,6 +129,25 @@ export class ClaudeSession {
     input: Record<string, unknown>,
     options: { title?: string; displayName?: string; decisionReason?: string }
   ): Promise<PermissionResult> => {
+    // AskUserQuestion 은 "행위 승인" 대상이 아니라 모델이 사용자에게 답을 요청하는 도구다.
+    // permission mode(auto 포함)·세션 always-allow 와 무관하게 항상 질문을 띄우고, 사용자가
+    // 고른 답(updatedInput.answers)을 도구 입력에 합쳐 돌려줘야 한다. 자동 승인하면 answers 가
+    // 비어 모델이 "사용자가 답하지 않았다" 고 보고 그대로 진행한다.
+    if (toolName === 'AskUserQuestion') {
+      const decision = await this.deps.requestPermission({
+        toolName,
+        title: options.title,
+        displayName: options.displayName,
+        decisionReason: options.decisionReason,
+        input
+      })
+
+      if (decision.behavior === 'allow') {
+        return { behavior: 'allow', updatedInput: decision.updatedInput ?? input }
+      }
+      return { behavior: 'deny', message: 'User dismissed the question' }
+    }
+
     // auto 모드: 분류기가 대부분 자동 처리하지만, 위험으로 분류돼 ask 경로로 넘어온 호출도
     // 사용자에게 묻지 않고 자동 승인한다(auto = "묻지 마" 라는 사용자 기대에 맞춤).
     if (this.deps.permissionMode === 'auto') {

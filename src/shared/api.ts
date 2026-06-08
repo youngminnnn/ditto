@@ -133,6 +133,8 @@ export interface DittoApi {
   /** /btw 사이드 질문의 시작/타이핑/완료/오류 스트림. */
   onSideQuestion(cb: (e: SideQuestionEvent) => void): () => void
   onPermission(cb: (e: PermissionRequest) => void): () => void
+  /** 응답받지 못한 채 무효가 된 권한 요청의 requestId — 해당 프롬프트를 화면에서 제거. */
+  onPermissionCancel(cb: (requestId: string) => void): () => void
   onScriptOutput(cb: (e: ScriptOutputEvent) => void): () => void
   onScriptExit(cb: (e: ScriptExitEvent) => void): () => void
   onState(cb: (state: AppState) => void): () => void

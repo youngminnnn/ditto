@@ -256,6 +256,10 @@ export const useStore = create<UIState>((set, get) => ({
       set({ permissions: [...get().permissions, req] })
     })
 
+    window.api.onPermissionCancel((requestId: string) => {
+      set({ permissions: get().permissions.filter((p) => p.requestId !== requestId) })
+    })
+
     window.api.onScriptOutput(({ workspaceId, kind, chunk }) => {
       const key = scriptKey(workspaceId, kind)
       const out = get().scriptOutput

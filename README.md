@@ -8,8 +8,7 @@ its own isolated git worktree. Each task runs in its own dedicated worktree + br
 prompt** — nothing runs until you send your first message.
 
 > **Agent support** — Ditto currently drives **Claude Code** (via the Claude
-> Agent SDK). Support for additional agents such as **Codex** is planned; the
-> architecture keeps the agent layer pluggable so more backends can be added.
+> Agent SDK). Support for more agents such as **Codex** is planned.
 
 ## Concept
 
@@ -48,7 +47,7 @@ separate API key is needed.
 
 - **No default prompt** — the input box starts empty; the session begins only when you
   send your first message.
-- **Automatic creation** — workspaces get a friendly auto-generated name (like
+- **Automatic creation** — workspaces get an auto-generated name (like
   `witty-otter`) and branch off the repo's default branch. Turn on **manual setup** in
   Settings to choose the name and base branch yourself. Rename a workspace by
   double-clicking its name in the header.

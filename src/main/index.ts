@@ -6,7 +6,7 @@ import { ScriptRunner } from './scripts'
 import { TerminalManager } from './terminal'
 import { registerIpc } from './ipc'
 import { log } from './logger'
-import { hydratePathFromLoginShell } from './env'
+import { hydrateEnvFromLoginShell } from './env'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -100,8 +100,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // 인증 탐지·세션 spawn 보다 먼저 PATH 를 보정해, 설치된 CLI 가 미설치로 보이지 않게 한다.
-  hydratePathFromLoginShell()
+  // 인증 탐지·세션 spawn 보다 먼저 셸 환경(PATH + export 변수)을 보정해, 설치된 CLI 가
+  // 미설치로 보이거나 child 프로세스가 토큰/설정을 못 읽는 일이 없게 한다.
+  hydrateEnvFromLoginShell()
   applyContentSecurityPolicy()
   registerIpc({ sessions, scripts, terminals, getWindow: () => mainWindow })
   createWindow()

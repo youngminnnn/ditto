@@ -18,6 +18,7 @@ import type {
   ScriptKind,
   ScriptOutputEvent,
   ScriptStatus,
+  SideQuestionEvent,
   SlashCommandInfo,
   TerminalDataEvent,
   TerminalExitEvent,
@@ -59,6 +60,8 @@ export interface DittoApi {
     send(workspaceId: string, text: string): Promise<void>
     interrupt(workspaceId: string): Promise<void>
     getHistory(workspaceId: string): Promise<ChatItem[]>
+    /** /btw 사이드 질문을 띄운다. 답변은 onSideQuestion 으로 스트리밍되며 기록에 남지 않는다. */
+    sideQuestion(workspaceId: string, question: string): Promise<void>
   }
 
   permission: {
@@ -127,6 +130,8 @@ export interface DittoApi {
 
   // 단방향 이벤트 구독. 반환값은 구독 해제 함수.
   onChat(cb: (e: ChatEnvelope) => void): () => void
+  /** /btw 사이드 질문의 시작/타이핑/완료/오류 스트림. */
+  onSideQuestion(cb: (e: SideQuestionEvent) => void): () => void
   onPermission(cb: (e: PermissionRequest) => void): () => void
   onScriptOutput(cb: (e: ScriptOutputEvent) => void): () => void
   onScriptExit(cb: (e: ScriptExitEvent) => void): () => void

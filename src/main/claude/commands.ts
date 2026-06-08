@@ -14,6 +14,19 @@ import type { SlashCommandInfo } from '@shared/types'
  */
 const cache = new Map<string, Promise<SlashCommandInfo[]>>()
 
+/**
+ * SDK supportedCommands() 가 돌려주지 않는 내장 명령을 자동완성에 보강한다.
+ * /btw 는 Claude Code TUI 전용(local-jsx · control-request)이라 SDK 목록에서 빠지지만,
+ * Ditto 는 이를 사이드 질문으로 직접 처리하므로(sideQuestion.ts) 입력창에서 고를 수 있어야 한다.
+ */
+const BUILTIN_COMMANDS: SlashCommandInfo[] = [
+  {
+    name: 'btw',
+    description: 'Ask a quick side question without interrupting the current task',
+    argumentHint: '<question>'
+  }
+]
+
 export function listSlashCommands(cwd: string): Promise<SlashCommandInfo[]> {
   const cached = cache.get(cwd)
   if (cached) return cached
@@ -44,11 +57,15 @@ async function fetchCommands(cwd: string): Promise<SlashCommandInfo[]> {
       setTimeout(() => reject(new Error('supportedCommands timed out')), FETCH_TIMEOUT_MS)
     )
     const commands = await Promise.race([q.supportedCommands(), timeout])
-    return commands.map((c) => ({
+    const fromSdk = commands.map((c) => ({
       name: c.name,
       description: c.description ?? '',
       argumentHint: c.argumentHint || undefined
     }))
+
+    // 내장 명령을 앞에 보강하되, SDK 가 같은 이름을 이미 돌려줬다면 중복을 피한다.
+    const present = new Set(fromSdk.map((c) => c.name))
+    return [...BUILTIN_COMMANDS.filter((c) => !present.has(c.name)), ...fromSdk]
   } finally {
     // 정리는 fire-and-forget — 조회 결과 반환을 인터럽트 응답 대기로 막지 않는다.
     input.close()

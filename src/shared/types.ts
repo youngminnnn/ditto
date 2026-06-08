@@ -216,6 +216,8 @@ export const IPC = {
   chatSend: 'chat:send',
   chatInterrupt: 'chat:interrupt',
   chatGetHistory: 'chat:getHistory',
+  /** /btw 사이드 질문 — 메인 대화를 건드리지 않는 임시 질의를 띄운다. */
+  chatSideQuestion: 'chat:sideQuestion',
   permissionRespond: 'permission:respond',
   scriptRun: 'script:run',
   scriptStop: 'script:stop',
@@ -247,6 +249,8 @@ export const IPC = {
 
   // 단방향 이벤트 (main.send → renderer.on)
   evtChat: 'evt:chat',
+  /** /btw 사이드 질문의 진행 상태(시작/타이핑/완료/오류). 트랜스크립트와 분리된 임시 스트림. */
+  evtSideQuestion: 'evt:sideQuestion',
   evtPermission: 'evt:permission',
   evtScriptOutput: 'evt:scriptOutput',
   evtScriptExit: 'evt:scriptExit',
@@ -389,3 +393,14 @@ export interface ChatEnvelope {
   workspaceId: string
   event: ChatEvent
 }
+
+// ── /btw 사이드 질문 ──────────────────────────────────────────────────────
+// Claude Code 의 /btw 와 같은 동작을 SDK 로 재현한다: 현재 세션 맥락을 이어받아 1턴·무도구로
+// 답하되, 질문/답변은 영속 트랜스크립트에 남기지 않고 입력창 위 임시 카드로만 보여 준다.
+// 그래서 ChatEvent(트랜스크립트 반영)와 섞지 않고 별도 이벤트로 둔다. id 로 스트림을 구분해
+// 새 질문이 시작되면 이전 답변 카드를 대체한다.
+export type SideQuestionEvent =
+  | { workspaceId: string; id: string; phase: 'start'; question: string }
+  | { workspaceId: string; id: string; phase: 'delta'; text: string }
+  | { workspaceId: string; id: string; phase: 'done' }
+  | { workspaceId: string; id: string; phase: 'error'; message: string }

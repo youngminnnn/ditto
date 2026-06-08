@@ -3,6 +3,7 @@ import { Notification, type BrowserWindow } from 'electron'
 import { getStore } from '../store'
 import { getTranscripts } from '../transcripts'
 import { ClaudeSession } from './session'
+import { askSideQuestion } from './sideQuestion'
 import { IPC } from '@shared/types'
 import type {
   ChatEvent,
@@ -59,6 +60,41 @@ export class SessionManager {
 
   sendMessage(workspaceId: string, text: string): void {
     this.ensure(workspaceId)?.send(text)
+  }
+
+  /**
+   * /btw 사이드 질문을 띄운다. 메인 세션과 분리된 임시 query 로 처리하므로 세션 생성·상태에
+   * 영향을 주지 않으며(작업 중에도 병렬), 진행 상태만 evtSideQuestion 으로 흘려보낸다.
+   */
+  sideQuestion(workspaceId: string, question: string): void {
+    const ws = this.getWorkspace(workspaceId)
+    if (!ws) return
+
+    const trimmed = question.trim()
+    if (!trimmed) return
+
+    const settings = getStore().getState().settings
+    const id = randomUUID()
+
+    this.dispatch(IPC.evtSideQuestion, { workspaceId, id, phase: 'start', question: trimmed })
+
+    void askSideQuestion({
+      cwd: ws.worktreePath,
+      resumeSessionId: ws.sessionId,
+      model: ws.model ?? settings.model,
+      question: trimmed,
+      onDelta: (text) =>
+        this.dispatch(IPC.evtSideQuestion, { workspaceId, id, phase: 'delta', text })
+    })
+      .then(() => this.dispatch(IPC.evtSideQuestion, { workspaceId, id, phase: 'done' }))
+      .catch((err) =>
+        this.dispatch(IPC.evtSideQuestion, {
+          workspaceId,
+          id,
+          phase: 'error',
+          message: err instanceof Error ? err.message : String(err)
+        })
+      )
   }
 
   interrupt(workspaceId: string): Promise<void> {

@@ -311,6 +311,10 @@ export function registerIpc(ctx: IpcContext): void {
     return ctx.sessions.interrupt(workspaceId)
   })
 
+  ipcMain.handle(IPC.chatSideQuestion, (_e, workspaceId: string, question: string) => {
+    ctx.sessions.sideQuestion(workspaceId, question)
+  })
+
   ipcMain.handle(IPC.chatGetHistory, (_e, workspaceId: string) => {
     return getTranscripts().load(workspaceId)
   })

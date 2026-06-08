@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Square, Terminal as TerminalIcon } from 'lucide-react'
+import { Send, Square, Terminal as TerminalIcon, MessageCircleQuestion, X } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
 import type { ChatItem, SlashCommandInfo, Workspace } from '@shared/types'
@@ -18,6 +18,28 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   const [commands, setCommands] = useState<SlashCommandInfo[] | null>(null)
   const [loadingCommands, setLoadingCommands] = useState(false)
   const [menuIdx, setMenuIdx] = useState(0)
+
+  // /btw 사이드 질문의 임시 답변(트랜스크립트와 분리, 닫으면 사라짐).
+  const [sideAnswer, setSideAnswer] = useState<SideAnswer | null>(null)
+
+  // 워크스페이스를 바꾸면 이전 사이드 답변을 치운다(다른 작업의 답이 남지 않도록).
+  useEffect(() => {
+    setSideAnswer(null)
+  }, [workspace.id])
+
+  // 사이드 질문 스트림 구독. 현재 워크스페이스의 이벤트만, id 로 스트림을 구분해 반영한다.
+  useEffect(() => {
+    return window.api.onSideQuestion((e) => {
+      if (e.workspaceId !== workspace.id) return
+      setSideAnswer((prev) => {
+        if (e.phase === 'start') return { id: e.id, question: e.question, text: '', status: 'streaming' }
+        if (!prev || prev.id !== e.id) return prev
+        if (e.phase === 'delta') return { ...prev, text: prev.text + e.text }
+        if (e.phase === 'done') return { ...prev, status: 'done' }
+        return { ...prev, status: 'error', error: e.message }
+      })
+    })
+  }, [workspace.id])
 
   const setText = (v: string): void => setDraft(workspace.id, v)
 
@@ -69,6 +91,19 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   const send = (): void => {
     const trimmed = text.trim()
     if (!trimmed) return
+
+    // /btw 는 사이드 질문으로 분기한다 — 일반 메시지로 보내면 현재 턴 뒤에 큐잉되어 메인 대화에
+    // 쌓이므로(=오염), 맥락만 공유하는 임시 질의로 처리하고 답변은 별도 카드로 보여 준다.
+    const sideQ = /^\/btw(?:\s+([\s\S]+))?$/.exec(trimmed)
+    if (sideQ) {
+      const question = (sideQ[1] ?? '').trim()
+      if (!question) return // 질문 없이 "/btw" 만 보낸 경우는 무시.
+      void window.api.chat.sideQuestion(workspace.id, question)
+      setText('')
+      historyIdx.current = -1
+      return
+    }
+
     // 실행 중이어도 전송을 허용한다 — 세션 입력 큐에 적재돼 현재 응답 뒤에 이어 처리된다.
     void window.api.chat.send(workspace.id, trimmed)
     setText('')
@@ -114,6 +149,13 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       }
     }
 
+    // 사이드 답변 카드가 떠 있으면 Esc 로 닫는다(메뉴가 우선).
+    if (e.key === 'Escape' && sideAnswer && !menuOpen) {
+      e.preventDefault()
+      setSideAnswer(null)
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       send()
@@ -152,6 +194,9 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             onHover={setMenuIdx}
             onPick={acceptCommand}
           />
+        )}
+        {sideAnswer && !menuOpen && (
+          <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
         )}
         <div className="flex items-end gap-2 bg-[#15171c] border border-[#23262d] rounded-xl px-3 py-2 focus-within:border-[#384050] transition-colors">
           <textarea
@@ -254,6 +299,56 @@ function SlashMenu({
           )
         })
       )}
+    </div>
+  )
+}
+
+/** /btw 사이드 답변의 임시 상태(트랜스크립트에 저장되지 않음). */
+type SideAnswer = {
+  id: string
+  question: string
+  text: string
+  status: 'streaming' | 'done' | 'error'
+  error?: string
+}
+
+/**
+ * 입력창 위에 뜨는 /btw 사이드 답변 카드.
+ * 메인 대화와 분리된 임시 표시 — 닫으면(Esc/✕) 사라지고 기록에 남지 않는다.
+ */
+function SideAnswerCard({
+  answer,
+  onClose
+}: {
+  answer: SideAnswer
+  onClose: () => void
+}): React.JSX.Element {
+  return (
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-80 overflow-y-auto rounded-xl border border-violet-500/30 bg-[#101216] shadow-2xl z-20">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#1c1f25] sticky top-0 bg-[#101216]">
+        <MessageCircleQuestion size={13} className="text-violet-400 shrink-0" />
+        <span className="text-[11px] font-medium text-violet-300 shrink-0">Side question</span>
+        <span className="text-[11px] text-neutral-500 truncate">{answer.question}</span>
+        <button
+          onClick={onClose}
+          title="Dismiss (Esc)"
+          className="ml-auto shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[#1b1f27]"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="px-3 py-2 text-[12.5px] leading-relaxed text-neutral-200 whitespace-pre-wrap">
+        {answer.status === 'error' ? (
+          <span className="text-red-400">{answer.error || 'Side question failed.'}</span>
+        ) : (
+          <>
+            {answer.text}
+            {answer.status === 'streaming' && (
+              <span className="text-neutral-500">{answer.text ? ' ▍' : 'Thinking…'}</span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

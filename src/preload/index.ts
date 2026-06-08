@@ -35,7 +35,9 @@ const api: DittoApi = {
   chat: {
     send: (workspaceId, text) => ipcRenderer.invoke(IPC.chatSend, workspaceId, text),
     interrupt: (workspaceId) => ipcRenderer.invoke(IPC.chatInterrupt, workspaceId),
-    getHistory: (workspaceId) => ipcRenderer.invoke(IPC.chatGetHistory, workspaceId)
+    getHistory: (workspaceId) => ipcRenderer.invoke(IPC.chatGetHistory, workspaceId),
+    sideQuestion: (workspaceId, question) =>
+      ipcRenderer.invoke(IPC.chatSideQuestion, workspaceId, question)
   },
 
   permission: {
@@ -99,6 +101,7 @@ const api: DittoApi = {
   },
 
   onChat: (cb) => subscribe(IPC.evtChat, cb),
+  onSideQuestion: (cb) => subscribe(IPC.evtSideQuestion, cb),
   onPermission: (cb) => subscribe(IPC.evtPermission, cb),
   onScriptOutput: (cb) => subscribe(IPC.evtScriptOutput, cb),
   onScriptExit: (cb) => subscribe(IPC.evtScriptExit, cb),

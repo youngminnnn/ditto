@@ -1,0 +1,91 @@
+import { useEffect, useRef } from 'react'
+import { ShieldQuestion } from 'lucide-react'
+import { useStore } from '../store'
+import type { PermissionRequest } from '@shared/types'
+
+export default function PermissionPrompt({
+  request
+}: {
+  request: PermissionRequest
+}): React.JSX.Element {
+  const dismiss = useStore((s) => s.dismissPermission)
+  const allowRef = useRef<HTMLButtonElement>(null)
+
+  const respond = (behavior: 'allow' | 'deny', remember = false): void => {
+    void window.api.permission.respond(
+      request.requestId,
+      behavior === 'allow' ? { behavior: 'allow', rememberForSession: remember } : { behavior: 'deny' }
+    )
+    dismiss(request.requestId)
+  }
+
+  // 고빈도 인터랙션이라 키보드를 지원한다: Allow 에 포커스(Enter/Space=허용), Esc=거부.
+  useEffect(() => {
+    allowRef.current?.focus()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        respond('deny')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // requestId 가 바뀌면(다음 권한 요청) 다시 포커스/바인딩.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request.requestId])
+
+  const heading = request.title ?? `Allow ${request.displayName ?? request.toolName}?`
+  const detail = summarize(request)
+
+  return (
+    <div className="shrink-0 mx-4 mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
+      <div className="flex items-start gap-2.5">
+        <ShieldQuestion size={16} className="text-amber-400 mt-0.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[12.5px] text-neutral-100">{heading}</div>
+          {detail && (
+            <pre className="mt-1 text-[11.5px] text-neutral-400 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
+              {detail}
+            </pre>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => respond('deny')}
+            className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[#1c1f25]"
+          >
+            Deny
+          </button>
+          <button
+            onClick={() => respond('allow', true)}
+            title={`Allow ${request.displayName ?? request.toolName} for the rest of this session without asking`}
+            className="text-[12px] px-2.5 py-1 rounded-md text-amber-300 hover:bg-amber-500/15"
+          >
+            Always allow
+          </button>
+          <button
+            ref={allowRef}
+            onClick={() => respond('allow')}
+            className="text-[12px] px-2.5 py-1 rounded-md bg-amber-500/90 text-black font-medium hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+          >
+            Allow
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function summarize(request: PermissionRequest): string {
+  const input = request.input
+  if (input && typeof input === 'object') {
+    const obj = input as Record<string, unknown>
+    for (const key of ['command', 'file_path', 'path', 'url', 'pattern', 'query', 'description']) {
+      if (typeof obj[key] === 'string' && obj[key]) return obj[key] as string
+    }
+    // 알려진 키가 없으면 입력 전체를 간결한 JSON 으로(빈 객체는 제외).
+    const keys = Object.keys(obj)
+    if (keys.length) return JSON.stringify(obj, null, 2)
+  }
+  return request.decisionReason ?? ''
+}

@@ -1,0 +1,124 @@
+import { app, shell, BrowserWindow, session } from 'electron'
+import { join } from 'node:path'
+import { IPC } from '@shared/types'
+import { SessionManager } from './claude/manager'
+import { ScriptRunner } from './scripts'
+import { TerminalManager } from './terminal'
+import { registerIpc } from './ipc'
+import { log } from './logger'
+import { hydrateEnvFromLoginShell } from './env'
+
+let mainWindow: BrowserWindow | null = null
+
+// 배포 빌드는 콘솔이 보이지 않으므로, 처리되지 않은 오류를 파일 로그로 남겨 진단 가능하게 한다.
+process.on('uncaughtException', (err) => log.error('uncaughtException', err))
+process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason))
+
+/** 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용). */
+function dispatch(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel, payload)
+  }
+}
+
+const sessions = new SessionManager(dispatch, () => mainWindow)
+const scripts = new ScriptRunner(dispatch)
+const terminals = new TerminalManager(dispatch)
+
+/**
+ * 프로덕션에서만 엄격한 Content-Security-Policy 를 응답 헤더로 주입한다.
+ * dev(Vite/React HMR)는 인라인 프리앰블 스크립트 + localhost websocket 이 필요하므로
+ * index.html 의 완화된 meta CSP 를 그대로 쓰고 여기서는 아무것도 하지 않는다.
+ * 프로덕션 번들은 인라인 스크립트·원격 연결을 쓰지 않으므로 script-src 를 'self' 로 좁히고
+ * 'unsafe-inline'/ws/localhost 를 제거한다. meta 와 헤더가 함께 적용되면 더 엄격한 쪽이 이긴다.
+ */
+function applyContentSecurityPolicy(): void {
+  if (process.env['ELECTRON_RENDERER_URL']) return
+
+  const policy =
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+    "connect-src 'self'; img-src 'self' data:; font-src 'self' data:"
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] }
+    })
+  })
+}
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 840,
+    minWidth: 900,
+    minHeight: 600,
+    show: false,
+    backgroundColor: '#0b0c0e',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 16 },
+    webPreferences: {
+      preload: join(import.meta.dirname, '../preload/index.mjs'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  mainWindow.on('ready-to-show', () => mainWindow?.show())
+
+  // 창이 포커스를 얻으면 renderer 가 보고 있는 workspace 의 미확인 표시를 해제하도록 알린다.
+  // DOM 의 window 'focus' 는 Dock 클릭·앱 전환 시 누락될 수 있어, main 의 신뢰 가능한 이벤트로 보완한다.
+  mainWindow.on('focus', () => mainWindow?.webContents.send(IPC.evtWindowFocus))
+  mainWindow.on('blur', () => mainWindow?.webContents.send(IPC.evtWindowBlur))
+
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    log.error(`renderer load failed: ${code} ${desc}`)
+  })
+
+  // 외부 링크(window.open / target=_blank)는 기본 브라우저로.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  // 앱 내 일반 링크(<a href> 클릭)가 창을 외부 URL 로 이동시키지 않게 가로채,
+  // 사용자의 기본 브라우저로 연다. 개발 서버 URL 로의 이동만 허용.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const devUrl = process.env['ELECTRON_RENDERER_URL']
+    if (devUrl && url.startsWith(devUrl)) return
+    if (/^https?:\/\//.test(url)) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    mainWindow.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  }
+}
+
+app.whenReady().then(() => {
+  // 인증 탐지·세션 spawn 보다 먼저 셸 환경(PATH + export 변수)을 보정해, 설치된 CLI 가
+  // 미설치로 보이거나 child 프로세스가 토큰/설정을 못 읽는 일이 없게 한다.
+  hydrateEnvFromLoginShell()
+  applyContentSecurityPolicy()
+  registerIpc({ sessions, scripts, terminals, getWindow: () => mainWindow })
+  createWindow()
+  log.info('main ready')
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  sessions.disposeAll()
+  scripts.disposeAll()
+  terminals.disposeAll()
+})

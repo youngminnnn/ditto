@@ -1,0 +1,131 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: #0b0c0e;
+  color: #e6e7ea;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* 프레임리스 타이틀바 드래그 영역 */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* 키보드 포커스 가시성 (마우스 클릭에는 적용되지 않음) */
+button:focus-visible,
+[role='button']:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid #4b88f5;
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+/* 얇은 스크롤바 */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2d33;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #383c44;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 마크다운 본문 */
+.md {
+  line-height: 1.6;
+  word-break: break-word;
+}
+.md p {
+  margin: 0.4em 0;
+}
+.md ul,
+.md ol {
+  margin: 0.4em 0;
+  padding-left: 1.3em;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md h1,
+.md h2,
+.md h3 {
+  font-weight: 600;
+  margin: 0.7em 0 0.35em;
+}
+.md h1 {
+  font-size: 1.25em;
+}
+.md h2 {
+  font-size: 1.15em;
+}
+.md h3 {
+  font-size: 1.05em;
+}
+.md a {
+  color: #6ea8fe;
+  text-decoration: underline;
+}
+.md code {
+  font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  font-size: 0.92em;
+}
+.md :not(pre) > code {
+  background: #1c1f25;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.md pre {
+  background: #15171c;
+  border: 1px solid #23262d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.md pre code {
+  background: transparent;
+  padding: 0;
+}
+.md blockquote {
+  border-left: 3px solid #2f333b;
+  margin: 0.5em 0;
+  padding-left: 0.8em;
+  color: #aab0ba;
+}
+.md table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+.md th,
+.md td {
+  border: 1px solid #23262d;
+  padding: 4px 8px;
+}

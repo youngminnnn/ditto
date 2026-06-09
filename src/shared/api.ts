@@ -8,6 +8,7 @@ import type {
   DirEntry,
   FileContent,
   GitStatus,
+  ImageAttachment,
   PermissionDecision,
   PermissionMode,
   PermissionRequest,
@@ -57,7 +58,8 @@ export interface DittoApi {
   }
 
   chat: {
-    send(workspaceId: string, text: string): Promise<void>
+    /** 텍스트(+선택적 붙여넣기 이미지)를 보낸다. 이미지는 base64 로 세션에 직접 전달된다. */
+    send(workspaceId: string, text: string, images?: ImageAttachment[]): Promise<void>
     interrupt(workspaceId: string): Promise<void>
     getHistory(workspaceId: string): Promise<ChatItem[]>
     /** /btw 사이드 질문을 띄운다. 답변은 onSideQuestion 으로 스트리밍되며 기록에 남지 않는다. */

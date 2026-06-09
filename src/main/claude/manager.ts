@@ -7,6 +7,7 @@ import { askSideQuestion } from './sideQuestion'
 import { IPC } from '@shared/types'
 import type {
   ChatEvent,
+  ImageAttachment,
   PermissionDecision,
   PermissionMode,
   PermissionRequest,
@@ -63,8 +64,8 @@ export class SessionManager {
     return session
   }
 
-  sendMessage(workspaceId: string, text: string): void {
-    this.ensure(workspaceId)?.send(text)
+  sendMessage(workspaceId: string, text: string, images?: ImageAttachment[]): void {
+    this.ensure(workspaceId)?.send(text, images)
   }
 
   /**

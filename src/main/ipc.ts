@@ -30,6 +30,7 @@ import { IPC } from '@shared/types'
 import type {
   AppSettings,
   CreateWorkspaceArgs,
+  ImageAttachment,
   PermissionDecision,
   PermissionMode,
   Repo,
@@ -303,9 +304,12 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ── 채팅 ───────────────────────────────────────────────────────────────
 
-  ipcMain.handle(IPC.chatSend, (_e, workspaceId: string, text: string) => {
-    ctx.sessions.sendMessage(workspaceId, text)
-  })
+  ipcMain.handle(
+    IPC.chatSend,
+    (_e, workspaceId: string, text: string, images?: ImageAttachment[]) => {
+      ctx.sessions.sendMessage(workspaceId, text, images)
+    }
+  )
 
   ipcMain.handle(IPC.chatInterrupt, (_e, workspaceId: string) => {
     return ctx.sessions.interrupt(workspaceId)

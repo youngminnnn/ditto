@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import Modal, { inputClass, labelClass, primaryBtn, ghostBtn } from './Modal'
 
@@ -8,13 +8,26 @@ export default function RepoConfigModal({
 }: {
   repoId: string
   onClose: () => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const app = useStore((s) => s.app)!
-  const repo = app.repos.find((r) => r.id === repoId)!
-  const [name, setName] = useState(repo.name)
-  const [setupScript, setSetup] = useState(repo.setupScript)
-  const [devScript, setDev] = useState(repo.devScript)
-  const [archiveScript, setArchive] = useState(repo.archiveScript)
+  const repo = app.repos.find((r) => r.id === repoId)
+  // 리포가 제거되면(예: 아래 removeRepo) main 의 state 브로드캐스트가 onClose 보다 먼저 도착해
+  // 이 모달이 사라진 리포로 한 번 더 렌더된다. 비널 단언으로 repo.name 등에 접근하면 렌더 중
+  // TypeError 가 나고, 에러 바운더리가 없어 앱 전체가 멈춘다(먹통). repo 가 없으면 닫고 빠진다.
+  const [name, setName] = useState(repo?.name ?? '')
+  const [setupScript, setSetup] = useState(repo?.setupScript ?? '')
+  const [devScript, setDev] = useState(repo?.devScript ?? '')
+  const [archiveScript, setArchive] = useState(repo?.archiveScript ?? '')
+
+  const confirm = useStore((s) => s.confirm)
+
+  useEffect(() => {
+    if (!repo) onClose()
+  }, [repo, onClose])
+
+  // 모든 훅 호출 뒤에서 가드한다(훅 규칙). repo 가 사라진 프레임에서는 아무것도 렌더하지 않고,
+  // 위 useEffect 가 onClose 로 모달을 정리한다.
+  if (!repo) return null
 
   const save = async (): Promise<void> => {
     await window.api.repo.update(repoId, {
@@ -25,8 +38,6 @@ export default function RepoConfigModal({
     })
     onClose()
   }
-
-  const confirm = useStore((s) => s.confirm)
 
   const removeRepo = async (): Promise<void> => {
     const wsCount = app.workspaces.filter((w) => w.repoId === repoId).length

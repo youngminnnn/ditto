@@ -63,7 +63,7 @@ export function PanelToolbar({
   spinning: boolean
 }): React.JSX.Element {
   return (
-    <div className="h-8 shrink-0 flex items-center gap-2 px-3 border-b border-[var(--surface-2)] text-[11px] text-neutral-500">
+    <div className="h-8 shrink-0 flex items-center gap-2 px-3 border-b border-[var(--border)] text-[11px] text-neutral-500">
       <span className="truncate">{label}</span>
       <div className="flex-1" />
       <button

@@ -138,7 +138,7 @@ export default function App(): React.JSX.Element {
 
       <div className="flex-1 flex min-h-0">
         <Sidebar onNewWorkspace={handleNewWorkspace} onConfigRepo={setConfigRepoId} />
-        <div className="flex-1 min-w-0 border-l border-[var(--surface-2)] flex">
+        <div className="flex-1 min-w-0 border-l border-[var(--border)] flex">
           {selected ? (
             <>
               <div className="flex-1 min-w-0">
@@ -154,7 +154,7 @@ export default function App(): React.JSX.Element {
                   />
                   <div
                     style={{ width: rightWidth }}
-                    className="shrink-0 border-l border-[var(--surface-2)] min-w-0"
+                    className="shrink-0 border-l border-[var(--border)] min-w-0"
                   >
                     <WorkArea key={selected.id} workspace={selected} />
                   </div>

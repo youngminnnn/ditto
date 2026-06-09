@@ -184,7 +184,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   }
 
   return (
-    <div className="shrink-0 px-4 py-3 border-t border-[var(--surface-2)]">
+    <div className="shrink-0 px-4 py-3 border-t border-[var(--border)]">
       <div className="max-w-3xl mx-auto relative">
         {menuOpen && (
           <SlashMenu
@@ -325,7 +325,7 @@ function SideAnswerCard({
 }): React.JSX.Element {
   return (
     <div className="absolute bottom-full mb-2 left-0 right-0 max-h-80 overflow-y-auto rounded-xl border border-violet-500/30 bg-[var(--bg-3)] shadow-2xl z-20">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--surface-2)] sticky top-0 bg-[var(--bg-3)]">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-3)]">
         <MessageCircleQuestion size={13} className="text-violet-400 shrink-0" />
         <span className="text-[11px] font-medium text-violet-300 shrink-0">Side question</span>
         <span className="text-[11px] text-neutral-500 truncate">{answer.question}</span>

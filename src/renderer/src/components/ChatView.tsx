@@ -159,7 +159,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   return (
     <div className="h-full flex flex-col min-w-0">
       {/* 헤더 */}
-      <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-[var(--surface-2)]">
+      <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-[var(--border)]">
         <div className="min-w-0">
           {editingName !== null ? (
             <input
@@ -269,7 +269,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
         {/* PR 상태 + 링크: 헤더 우측 끝. 상태별 색·아이콘으로 한눈에 구분. */}
         {(pr || (git && git.ahead > 0)) && (
-          <div className="flex items-center pl-2 ml-0.5 border-l border-[var(--surface-2)]">
+          <div className="flex items-center pl-2 ml-0.5 border-l border-[var(--border)]">
             {pr ? (
               (() => {
                 const { Icon, iconClass, badgeClass } = PR_STYLE[pr.state]

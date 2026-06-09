@@ -31,8 +31,8 @@ export default function ScriptPanel({
   }
 
   return (
-    <div className="shrink-0 h-64 border-t border-[var(--surface-2)] bg-[var(--bg-2)] flex flex-col">
-      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[var(--surface-2)]">
+    <div className="shrink-0 h-64 border-t border-[var(--border)] bg-[var(--bg-2)] flex flex-col">
+      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[var(--border)]">
         {(['dev', 'setup'] as ScriptKind[]).map((kind) => {
           const active = tab === kind
           const isRunning = statuses.find((s) => s.kind === kind)?.state === 'running'

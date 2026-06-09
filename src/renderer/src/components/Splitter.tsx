@@ -40,7 +40,7 @@ export default function Splitter({
     window.addEventListener('mouseup', onUp)
   }
 
-  const base = 'shrink-0 bg-[var(--surface-2)] hover:bg-[var(--border-strong)] transition-colors'
+  const base = 'shrink-0 bg-[var(--border)] hover:bg-[var(--border-strong)] transition-colors'
   const cls =
     axis === 'x'
       ? `${base} w-px hover:w-0.5 cursor-col-resize`

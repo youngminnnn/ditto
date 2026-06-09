@@ -221,7 +221,7 @@ function ToolResult({ text, isError }: { text: string; isError: boolean }): Reac
           'whitespace-pre-wrap rounded-md p-2 overflow-x-auto border ' +
           (isError
             ? 'bg-red-500/5 border-red-500/20 text-red-300/90'
-            : 'bg-[var(--bg-3)] border-[var(--surface-2)] text-neutral-500')
+            : 'bg-[var(--bg-3)] border-[var(--border)] text-neutral-500')
         }
       >
         {open || !truncated ? text : preview + (truncated ? '\n…' : '')}

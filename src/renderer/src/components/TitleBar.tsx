@@ -7,7 +7,7 @@ export default function TitleBar({
   onOpenSettings: () => void
 }): React.JSX.Element {
   return (
-    <div className="drag h-11 shrink-0 flex items-center justify-between bg-[var(--bg)] border-b border-[var(--surface-2)] pl-20 pr-3">
+    <div className="drag h-11 shrink-0 flex items-center justify-between bg-[var(--bg)] border-b border-[var(--border)] pl-20 pr-3">
       <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight text-neutral-200">
         <Logo size={18} />
         Ditto

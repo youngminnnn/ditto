@@ -38,7 +38,7 @@ export default function FileBrowser({ workspaceId }: { workspaceId: string }): R
   if (openFile !== null) {
     return (
       <div className="h-full flex flex-col min-h-0">
-        <div className="h-8 shrink-0 flex items-center gap-2 px-2 border-b border-[var(--surface-2)]">
+        <div className="h-8 shrink-0 flex items-center gap-2 px-2 border-b border-[var(--border)]">
           <button
             onClick={() => setOpenFile(null)}
             className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-100 px-1.5 py-0.5 rounded hover:bg-[var(--surface-2)]"

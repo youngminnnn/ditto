@@ -52,6 +52,11 @@ export default function IntegrationsPanel(): React.JSX.Element {
               ? [claude.email, claude.orgName].filter(Boolean).join(' · ') || 'Signed in'
               : 'Sign in to run Claude Code agents'
         }
+        warning={
+          claude?.apiKeyInEnv
+            ? 'ANTHROPIC_API_KEY is set in your environment — agents authenticate and bill via that key, not the account here.'
+            : undefined
+        }
         onConnect={() => {
           void window.api.auth.claudeLogin()
           pollUntilChange()
@@ -102,6 +107,7 @@ function IntegrationRow({
   name,
   icon,
   detail,
+  warning,
   connected,
   loading,
   installed,
@@ -112,6 +118,7 @@ function IntegrationRow({
   name: string
   icon: React.ReactNode
   detail: string
+  warning?: string
   connected: boolean
   loading: boolean
   installed: boolean
@@ -130,6 +137,7 @@ function IntegrationRow({
           {connected && <Check size={13} className="text-emerald-400" />}
         </div>
         <div className="text-[11.5px] text-neutral-500 truncate">{detail}</div>
+        {warning && <div className="text-[11px] text-amber-500/90 mt-0.5">{warning}</div>}
       </div>
       {loading ? (
         <Loader2 size={15} className="text-neutral-500 animate-spin" />

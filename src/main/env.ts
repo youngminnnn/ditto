@@ -41,9 +41,27 @@ export function hydrateEnvFromLoginShell(): void {
 // 프로브 셸의 실행 맥락을 반영할 뿐이라 Electron 프로세스로 옮기면 의미가 어긋난다.
 const TRANSIENT_VARS = new Set(['PATH', 'PWD', 'OLDPWD', 'SHLVL', '_'])
 
-/** 캡처한 PATH 를 앞에, 기존 + 알려진 설치 위치를 뒤에 두고 순서 보존 중복 제거 후 반영. */
+/**
+ * 캡처한 PATH 를 앞에, 기존 + 알려진 설치 위치를 뒤에 두고 순서 보존 중복 제거 후 반영.
+ *
+ * fallback 은 로그인 셸 캡처가 실패했을 때의 안전망이다. 특히 git 같은 도구는 호출 빈도가
+ * 높아 매번 로그인 셸로 감싸지 않고(git.ts) process.env.PATH 에 직접 의존하므로, 흔한 설치
+ * 위치를 빠짐없이 덮어 둔다 — homebrew(arm/intel)·MacPorts·asdf shim 과, GUI launchd 가
+ * 기본 제공하는 시스템 경로(/usr/bin 의 Xcode CLT git 등)까지 포함한다.
+ */
 function hydratePath(captured: string[] | null): void {
-  const fallbacks = [join(homedir(), '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin']
+  const home = homedir()
+  const fallbacks = [
+    join(home, '.local', 'bin'),
+    join(home, '.asdf', 'shims'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/opt/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ]
   const current = process.env.PATH ? process.env.PATH.split(':') : []
 
   const merged: string[] = []

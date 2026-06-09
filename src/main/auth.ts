@@ -54,11 +54,21 @@ async function isInstalled(command: 'claude' | 'gh'): Promise<boolean> {
   return code === 0
 }
 
+/**
+ * 에이전트(Agent SDK)는 process.env 를 그대로 물려받으므로, 여기에 ANTHROPIC_API_KEY/
+ * ANTHROPIC_AUTH_TOKEN 이 있으면 계정 로그인과 무관하게 그 키로 인증·과금한다. main 의
+ * process.env 는 시작 시 로그인 셸에서 하이드레이트되므로(env.ts), 사용자의 셸 설정에 키가
+ * export 돼 있으면 여기서 그대로 감지된다.
+ */
+function apiKeyInEnv(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY?.trim() || process.env.ANTHROPIC_AUTH_TOKEN?.trim())
+}
+
 async function getClaudeStatus(): Promise<ClaudeAuthStatus> {
   if (!(await isInstalled('claude'))) return { installed: false, loggedIn: false }
 
   const { stdout, code } = await runLoginShell('claude auth status --json')
-  if (code !== 0) return { installed: true, loggedIn: false }
+  if (code !== 0) return { installed: true, loggedIn: false, apiKeyInEnv: apiKeyInEnv() }
   try {
     const json = JSON.parse(stdout.trim()) as Record<string, unknown>
     return {
@@ -67,10 +77,11 @@ async function getClaudeStatus(): Promise<ClaudeAuthStatus> {
       email: json.email as string | undefined,
       orgName: json.orgName as string | undefined,
       subscriptionType: json.subscriptionType as string | undefined,
-      authMethod: json.authMethod as string | undefined
+      authMethod: json.authMethod as string | undefined,
+      apiKeyInEnv: apiKeyInEnv()
     }
   } catch {
-    return { installed: true, loggedIn: false }
+    return { installed: true, loggedIn: false, apiKeyInEnv: apiKeyInEnv() }
   }
 }
 

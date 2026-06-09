@@ -321,6 +321,12 @@ export interface ClaudeAuthStatus {
   orgName?: string
   subscriptionType?: string
   authMethod?: string
+  /**
+   * 에이전트 프로세스 환경에 ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN 이 설정돼 있는지.
+   * 있으면 아래 계정 로그인과 무관하게 에이전트가 그 키로 인증·과금하므로(구독이 아니라),
+   * 패널이 이 불일치를 알려 "로그아웃했는데 왜 계속 되지 / 왜 구독이 아니라 API 과금이지" 혼선을 막는다.
+   */
+  apiKeyInEnv?: boolean
 }
 
 export interface GithubAuthStatus {

@@ -65,6 +65,8 @@ interface UIState {
   scriptPanelOpen: Record<string, boolean>
   /** 우측 작업 패널(파일/변경/체크 + 터미널)의 너비(px). 세로 분할 드래그로 조절. */
   rightWidth: number
+  /** 우측 작업 패널 표시 여부. 숨기면 대화 영역이 전체 폭을 차지한다. */
+  rightPanelOpen: boolean
   /** 우하단 터미널이 우측 컬럼 높이에서 차지하는 비율(0~1). 기본 0.5. 가로 분할 드래그로 조절. */
   terminalRatio: number
   toasts: Toast[]
@@ -92,6 +94,7 @@ interface UIState {
   setScrollPosition: (workspaceId: string, top: number) => void
   setScriptPanelOpen: (workspaceId: string, open: boolean) => void
   setRightWidth: (px: number) => void
+  toggleRightPanel: () => void
   setTerminalRatio: (ratio: number) => void
   pushToast: (kind: ToastKind, message: string) => void
   dismissToast: (id: string) => void
@@ -130,6 +133,7 @@ export const useStore = create<UIState>((set, get) => ({
   scrollPositions: {},
   scriptPanelOpen: {},
   rightWidth: 460,
+  rightPanelOpen: true,
   terminalRatio: 0.5,
   toasts: [],
   confirmState: null,
@@ -397,6 +401,9 @@ export const useStore = create<UIState>((set, get) => ({
 
   // 우측 패널 너비 — 대화/터미널이 너무 좁아지지 않도록 양끝을 클램프한다.
   setRightWidth: (px) => set({ rightWidth: Math.max(320, Math.min(900, Math.round(px))) }),
+
+  // 우측 패널 표시 토글 — 숨기면 대화가 전체 폭을 쓰고, 다시 켜면 마지막 너비로 복귀한다.
+  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
 
   // 터미널 비율 — 패널/터미널 어느 쪽도 사라지지 않도록 0.15~0.85 로 클램프한다.
   setTerminalRatio: (ratio) => set({ terminalRatio: Math.max(0.15, Math.min(0.85, ratio)) }),

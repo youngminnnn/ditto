@@ -1,8 +1,41 @@
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
+import type { ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { TerminalSquare, RotateCw } from 'lucide-react'
+
+// xterm 은 CSS 변수를 못 읽으므로 테마별 색을 직접 정의한다. 라이트는 패널 배경(--bg-2)에
+// 맞춘 밝은 바탕 + 흰 배경에서도 읽히는 ANSI 팔레트를 쓴다(다크는 xterm 기본 ANSI 로 충분).
+const DARK_TERMINAL: ITheme = { background: '#0d0e11', foreground: '#d4d4d8', cursor: '#d4d4d8' }
+const LIGHT_TERMINAL: ITheme = {
+  background: '#ffffff',
+  foreground: '#27272a',
+  cursor: '#27272a',
+  cursorAccent: '#ffffff',
+  selectionBackground: '#bcd4f6',
+  black: '#27272a',
+  red: '#c0392b',
+  green: '#1e7e34',
+  yellow: '#b7791f',
+  blue: '#2563eb',
+  magenta: '#9333ea',
+  cyan: '#0e7490',
+  white: '#52525b',
+  brightBlack: '#71717a',
+  brightRed: '#e74c3c',
+  brightGreen: '#22a35a',
+  brightYellow: '#d69e2e',
+  brightBlue: '#3b82f6',
+  brightMagenta: '#a855f7',
+  brightCyan: '#0891b2',
+  brightWhite: '#18181b'
+}
+
+/** 현재 <html data-theme> 에 맞는 xterm 테마를 고른다. */
+function terminalTheme(): ITheme {
+  return document.documentElement.dataset.theme === 'light' ? LIGHT_TERMINAL : DARK_TERMINAL
+}
 
 /**
  * 우하단 인터랙티브 터미널. workspace 의 PTY(메인 프로세스)에 붙는다.
@@ -26,7 +59,7 @@ export default function TerminalPane({ workspaceId }: { workspaceId: string }): 
       fontFamily: "'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace",
       lineHeight: 1.2,
       cursorBlink: true,
-      theme: { background: '#0d0e11', foreground: '#d4d4d8', cursor: '#d4d4d8' }
+      theme: terminalTheme()
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -77,12 +110,19 @@ export default function TerminalPane({ workspaceId }: { workspaceId: string }): 
     })
     ro.observe(host)
 
+    // 테마 전환(<html data-theme> 변경) → 터미널 색을 다시 적용한다.
+    const themeObs = new MutationObserver(() => {
+      term.options.theme = terminalTheme()
+    })
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+
     return () => {
       cancelAnimationFrame(raf)
       inputSub.dispose()
       offData()
       offExit()
       ro.disconnect()
+      themeObs.disconnect()
       term.dispose()
       termRef.current = null
       fitRef.current = null
@@ -106,7 +146,7 @@ export default function TerminalPane({ workspaceId }: { workspaceId: string }): 
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--bg-2)]">
-      <div className="h-7 shrink-0 flex items-center gap-1.5 px-3 border-b border-[var(--surface-2)] text-[11px] text-neutral-500">
+      <div className="h-7 shrink-0 flex items-center gap-1.5 px-3 border-b border-[var(--border)] text-[11px] text-neutral-500">
         <TerminalSquare size={12} />
         <span>Terminal</span>
         <div className="flex-1" />

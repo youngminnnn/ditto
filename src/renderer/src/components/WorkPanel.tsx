@@ -19,7 +19,7 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--bg)]">
-      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[var(--surface-2)]">
+      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[var(--border)]">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id
           return (

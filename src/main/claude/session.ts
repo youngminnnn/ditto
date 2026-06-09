@@ -2,6 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Query, SDKMessage, SDKUserMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
 import { resolveClaudeExecutable } from './executable'
+import { MCP_SETTING_SOURCES, resolveUserMcpServers } from './mcp'
 import type {
   ChatItem,
   ChatEvent,
@@ -13,6 +14,8 @@ import type {
 
 export interface SessionDeps {
   cwd: string
+  /** worktree 의 원본 repo 절대 경로. ~/.claude.json 의 project 스코프 MCP 조회에 쓴다(없으면 user 스코프만). */
+  repoPath: string | null
   model: string | null
   permissionMode: PermissionMode
   /** 이전 실행에서 이어갈 Claude 세션 ID. 없으면 새 세션. */
@@ -107,12 +110,18 @@ export class ClaudeSession {
 
   private async run(): Promise<void> {
     try {
+      // 사용자가 claude CLI 용으로 등록한 MCP 서버(user/project/local 스코프)를 명시 주입한다.
+      // cwd 가 worktree 라 SDK 자동 탐색만으로는 원본 repo 의 project 스코프 서버가 누락되기 때문.
+      const mcpServers = resolveUserMcpServers(this.deps.repoPath)
       this.q = query({
         prompt: this.input,
         options: {
           cwd: this.deps.cwd,
           includePartialMessages: true,
           permissionMode: this.deps.permissionMode,
+          // CLI 와 동일하게 파일시스템 설정(settings.json·CLAUDE.md·.mcp.json)을 로드.
+          settingSources: MCP_SETTING_SOURCES,
+          ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
           ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
           ...(this.deps.model ? { model: this.deps.model } : {}),
           // 이전 세션 ID 가 있으면 디스크에서 대화 맥락을 복원한다(과거 메시지는 재방출되지 않음).

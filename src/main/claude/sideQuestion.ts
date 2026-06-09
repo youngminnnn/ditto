@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { SDKMessage, SDKUserMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk'
 import { resolveClaudeExecutable } from './executable'
+import { MCP_SETTING_SOURCES } from './mcp'
 
 // session.ts 와 동일 — 패키징 빌드에서 app.asar 내부 경로로 CLI 를 spawn 해 ENOTDIR 로
 // 실패하지 않도록 unpacked 바이너리 경로를 1회 계산해 둔다(dev 에서는 null → SDK 기본값).
@@ -40,6 +41,8 @@ export async function askSideQuestion(opts: SideQuestionOptions): Promise<void> 
       maxTurns: 1,
       allowedTools: [],
       canUseTool: denyAllTools,
+      // 도구는 안 쓰지만(권한 전면 거부), CLAUDE.md·프로젝트 설정 맥락은 답변 품질에 도움이 된다.
+      settingSources: MCP_SETTING_SOURCES,
       ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(opts.model ? { model: opts.model } : {}),
       // resume 한 세션에 답을 덧쓰면 메인 대화가 오염되므로, forkSession 으로 새 임시 세션에 분기한다.

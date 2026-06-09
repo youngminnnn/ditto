@@ -41,6 +41,11 @@ export class SessionManager {
     return getStore().getState().workspaces.find((w) => w.id === id)
   }
 
+  /** worktree 의 원본 repo 절대 경로. ~/.claude.json 의 project 스코프 MCP 조회에 쓴다. */
+  private getRepoPath(repoId: string): string | null {
+    return getStore().getState().repos.find((r) => r.id === repoId)?.path ?? null
+  }
+
   private ensure(workspaceId: string): ClaudeSession | null {
     const existing = this.sessions.get(workspaceId)
     if (existing) return existing
@@ -51,6 +56,7 @@ export class SessionManager {
     const settings = getStore().getState().settings
     const session = new ClaudeSession({
       cwd: ws.worktreePath,
+      repoPath: this.getRepoPath(ws.repoId),
       // workspace 오버라이드가 있으면 우선, 없으면 전역 설정 모델.
       model: ws.model ?? settings.model,
       permissionMode: ws.permissionMode,

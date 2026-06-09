@@ -5,6 +5,7 @@ import { resolveClaudeExecutable } from './executable'
 import type {
   ChatItem,
   ChatEvent,
+  ImageAttachment,
   PermissionMode,
   PermissionRequest,
   PermissionDecision
@@ -53,20 +54,34 @@ export class ClaudeSession {
   constructor(private deps: SessionDeps) {}
 
   /** 사용자 메시지를 보낸다. 첫 메시지면 query 를 시작한다. */
-  send(text: string): void {
+  send(text: string, images?: ImageAttachment[]): void {
+    const imgs = images ?? []
     const item: ChatItem = {
       id: `user:${Date.now()}:${Math.round(performance.now())}`,
       type: 'user',
       text,
-      ts: Date.now()
+      ts: Date.now(),
+      // base64 본문은 트랜스크립트에 남기지 않고(무겁다) 이름/형식만 칩으로 표시.
+      ...(imgs.length ? { attachments: imgs.map((i) => ({ name: i.name, mediaType: i.mediaType })) } : {})
     }
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
     this.deps.emit({ type: 'status', status: 'running' })
 
+    // 이미지가 있으면 멀티모달 content 배열로(텍스트 블록 + base64 이미지 블록), 없으면 문자열.
+    const content = imgs.length
+      ? [
+          ...(text ? [{ type: 'text' as const, text }] : []),
+          ...imgs.map((i) => ({
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: i.mediaType, data: i.dataBase64 }
+          }))
+        ]
+      : text
+
     this.input.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content },
       parent_tool_use_id: null
     })
 

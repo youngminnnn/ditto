@@ -1,8 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Square, Terminal as TerminalIcon, MessageCircleQuestion, X } from 'lucide-react'
+import { Send, Square, Terminal as TerminalIcon, MessageCircleQuestion, X, ImageIcon } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
-import type { ChatItem, SlashCommandInfo, Workspace } from '@shared/types'
+import type { ChatItem, ImageAttachment, ImageMediaType, SlashCommandInfo, Workspace } from '@shared/types'
+
+/** Claude 가 받는 이미지 형식. 클립보드의 다른 형식은 붙여넣기 시 무시한다. */
+const IMAGE_TYPES: Record<string, ImageMediaType> = {
+  'image/png': 'image/png',
+  'image/jpeg': 'image/jpeg',
+  'image/gif': 'image/gif',
+  'image/webp': 'image/webp'
+}
+
+/** 화면에 띄우는 붙여넣기 이미지: 전송용 base64 + 썸네일용 data URL. */
+type PendingImage = ImageAttachment & { id: string; previewUrl: string }
+
+/** Blob → 순수 base64(+data URL). FileReader 로 읽어 "data:...;base64," 접두사를 떼어 본문만 남긴다. */
+function readImage(blob: Blob): Promise<{ dataBase64: string; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result)
+      resolve({ dataBase64: dataUrl.slice(dataUrl.indexOf(',') + 1), dataUrl })
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('image read failed'))
+    reader.readAsDataURL(blob)
+  })
+}
 
 export default function Composer({ workspace }: { workspace: Workspace }): React.JSX.Element {
   // 초안은 store 에 보관해 workspace 전환에도 살아남는다(작성 중 메시지 분실 방지).
@@ -22,10 +46,37 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   // /btw 사이드 질문의 임시 답변(트랜스크립트와 분리, 닫으면 사라짐).
   const [sideAnswer, setSideAnswer] = useState<SideAnswer | null>(null)
 
-  // 워크스페이스를 바꾸면 이전 사이드 답변을 치운다(다른 작업의 답이 남지 않도록).
+  // 붙여넣은 이미지 첨부(전송 전 대기). 초안과 달리 워크스페이스 전환 시 비운다(다른 작업으로 새지 않도록).
+  const [images, setImages] = useState<PendingImage[]>([])
+  // 같은 워크스페이스 안에서 첨부 id 가 겹치지 않도록 하는 단조 카운터.
+  const imgSeq = useRef(0)
+
+  // 워크스페이스를 바꾸면 이전 사이드 답변과 대기 중 첨부를 치운다(다른 작업으로 새지 않도록).
   useEffect(() => {
     setSideAnswer(null)
+    setImages([])
   }, [workspace.id])
+
+  const removeImage = (id: string): void => setImages((prev) => prev.filter((i) => i.id !== id))
+
+  /** 클립보드의 이미지를 첨부로 받는다. 이미지가 하나라도 있으면 기본 텍스트 붙여넣기를 막는다. */
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    const files = Array.from(e.clipboardData.items)
+      .filter((it) => it.kind === 'file' && IMAGE_TYPES[it.type])
+      .map((it) => ({ mediaType: IMAGE_TYPES[it.type], file: it.getAsFile() }))
+      .filter((x): x is { mediaType: ImageMediaType; file: File } => x.file != null)
+    if (!files.length) return // 텍스트 붙여넣기는 그대로 둔다.
+
+    e.preventDefault()
+    for (const { mediaType, file } of files) {
+      const id = `img:${imgSeq.current++}`
+      const ext = mediaType.split('/')[1]
+      const name = file.name && file.name !== 'image.png' ? file.name : `image-${imgSeq.current}.${ext}`
+      void readImage(file).then(({ dataBase64, dataUrl }) => {
+        setImages((prev) => [...prev, { id, name, mediaType, dataBase64, previewUrl: dataUrl }])
+      })
+    }
+  }
 
   // 사이드 질문 스트림 구독. 현재 워크스페이스의 이벤트만, id 로 스트림을 구분해 반영한다.
   useEffect(() => {
@@ -90,11 +141,12 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
 
   const send = (): void => {
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed && !images.length) return // 텍스트도 첨부도 없으면 무시.
 
     // /btw 는 사이드 질문으로 분기한다 — 일반 메시지로 보내면 현재 턴 뒤에 큐잉되어 메인 대화에
     // 쌓이므로(=오염), 맥락만 공유하는 임시 질의로 처리하고 답변은 별도 카드로 보여 준다.
-    const sideQ = /^\/btw(?:\s+([\s\S]+))?$/.exec(trimmed)
+    // (사이드 질문은 텍스트 전용 — 첨부가 있으면 일반 메시지로 보낸다.)
+    const sideQ = images.length ? null : /^\/btw(?:\s+([\s\S]+))?$/.exec(trimmed)
     if (sideQ) {
       const question = (sideQ[1] ?? '').trim()
       if (!question) return // 질문 없이 "/btw" 만 보낸 경우는 무시.
@@ -104,9 +156,16 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       return
     }
 
+    // 첨부에서 화면 전용 필드(id·previewUrl)를 떼고 전송용 payload 만 보낸다.
+    const payload: ImageAttachment[] = images.map(({ name, mediaType, dataBase64 }) => ({
+      name,
+      mediaType,
+      dataBase64
+    }))
     // 실행 중이어도 전송을 허용한다 — 세션 입력 큐에 적재돼 현재 응답 뒤에 이어 처리된다.
-    void window.api.chat.send(workspace.id, trimmed)
+    void window.api.chat.send(workspace.id, trimmed, payload.length ? payload : undefined)
     setText('')
+    setImages([])
     historyIdx.current = -1
   }
 
@@ -198,40 +257,50 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
         {sideAnswer && !menuOpen && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
         )}
-        <div className="flex items-end gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
-          <textarea
-            ref={taRef}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value)
-              historyIdx.current = -1
-            }}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder={
-              running
-                ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
-                : 'Message Claude Code…  (Enter to send · / for commands)'
-            }
-            className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
-          />
-          {running && (
-            <button
-              onClick={() => void window.api.chat.interrupt(workspace.id)}
-              title="Stop the current turn"
-              className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
-            >
-              <Square size={15} fill="currentColor" />
-            </button>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {images.map((img) => (
+                <ImageChip key={img.id} img={img} onRemove={() => removeImage(img.id)} />
+              ))}
+            </div>
           )}
-          <button
-            onClick={send}
-            disabled={!text.trim()}
-            title={running ? 'Queue message' : 'Send'}
-            className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[var(--border)] disabled:text-neutral-600 hover:bg-blue-500"
-          >
-            <Send size={15} />
-          </button>
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={taRef}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value)
+                historyIdx.current = -1
+              }}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              rows={1}
+              placeholder={
+                running
+                  ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
+                  : 'Message Claude Code…  (Enter to send · / for commands · paste an image)'
+              }
+              className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
+            />
+            {running && (
+              <button
+                onClick={() => void window.api.chat.interrupt(workspace.id)}
+                title="Stop the current turn"
+                className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
+              >
+                <Square size={15} fill="currentColor" />
+              </button>
+            )}
+            <button
+              onClick={send}
+              disabled={!text.trim() && images.length === 0}
+              title={running ? 'Queue message' : 'Send'}
+              className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[var(--border)] disabled:text-neutral-600 hover:bg-blue-500"
+            >
+              <Send size={15} />
+            </button>
+          </div>
         </div>
       </div>
       <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px]">
@@ -248,6 +317,30 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           )
         })()}
       </div>
+    </div>
+  )
+}
+
+/** 전송 대기 중인 붙여넣기 이미지 칩(썸네일 + 이름 + 제거). */
+function ImageChip({
+  img,
+  onRemove
+}: {
+  img: PendingImage
+  onRemove: () => void
+}): React.JSX.Element {
+  return (
+    <div className="group/chip relative flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-lg bg-[var(--surface-3)] border border-[var(--border)]">
+      <img src={img.previewUrl} alt={img.name} className="h-7 w-7 rounded object-cover" />
+      <ImageIcon size={11} className="text-neutral-500 shrink-0" />
+      <span className="text-[11px] text-neutral-300 max-w-[140px] truncate">{img.name}</span>
+      <button
+        onClick={onRemove}
+        title="Remove image"
+        className="ml-0.5 shrink-0 h-4 w-4 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-4)]"
+      >
+        <X size={12} />
+      </button>
     </div>
   )
 }

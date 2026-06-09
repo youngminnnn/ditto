@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown } from 'lucide-react'
+import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon } from 'lucide-react'
 import { useStore } from '../store'
 import { formatTime } from '../lib/format'
 import type { ChatItem } from '@shared/types'
@@ -108,8 +108,21 @@ function Item({
     case 'user':
       return (
         <div className="flex justify-end" title={time}>
-          <div className="max-w-[85%] bg-[var(--surface-4)] text-neutral-100 rounded-2xl rounded-br-md px-3.5 py-2 text-[13px] whitespace-pre-wrap">
-            {item.text}
+          <div className="max-w-[85%] bg-[var(--surface-4)] text-neutral-100 rounded-2xl rounded-br-md px-3.5 py-2 text-[13px]">
+            {item.attachments && item.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {item.attachments.map((a, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/20 text-[11px] text-neutral-300"
+                  >
+                    <ImageIcon size={11} className="text-neutral-400" />
+                    {a.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            {item.text && <div className="whitespace-pre-wrap">{item.text}</div>}
           </div>
         </div>
       )

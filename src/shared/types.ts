@@ -95,8 +95,26 @@ export interface AppState {
 // ── 채팅 트랜스크립트 ────────────────────────────────────────────────────
 // main 이 권위 있는 트랜스크립트를 보유·영속화하고, renderer 는 이벤트로 동기화한다.
 
+/** 채팅 지원 이미지의 media type(Claude API 가 받는 base64 이미지 형식). */
+export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+
+/** renderer → main 으로 보내는 붙여넣기 이미지(base64 본문 포함, IPC 전송용). */
+export interface ImageAttachment {
+  /** 표시용 이름(예: image.png). */
+  name: string
+  mediaType: ImageMediaType
+  /** data: 접두사 없는 순수 base64 본문. */
+  dataBase64: string
+}
+
+/**
+ * 트랜스크립트에 남는 첨부 메타데이터. base64 본문은 무겁고 모델에만 필요하므로 저장하지 않고,
+ * 이름/형식만 남겨 사용자 메시지에 "[image.png]" 같은 칩으로 보여 준다.
+ */
+export type ChatAttachment = Pick<ImageAttachment, 'name' | 'mediaType'>
+
 export type ChatItem =
-  | { id: string; type: 'user'; text: string; ts: number }
+  | { id: string; type: 'user'; text: string; ts: number; attachments?: ChatAttachment[] }
   | { id: string; type: 'assistant'; text: string; ts: number; streaming?: boolean }
   | { id: string; type: 'thinking'; text: string; ts: number; streaming?: boolean }
   | { id: string; type: 'tool_use'; toolId: string; name: string; input: unknown; ts: number }

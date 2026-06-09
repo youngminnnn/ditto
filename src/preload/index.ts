@@ -33,7 +33,7 @@ const api: DittoApi = {
   },
 
   chat: {
-    send: (workspaceId, text) => ipcRenderer.invoke(IPC.chatSend, workspaceId, text),
+    send: (workspaceId, text, images) => ipcRenderer.invoke(IPC.chatSend, workspaceId, text, images),
     interrupt: (workspaceId) => ipcRenderer.invoke(IPC.chatInterrupt, workspaceId),
     getHistory: (workspaceId) => ipcRenderer.invoke(IPC.chatGetHistory, workspaceId),
     sideQuestion: (workspaceId, question) =>

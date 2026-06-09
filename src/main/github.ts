@@ -49,6 +49,10 @@ function runLoginShell(
  * 종결 상태(merged/closed) → draft 순으로 먼저 거르고, 열린 PR 중에서는 병합 충돌을
  * 리뷰 결정보다 우선한다 — 충돌은 리뷰 승인 여부와 무관하게 병합을 막는 실행 차단 요인이라
  * 가장 먼저 드러나야 한다.
+ *
+ * reviewDecision 이 빈 문자열이면 해당 브랜치에 필수 리뷰(브랜치 보호 규칙)가 없어
+ * 별도 승인 없이도 병합할 수 있다는 뜻이다 — APPROVED 와 마찬가지로 'approved'(Ready to
+ * merge)로 본다. 즉 "승인됨" 또는 "승인 불필요" 둘 다 Ready to merge 로 표시된다.
  */
 function stateFor(pr: GhPr): PrState {
   if (pr.state === 'MERGED') return 'merged'
@@ -63,7 +67,8 @@ function stateFor(pr: GhPr): PrState {
     case 'APPROVED':
       return 'approved'
     default:
-      return 'open'
+      // 빈 문자열 = 필수 리뷰 설정 없음 → 승인 불필요, 바로 병합 가능.
+      return 'approved'
   }
 }
 

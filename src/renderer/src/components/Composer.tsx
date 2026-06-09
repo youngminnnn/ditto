@@ -184,7 +184,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   }
 
   return (
-    <div className="shrink-0 px-4 py-3 border-t border-[#1c1f25]">
+    <div className="shrink-0 px-4 py-3 border-t border-[var(--surface-2)]">
       <div className="max-w-3xl mx-auto relative">
         {menuOpen && (
           <SlashMenu
@@ -198,7 +198,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
         {sideAnswer && !menuOpen && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
         )}
-        <div className="flex items-end gap-2 bg-[#15171c] border border-[#23262d] rounded-xl px-3 py-2 focus-within:border-[#384050] transition-colors">
+        <div className="flex items-end gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
           <textarea
             ref={taRef}
             value={text}
@@ -228,7 +228,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             onClick={send}
             disabled={!text.trim()}
             title={running ? 'Queue message' : 'Send'}
-            className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[#23262d] disabled:text-neutral-600 hover:bg-blue-500"
+            className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[var(--border)] disabled:text-neutral-600 hover:bg-blue-500"
           >
             <Send size={15} />
           </button>
@@ -267,7 +267,7 @@ function SlashMenu({
   onPick: (cmd: SlashCommandInfo) => void
 }): React.JSX.Element {
   return (
-    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-72 overflow-y-auto rounded-xl border border-[#23262d] bg-[#101216] shadow-2xl py-1 z-20">
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-3)] shadow-2xl py-1 z-20">
       {loading ? (
         <div className="px-3 py-2 text-[12px] text-neutral-500">Loading commands…</div>
       ) : (
@@ -284,7 +284,7 @@ function SlashMenu({
               }}
               className={
                 'w-full flex items-baseline gap-2 px-3 py-1.5 text-left ' +
-                (active ? 'bg-[#1b1f27]' : 'hover:bg-[#15171c]')
+                (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
               }
             >
               <TerminalIcon size={12} className="text-violet-400 shrink-0 translate-y-0.5" />
@@ -324,15 +324,15 @@ function SideAnswerCard({
   onClose: () => void
 }): React.JSX.Element {
   return (
-    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-80 overflow-y-auto rounded-xl border border-violet-500/30 bg-[#101216] shadow-2xl z-20">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#1c1f25] sticky top-0 bg-[#101216]">
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-80 overflow-y-auto rounded-xl border border-violet-500/30 bg-[var(--bg-3)] shadow-2xl z-20">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--surface-2)] sticky top-0 bg-[var(--bg-3)]">
         <MessageCircleQuestion size={13} className="text-violet-400 shrink-0" />
         <span className="text-[11px] font-medium text-violet-300 shrink-0">Side question</span>
         <span className="text-[11px] text-neutral-500 truncate">{answer.question}</span>
         <button
           onClick={onClose}
           title="Dismiss (Esc)"
-          className="ml-auto shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[#1b1f27]"
+          className="ml-auto shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
         >
           <X size={13} />
         </button>

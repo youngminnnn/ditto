@@ -31,8 +31,8 @@ export default function ScriptPanel({
   }
 
   return (
-    <div className="shrink-0 h-64 border-t border-[#1c1f25] bg-[#0d0e11] flex flex-col">
-      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[#1c1f25]">
+    <div className="shrink-0 h-64 border-t border-[var(--surface-2)] bg-[var(--bg-2)] flex flex-col">
+      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[var(--surface-2)]">
         {(['dev', 'setup'] as ScriptKind[]).map((kind) => {
           const active = tab === kind
           const isRunning = statuses.find((s) => s.kind === kind)?.state === 'running'
@@ -42,7 +42,7 @@ export default function ScriptPanel({
               onClick={() => setTab(kind)}
               className={
                 'flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-md ' +
-                (active ? 'bg-[#1c1f25] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
+                (active ? 'bg-[var(--surface-2)] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
               }
             >
               {kind === 'dev' ? 'Dev server' : 'Setup'}
@@ -75,7 +75,7 @@ export default function ScriptPanel({
 
         <button
           onClick={onClose}
-          className="h-6 w-6 grid place-items-center rounded-md text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
+          className="h-6 w-6 grid place-items-center rounded-md text-neutral-500 hover:bg-[var(--surface-2)] hover:text-neutral-200"
         >
           <X size={14} />
         </button>

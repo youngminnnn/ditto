@@ -89,7 +89,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
         </p>
         <button
           onClick={() => void refreshAuth()}
-          className="shrink-0 flex items-center gap-1.5 text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[#1c1f25]"
+          className="shrink-0 flex items-center gap-1.5 text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
         >
           <RefreshCw size={13} /> Refresh
         </button>
@@ -120,8 +120,8 @@ function IntegrationRow({
   onDisconnect: () => void
 }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-3 bg-[#0d0e11] border border-[#23262d] rounded-lg px-3.5 py-3">
-      <div className="h-8 w-8 grid place-items-center rounded-lg bg-[#1c1f25] text-neutral-300 shrink-0">
+    <div className="flex items-center gap-3 bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3.5 py-3">
+      <div className="h-8 w-8 grid place-items-center rounded-lg bg-[var(--surface-2)] text-neutral-300 shrink-0">
         {icon}
       </div>
       <div className="min-w-0 flex-1">
@@ -136,7 +136,7 @@ function IntegrationRow({
       ) : !installed ? (
         <button
           onClick={() => void window.api.openExternal(installUrl)}
-          className="text-[12px] px-3 py-1.5 rounded-lg bg-[#1c1f25] text-neutral-200 font-medium hover:bg-[#23262d]"
+          className="text-[12px] px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-neutral-200 font-medium hover:bg-[var(--border)]"
         >
           Install
         </button>
@@ -144,7 +144,7 @@ function IntegrationRow({
         <div className="flex gap-1.5">
           <button
             onClick={onConnect}
-            className="text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[#1c1f25]"
+            className="text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
           >
             Reconnect
           </button>

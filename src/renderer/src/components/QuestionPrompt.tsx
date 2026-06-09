@@ -139,7 +139,7 @@ export default function QuestionPrompt({
                         className={`text-left rounded-md border px-2.5 py-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-300/50 ${
                           on
                             ? 'border-sky-400/60 bg-sky-500/15'
-                            : 'border-neutral-700/60 hover:bg-[#1c1f25]'
+                            : 'border-neutral-700/60 hover:bg-[var(--surface-2)]'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export default function QuestionPrompt({
       <div className="mt-3 flex items-center justify-end gap-1.5">
         <button
           onClick={cancel}
-          className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[#1c1f25]"
+          className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[var(--surface-2)]"
         >
           Cancel
         </button>

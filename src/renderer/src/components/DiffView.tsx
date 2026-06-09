@@ -51,10 +51,10 @@ function FileBlock({ file }: { file: FileDiff }): React.JSX.Element {
   const [open, setOpen] = useState(file.additions + file.deletions <= 400)
 
   return (
-    <div className="rounded-lg border border-[#23262d] overflow-hidden">
+    <div className="rounded-lg border border-[var(--border)] overflow-hidden">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-[#101216] hover:bg-[#15171c] text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 bg-[var(--bg-3)] hover:bg-[var(--surface)] text-left"
       >
         <StatusIcon status={file.status} />
         <span className="flex-1 truncate text-[12px] font-mono text-neutral-200">{file.path}</span>
@@ -68,7 +68,7 @@ function FileBlock({ file }: { file: FileDiff }): React.JSX.Element {
         )}
       </button>
       {open && !file.binary && file.patch && (
-        <pre className="overflow-x-auto text-[11.5px] font-mono leading-[1.45] bg-[#0d0e11] m-0">
+        <pre className="overflow-x-auto text-[11.5px] font-mono leading-[1.45] bg-[var(--code-bg)] m-0">
           {file.patch.split('\n').map((line, i) => (
             <DiffLine key={i} line={line} />
           ))}

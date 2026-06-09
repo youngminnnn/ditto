@@ -52,7 +52,7 @@ export default function PermissionPrompt({
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => respond('deny')}
-            className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[#1c1f25]"
+            className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[var(--surface-2)]"
           >
             Deny
           </button>

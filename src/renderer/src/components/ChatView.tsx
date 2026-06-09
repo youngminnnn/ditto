@@ -42,7 +42,7 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   draft: {
     Icon: GitPullRequestDraft,
     iconClass: 'text-neutral-400',
-    badgeClass: 'border-[#2a2e36] bg-[#15171c] text-neutral-300 hover:border-neutral-500'
+    badgeClass: 'border-[var(--border-2)] bg-[var(--surface)] text-neutral-300 hover:border-neutral-500'
   },
   review_required: {
     Icon: Clock,
@@ -77,7 +77,7 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   closed: {
     Icon: GitPullRequestClosed,
     iconClass: 'text-neutral-500',
-    badgeClass: 'border-[#2a2e36] bg-[#15171c] text-neutral-400 hover:border-neutral-500'
+    badgeClass: 'border-[var(--border-2)] bg-[var(--surface)] text-neutral-400 hover:border-neutral-500'
   }
 }
 
@@ -159,7 +159,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   return (
     <div className="h-full flex flex-col min-w-0">
       {/* 헤더 */}
-      <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-[#1c1f25]">
+      <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-[var(--surface-2)]">
         <div className="min-w-0">
           {editingName !== null ? (
             <input
@@ -171,7 +171,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                 if (e.key === 'Enter') commitName()
                 else if (e.key === 'Escape') setEditingName(null)
               }}
-              className="text-[13px] font-semibold text-neutral-100 bg-[#15171c] border border-[#384050] rounded px-1.5 py-0.5 outline-none"
+              className="text-[13px] font-semibold text-neutral-100 bg-[var(--surface)] border border-[var(--border-strong)] rounded px-1.5 py-0.5 outline-none"
             />
           ) : (
             <div
@@ -220,7 +220,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           value={workspace.model ?? ''}
           onChange={(e) => setModel(e.target.value)}
           disabled={running}
-          className="no-drag text-[11.5px] bg-[#15171c] border border-[#23262d] rounded-md px-1.5 py-1 text-neutral-300 focus:outline-none focus:border-[#384050] disabled:opacity-50"
+          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 text-neutral-300 focus:outline-none focus:border-[var(--border-strong)] disabled:opacity-50"
           title={running ? 'Stop the current turn to change model' : 'Model for this workspace'}
         >
           <option value="">Default · {modelLabel(settingsModel)}</option>
@@ -237,7 +237,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
         <select
           value={workspace.permissionMode}
           onChange={(e) => setMode(e.target.value as PermissionMode)}
-          className="no-drag text-[11.5px] bg-[#15171c] border border-[#23262d] rounded-md px-2 py-1 text-neutral-300 focus:outline-none focus:border-[#384050]"
+          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1 text-neutral-300 focus:outline-none focus:border-[var(--border-strong)]"
           title="Permission mode — ⇧⇥ to cycle"
         >
           {PERMISSION_ORDER.map((mode) => (
@@ -269,7 +269,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
         {/* PR 상태 + 링크: 헤더 우측 끝. 상태별 색·아이콘으로 한눈에 구분. */}
         {(pr || (git && git.ahead > 0)) && (
-          <div className="flex items-center pl-2 ml-0.5 border-l border-[#1c1f25]">
+          <div className="flex items-center pl-2 ml-0.5 border-l border-[var(--surface-2)]">
             {pr ? (
               (() => {
                 const { Icon, iconClass, badgeClass } = PR_STYLE[pr.state]
@@ -291,7 +291,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
             ) : (
               <button
                 onClick={createPr}
-                className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[#15171c] border border-[#23262d] text-neutral-300 hover:border-[#384050]"
+                className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[var(--surface)] border border-[var(--border)] text-neutral-300 hover:border-[var(--border-strong)]"
                 title="Open a pull request for this branch"
               >
                 <GitPullRequestCreate size={12} className="text-violet-400" />
@@ -382,8 +382,8 @@ function HeaderButton({
         (danger
           ? 'text-neutral-400 hover:bg-red-500/15 hover:text-red-400'
           : active
-            ? 'bg-[#1c1f25] text-neutral-100'
-            : 'text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-100')
+            ? 'bg-[var(--surface-2)] text-neutral-100'
+            : 'text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-100')
       }
     >
       {children}

@@ -38,10 +38,10 @@ export default function FileBrowser({ workspaceId }: { workspaceId: string }): R
   if (openFile !== null) {
     return (
       <div className="h-full flex flex-col min-h-0">
-        <div className="h-8 shrink-0 flex items-center gap-2 px-2 border-b border-[#1c1f25]">
+        <div className="h-8 shrink-0 flex items-center gap-2 px-2 border-b border-[var(--surface-2)]">
           <button
             onClick={() => setOpenFile(null)}
-            className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-100 px-1.5 py-0.5 rounded hover:bg-[#1c1f25]"
+            className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-100 px-1.5 py-0.5 rounded hover:bg-[var(--surface-2)]"
           >
             <ArrowLeft size={12} /> Files
           </button>
@@ -113,7 +113,7 @@ function DirNode({
         <button
           onClick={() => setOpen((v) => !v)}
           style={pad}
-          className="w-full flex items-center gap-1.5 pr-2 py-1 text-left text-[12px] text-neutral-300 hover:bg-[#15171c]"
+          className="w-full flex items-center gap-1.5 pr-2 py-1 text-left text-[12px] text-neutral-300 hover:bg-[var(--surface)]"
         >
           <ChevronRight size={11} className={(open ? 'rotate-90 ' : '') + 'shrink-0 transition text-neutral-500'} />
           {open ? (
@@ -183,8 +183,8 @@ function FileLeaf({
       onClick={() => onSelect(entry.path)}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       className={
-        'w-full flex items-center gap-1.5 pr-2 py-1 text-left text-[12px] hover:bg-[#15171c] ' +
-        (active ? 'bg-[#1b1f27] text-neutral-100' : 'text-neutral-400')
+        'w-full flex items-center gap-1.5 pr-2 py-1 text-left text-[12px] hover:bg-[var(--surface)] ' +
+        (active ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-400')
       }
     >
       <span className="w-[11px] shrink-0" />
@@ -226,7 +226,7 @@ function FileViewer({
 
   return (
     <div className="flex-1 overflow-auto">
-      <pre className="hljs text-[11.5px] font-mono leading-[1.5] p-3 m-0 bg-[#0d0e11] whitespace-pre">
+      <pre className="hljs text-[11.5px] font-mono leading-[1.5] p-3 m-0 bg-[var(--code-bg)] whitespace-pre">
         {html ? <code dangerouslySetInnerHTML={{ __html: html }} /> : <code>{content.text}</code>}
       </pre>
       {content.truncated && (

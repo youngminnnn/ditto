@@ -85,7 +85,7 @@ export default function MessageList({
         <button
           onClick={jumpToBottom}
           title="Jump to latest"
-          className="absolute bottom-3 right-4 h-8 w-8 grid place-items-center rounded-full bg-[#1c1f25] border border-[#2f333b] text-neutral-300 hover:text-neutral-100 shadow-lg"
+          className="absolute bottom-3 right-4 h-8 w-8 grid place-items-center rounded-full bg-[var(--surface-2)] border border-[var(--border-3)] text-neutral-300 hover:text-neutral-100 shadow-lg"
         >
           <ArrowDown size={15} />
         </button>
@@ -108,7 +108,7 @@ function Item({
     case 'user':
       return (
         <div className="flex justify-end" title={time}>
-          <div className="max-w-[85%] bg-[#1f2630] text-neutral-100 rounded-2xl rounded-br-md px-3.5 py-2 text-[13px] whitespace-pre-wrap">
+          <div className="max-w-[85%] bg-[var(--surface-4)] text-neutral-100 rounded-2xl rounded-br-md px-3.5 py-2 text-[13px] whitespace-pre-wrap">
             {item.text}
           </div>
         </div>
@@ -165,7 +165,7 @@ function Thinking({ text }: { text: string }): React.JSX.Element {
         <ChevronRight size={12} className={open ? 'rotate-90 transition' : 'transition'} />
       </button>
       {open && (
-        <div className="mt-1 pl-4 border-l border-[#23262d] text-neutral-500 whitespace-pre-wrap italic">
+        <div className="mt-1 pl-4 border-l border-[var(--border)] text-neutral-500 whitespace-pre-wrap italic">
           {text}
         </div>
       )}
@@ -200,7 +200,7 @@ function ToolUse({
         <ChevronRight size={12} className={(open ? 'rotate-90 ' : '') + 'ml-auto shrink-0 transition'} />
       </button>
       {open && (
-        <pre className="mt-1 ml-4 text-[11.5px] bg-[#15171c] border border-[#23262d] rounded-md p-2 overflow-x-auto text-neutral-400">
+        <pre className="mt-1 ml-4 text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md p-2 overflow-x-auto text-neutral-400">
           {JSON.stringify(input, null, 2)}
         </pre>
       )}
@@ -221,7 +221,7 @@ function ToolResult({ text, isError }: { text: string; isError: boolean }): Reac
           'whitespace-pre-wrap rounded-md p-2 overflow-x-auto border ' +
           (isError
             ? 'bg-red-500/5 border-red-500/20 text-red-300/90'
-            : 'bg-[#101216] border-[#1c1f25] text-neutral-500')
+            : 'bg-[var(--bg-3)] border-[var(--surface-2)] text-neutral-500')
         }
       >
         {open || !truncated ? text : preview + (truncated ? '\n…' : '')}
@@ -266,7 +266,7 @@ function CopyButton({ text, className }: { text: string; className?: string }): 
       onClick={copy}
       title="Copy"
       className={
-        'h-6 w-6 grid place-items-center rounded-md bg-[#1c1f25]/80 text-neutral-400 hover:text-neutral-100 ' +
+        'h-6 w-6 grid place-items-center rounded-md bg-[var(--surface-2)]/80 text-neutral-400 hover:text-neutral-100 ' +
         (className ?? '')
       }
     >

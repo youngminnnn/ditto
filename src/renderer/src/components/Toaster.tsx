@@ -11,7 +11,7 @@ export default function Toaster(): React.JSX.Element {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="flex items-start gap-2.5 rounded-lg border bg-[#15171c] px-3.5 py-2.5 shadow-2xl border-[#23262d]"
+          className="flex items-start gap-2.5 rounded-lg border bg-[var(--surface)] px-3.5 py-2.5 shadow-2xl border-[var(--border)]"
         >
           <Icon kind={t.kind} />
           <span className="flex-1 text-[12.5px] text-neutral-200 whitespace-pre-wrap break-words">

@@ -21,6 +21,8 @@ function normalizeMode(mode: unknown): PermissionMode {
 const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'default',
   model: DEFAULT_MODEL,
+  // 기본 다크 — 기존 사용자도 load 의 기본값 병합으로 다크를 유지한다.
+  theme: 'dark',
   soundOnComplete: true,
   manualWorkspaceSetup: false,
   onboarded: false,

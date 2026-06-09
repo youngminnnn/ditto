@@ -4,7 +4,14 @@ import Modal, { inputClass, labelClass, primaryBtn, ghostBtn } from './Modal'
 import IntegrationsPanel from './IntegrationsPanel'
 import { PERMISSION_ORDER, PERMISSION_LABELS, PERMISSION_DESCRIPTIONS } from '../lib/permission'
 import { MODEL_OPTIONS } from '../lib/models'
-import type { PermissionMode } from '@shared/types'
+import { applyTheme } from '../lib/theme'
+import type { PermissionMode, ThemePreference } from '@shared/types'
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' }
+]
 
 export default function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const settings = useStore((s) => s.app!.settings)
@@ -12,13 +19,25 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   const [manualWorkspaceSetup, setManualWorkspaceSetup] = useState(settings.manualWorkspaceSetup)
   const [soundOnComplete, setSoundOnComplete] = useState(settings.soundOnComplete)
   const [model, setModel] = useState(settings.model ?? MODEL_OPTIONS[0].id)
+  const [theme, setTheme] = useState<ThemePreference>(settings.theme)
+
+  // 테마는 즉시 미리보기로 적용한다. 저장 없이 닫으면 저장된 테마로 되돌린다.
+  const previewTheme = (next: ThemePreference): void => {
+    setTheme(next)
+    applyTheme(next)
+  }
+  const cancel = (): void => {
+    if (theme !== settings.theme) applyTheme(settings.theme)
+    onClose()
+  }
 
   const save = async (): Promise<void> => {
     await window.api.settings.update({
       defaultPermissionMode: mode,
       manualWorkspaceSetup,
       soundOnComplete,
-      model
+      model,
+      theme
     })
     onClose()
   }
@@ -26,11 +45,11 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   return (
     <Modal
       title="Settings"
-      onClose={onClose}
+      onClose={cancel}
       width={560}
       footer={
         <>
-          <button className={ghostBtn} onClick={onClose}>
+          <button className={ghostBtn} onClick={cancel}>
             Cancel
           </button>
           <button className={primaryBtn} onClick={save}>
@@ -42,6 +61,35 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
       <div className="space-y-5">
         <Section title="Integrations">
           <IntegrationsPanel />
+        </Section>
+
+        <Section title="Appearance">
+          <div>
+            <label className={labelClass}>Theme</label>
+            <div className="flex gap-1.5">
+              {THEME_OPTIONS.map((opt) => {
+                const active = theme === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => previewTheme(opt.value)}
+                    className={
+                      'flex-1 text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ' +
+                      (active
+                        ? 'border-blue-500 bg-blue-600/15 text-neutral-100'
+                        : 'border-[var(--border)] text-neutral-300 hover:bg-[var(--surface-2)]')
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-neutral-600">
+              System follows your OS light/dark setting.
+            </p>
+          </div>
         </Section>
 
         <Section title="Workspaces">

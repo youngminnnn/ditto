@@ -19,6 +19,7 @@ import {
   ExternalLink,
   BellDot,
   ShieldQuestion,
+  PanelRight,
   type LucideIcon
 } from 'lucide-react'
 import { useStore } from '../store'
@@ -83,6 +84,8 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
 export default function ChatView({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const showScripts = useStore((s) => s.scriptPanelOpen[workspace.id] ?? false)
   const setShowScripts = useStore((s) => s.setScriptPanelOpen)
+  const rightPanelOpen = useStore((s) => s.rightPanelOpen)
+  const toggleRightPanel = useStore((s) => s.toggleRightPanel)
   const [showDiff, setShowDiff] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [editingName, setEditingName] = useState<string | null>(null)
@@ -255,6 +258,13 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
         </HeaderButton>
         <HeaderButton title="Archive workspace" onClick={archiveWorkspace} danger>
           <Archive size={15} />
+        </HeaderButton>
+        <HeaderButton
+          title={rightPanelOpen ? 'Hide work panel — ⌘J' : 'Show work panel — ⌘J'}
+          onClick={toggleRightPanel}
+          active={rightPanelOpen}
+        >
+          <PanelRight size={15} />
         </HeaderButton>
 
         {/* PR 상태 + 링크: 헤더 우측 끝. 상태별 색·아이콘으로 한눈에 구분. */}

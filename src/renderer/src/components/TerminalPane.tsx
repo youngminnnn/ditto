@@ -105,8 +105,8 @@ export default function TerminalPane({ workspaceId }: { workspaceId: string }): 
   }
 
   return (
-    <div className="h-full flex flex-col min-h-0 bg-[#0d0e11]">
-      <div className="h-7 shrink-0 flex items-center gap-1.5 px-3 border-b border-[#1c1f25] text-[11px] text-neutral-500">
+    <div className="h-full flex flex-col min-h-0 bg-[var(--bg-2)]">
+      <div className="h-7 shrink-0 flex items-center gap-1.5 px-3 border-b border-[var(--surface-2)] text-[11px] text-neutral-500">
         <TerminalSquare size={12} />
         <span>Terminal</span>
         <div className="flex-1" />

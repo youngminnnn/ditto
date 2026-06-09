@@ -36,7 +36,7 @@ export default function OnboardingModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-      <div className="no-drag w-[520px] max-w-[92vw] bg-[#15171c] border border-[#23262d] rounded-xl shadow-2xl overflow-hidden">
+      <div className="no-drag w-[520px] max-w-[92vw] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden">
         <div className="px-6 pt-7 pb-2 text-center">
           <div className="mb-3 flex justify-center">
             <Logo size={56} />
@@ -107,7 +107,7 @@ function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Elem
         </label>
       </div>
 
-      <div className="px-6 py-4 border-t border-[#23262d] flex justify-end">
+      <div className="px-6 py-4 border-t border-[var(--border)] flex justify-end">
         <button
           className={primaryBtn + ' disabled:opacity-40 disabled:cursor-not-allowed'}
           disabled={!agreed}
@@ -130,7 +130,7 @@ function IntegrationsStep({ onDone }: { onDone: () => void }): React.JSX.Element
         <IntegrationsPanel />
       </div>
 
-      <div className="px-6 py-4 border-t border-[#23262d] flex justify-end">
+      <div className="px-6 py-4 border-t border-[var(--border)] flex justify-end">
         <button className={primaryBtn} onClick={onDone}>
           Get started
         </button>

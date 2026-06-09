@@ -18,8 +18,8 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
   const [tab, setTab] = useState<Tab>('changes')
 
   return (
-    <div className="h-full flex flex-col min-h-0 bg-[#0b0c0e]">
-      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[#1c1f25]">
+    <div className="h-full flex flex-col min-h-0 bg-[var(--bg)]">
+      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-[var(--surface-2)]">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id
           return (
@@ -28,7 +28,7 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
               onClick={() => setTab(id)}
               className={
                 'flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-md ' +
-                (active ? 'bg-[#1c1f25] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
+                (active ? 'bg-[var(--surface-2)] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
               }
             >
               <Icon size={13} />

@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { CURRENT_TERMS_VERSION } from '@shared/types'
 import { useStore } from './store'
 import { nextPermissionMode } from './lib/permission'
+import { applyTheme } from './lib/theme'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
@@ -35,6 +36,12 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     void init()
   }, [init])
+
+  // 권위 있는 설정의 테마를 <html> 에 반영한다(설정 변경·system 선호 변화 추적 포함).
+  const theme = app?.settings.theme
+  useEffect(() => {
+    if (theme) applyTheme(theme)
+  }, [theme])
 
   // 온보딩(약관 동의·계정 연결) 모달이 떠 있는 동안에는 전역 단축키도 막아, 동의 전 앱 조작을 차단한다.
   const onboardingOpen =
@@ -89,7 +96,7 @@ export default function App(): React.JSX.Element {
 
   if (!ready || !app) {
     return (
-      <div className="h-full grid place-items-center bg-[#0b0c0e]">
+      <div className="h-full grid place-items-center bg-[var(--bg)]">
         <div className="flex flex-col items-center gap-3 text-neutral-500">
           <Logo size={40} />
           <span className="text-[12px]">Loading…</span>
@@ -116,7 +123,7 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#0b0c0e]">
+    <div className="h-full flex flex-col bg-[var(--bg)]">
       <TitleBar onOpenSettings={() => setShowSettings(true)} />
 
       {claudeMissing && (
@@ -131,7 +138,7 @@ export default function App(): React.JSX.Element {
 
       <div className="flex-1 flex min-h-0">
         <Sidebar onNewWorkspace={handleNewWorkspace} onConfigRepo={setConfigRepoId} />
-        <div className="flex-1 min-w-0 border-l border-[#1c1f25] flex">
+        <div className="flex-1 min-w-0 border-l border-[var(--surface-2)] flex">
           {selected ? (
             <>
               <div className="flex-1 min-w-0">
@@ -147,7 +154,7 @@ export default function App(): React.JSX.Element {
                   />
                   <div
                     style={{ width: rightWidth }}
-                    className="shrink-0 border-l border-[#1c1f25] min-w-0"
+                    className="shrink-0 border-l border-[var(--surface-2)] min-w-0"
                   >
                     <WorkArea key={selected.id} workspace={selected} />
                   </div>

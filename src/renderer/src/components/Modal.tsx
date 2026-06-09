@@ -30,22 +30,22 @@ export default function Modal({
       onMouseDown={onClose}
     >
       <div
-        className="no-drag bg-[#15171c] border border-[#23262d] rounded-xl shadow-2xl max-w-[92vw] max-h-[88vh] flex flex-col"
+        className="no-drag bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl max-w-[92vw] max-h-[88vh] flex flex-col"
         style={{ width }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="shrink-0 flex items-center justify-between px-4 h-12 border-b border-[#23262d]">
+        <div className="shrink-0 flex items-center justify-between px-4 h-12 border-b border-[var(--border)]">
           <h3 className="text-[13px] font-semibold text-neutral-100">{title}</h3>
           <button
             onClick={onClose}
-            className="h-7 w-7 grid place-items-center rounded-md text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-100"
+            className="h-7 w-7 grid place-items-center rounded-md text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-100"
           >
             <X size={15} />
           </button>
         </div>
         <div className="p-4 overflow-y-auto">{children}</div>
         {footer && (
-          <div className="shrink-0 flex justify-end gap-2 px-4 py-3 border-t border-[#23262d]">
+          <div className="shrink-0 flex justify-end gap-2 px-4 py-3 border-t border-[var(--border)]">
             {footer}
           </div>
         )}
@@ -55,12 +55,12 @@ export default function Modal({
 }
 
 export const inputClass =
-  'w-full bg-[#0d0e11] border border-[#23262d] rounded-lg px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-[#384050]'
+  'w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-[var(--border-strong)]'
 
 export const labelClass = 'block text-[11.5px] font-medium text-neutral-400 mb-1.5'
 
 export const primaryBtn =
-  'text-[12.5px] px-3.5 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:bg-[#23262d] disabled:text-neutral-600'
+  'text-[12.5px] px-3.5 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:bg-[var(--border)] disabled:text-neutral-600'
 
 export const ghostBtn =
-  'text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[#1c1f25]'
+  'text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]'

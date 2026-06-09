@@ -82,7 +82,7 @@ function CheckRow({ check }: { check: PrCheck }): React.JSX.Element {
     <button
       onClick={open}
       disabled={!check.url}
-      className="group w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-[#15171c] disabled:hover:bg-transparent"
+      className="group w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-[var(--surface)] disabled:hover:bg-transparent"
       title={check.url ? 'Open check details' : undefined}
     >
       <CheckIcon state={check.state} />

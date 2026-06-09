@@ -31,14 +31,14 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-72 shrink-0 flex flex-col bg-[#0d0e11]">
+    <aside className="w-72 shrink-0 flex flex-col bg-[var(--bg-2)]">
       <div className="flex items-center justify-between px-3 h-10 shrink-0">
         <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
           Repositories
         </span>
         <button
           onClick={addRepo}
-          className="h-6 w-6 grid place-items-center rounded-md text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-100"
+          className="h-6 w-6 grid place-items-center rounded-md text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-100"
           title="Add repository"
         >
           <Plus size={15} />
@@ -81,14 +81,14 @@ export default function Sidebar({
                 )}
                 <button
                   onClick={() => onConfigRepo(repo.id)}
-                  className="h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
+                  className="h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[var(--surface-2)] hover:text-neutral-200"
                   title="Repository settings (setup / dev / archive scripts)"
                 >
                   <Settings2 size={13} />
                 </button>
                 <button
                   onClick={() => onNewWorkspace(repo.id)}
-                  className="h-5 w-5 grid place-items-center rounded text-neutral-400 hover:bg-[#1c1f25] hover:text-neutral-100"
+                  className="h-5 w-5 grid place-items-center rounded text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-100"
                   title="New workspace"
                 >
                   <Plus size={14} />
@@ -156,8 +156,8 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
         }
       }}
       className={
-        'group/ws w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#384050] ' +
-        (active ? 'bg-[#1b1f27]' : 'hover:bg-[#15171c]')
+        'group/ws w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-strong)] ' +
+        (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
       }
     >
       <StatusDot status={workspace.status} awaitingPermission={awaitingPermission} />
@@ -189,7 +189,7 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
       )}
       <button
         onClick={archive}
-        className="opacity-0 group-hover/ws:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200 shrink-0"
+        className="opacity-0 group-hover/ws:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[var(--surface-2)] hover:text-neutral-200 shrink-0"
         title="Archive workspace"
       >
         <Archive size={13} />
@@ -257,13 +257,13 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
   }
 
   return (
-    <div className="group/arc flex items-center gap-2 pl-6 pr-1.5 py-1 rounded-md hover:bg-[#15171c]">
+    <div className="group/arc flex items-center gap-2 pl-6 pr-1.5 py-1 rounded-md hover:bg-[var(--surface)]">
       <span className="flex-1 truncate text-[11.5px] text-neutral-500" title={workspace.branch}>
         {workspace.name}
       </span>
       <button
         onClick={unarchive}
-        className="opacity-0 group-hover/arc:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
+        className="opacity-0 group-hover/arc:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[var(--surface-2)] hover:text-neutral-200"
         title="Unarchive (recreate worktree)"
       >
         <ArchiveRestore size={12} />

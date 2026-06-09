@@ -27,7 +27,7 @@ export default function ConfirmDialog(): React.JSX.Element | null {
       onMouseDown={() => resolve(false)}
     >
       <div
-        className="no-drag w-[400px] max-w-[92vw] bg-[#15171c] border border-[#23262d] rounded-xl shadow-2xl p-5"
+        className="no-drag w-[400px] max-w-[92vw] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl p-5"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h3 className="text-[14px] font-semibold text-neutral-100">{state.title}</h3>
@@ -39,7 +39,7 @@ export default function ConfirmDialog(): React.JSX.Element | null {
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={() => resolve(false)}
-            className="text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[#1c1f25]"
+            className="text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
           >
             Cancel
           </button>

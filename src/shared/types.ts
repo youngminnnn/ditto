@@ -61,10 +61,15 @@ export interface Workspace {
  */
 export const CURRENT_TERMS_VERSION = 1
 
+/** UI 색상 테마. 'system' 은 OS 의 다크/라이트 설정을 따른다. */
+export type ThemePreference = 'system' | 'light' | 'dark'
+
 export interface AppSettings {
   defaultPermissionMode: PermissionMode
   /** 사용할 모델 ID (예: "claude-opus-4-8[1m]"). */
   model: string | null
+  /** UI 색상 테마(다크 기본). */
+  theme: ThemePreference
   /** 세션 응답이 완료되면 소리로 알림. */
   soundOnComplete: boolean
   /**

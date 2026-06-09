@@ -2,6 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
 import { resolveClaudeExecutable } from './executable'
+import { MCP_SETTING_SOURCES } from './mcp'
 import type { SlashCommandInfo } from '@shared/types'
 
 /**
@@ -50,7 +51,12 @@ async function fetchCommands(cwd: string): Promise<SlashCommandInfo[]> {
   const claudeExecutable = resolveClaudeExecutable()
   const q = query({
     prompt: input,
-    options: { cwd, ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}) }
+    options: {
+      cwd,
+      // 프로젝트/유저 스코프 슬래시 명령·스킬이 자동완성에 뜨도록 CLI 와 동일하게 설정을 로드.
+      settingSources: MCP_SETTING_SOURCES,
+      ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {})
+    }
   })
   try {
     const timeout = new Promise<never>((_, reject) =>

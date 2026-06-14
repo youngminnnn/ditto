@@ -18,6 +18,8 @@ interface GhPr {
   isDraft: boolean
   reviewDecision: string // REVIEW_REQUIRED | CHANGES_REQUESTED | APPROVED | ''
   mergeable: string // MERGEABLE | CONFLICTING | UNKNOWN
+  // BEHIND | BLOCKED | CLEAN | DIRTY | DRAFT | HAS_HOOKS | UNKNOWN | UNSTABLE
+  mergeStateStatus: string
 }
 
 function runLoginShell(
@@ -50,25 +52,43 @@ function runLoginShell(
  * 리뷰 결정보다 우선한다 — 충돌은 리뷰 승인 여부와 무관하게 병합을 막는 실행 차단 요인이라
  * 가장 먼저 드러나야 한다.
  *
- * reviewDecision 이 빈 문자열이면 해당 브랜치에 필수 리뷰(브랜치 보호 규칙)가 없어
- * 별도 승인 없이도 병합할 수 있다는 뜻이다 — APPROVED 와 마찬가지로 'approved'(Ready to
- * merge)로 본다. 즉 "승인됨" 또는 "승인 불필요" 둘 다 Ready to merge 로 표시된다.
+ * reviewDecision 만으로 'approved'(Ready to merge)를 판단하면 안 된다 — 빈 문자열은 "필수
+ * 리뷰 없음"일 수도 있지만, 리포가 ruleset(신형 브랜치 보호)으로 필수 리뷰를 걸어둔 경우
+ * gh 가 reviewDecision 을 빈 값으로 돌려주기도 한다. 즉 승인 전인데도 빈 값이 와서, 이를
+ * 무조건 Ready to merge 로 보면 병합 불가 PR 이 Ready 로 잘못 뜬다.
+ *
+ * 그래서 실제 병합 가능 여부는 GitHub 가 계산하는 mergeStateStatus 를 권위 있는 신호로 쓴다.
+ * BLOCKED(필수 리뷰·체크 미충족) 나 BEHIND(base 보다 뒤처짐) 면 reviewDecision 이 비어
+ * 있어도 Ready to merge 로 보지 않는다.
  */
 function stateFor(pr: GhPr): PrState {
   if (pr.state === 'MERGED') return 'merged'
   if (pr.state === 'CLOSED') return 'closed'
   if (pr.isDraft) return 'draft'
-  if (pr.mergeable === 'CONFLICTING') return 'conflict'
-  switch (pr.reviewDecision) {
-    case 'REVIEW_REQUIRED':
+  if (pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY') return 'conflict'
+
+  // 명시적 리뷰 결정이 있으면 그대로 따른다(필수 리뷰가 정상 노출되는 경우).
+  if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'changes_requested'
+  if (pr.reviewDecision === 'REVIEW_REQUIRED') return 'review_required'
+
+  // 여기까지 오면 reviewDecision 은 APPROVED 또는 ''(필수 리뷰 없음/ruleset 로 미노출).
+  // 병합 차단 여부는 mergeStateStatus 로 확정한다.
+  switch (pr.mergeStateStatus) {
+    case 'CLEAN':
+    case 'HAS_HOOKS':
+    case 'UNSTABLE':
+      // 병합 가능(UNSTABLE = 필수 외 체크만 실패/대기 → GitHub 도 병합 허용).
+      return 'approved'
+    case 'BLOCKED':
+      // 필수 리뷰·체크 미충족으로 병합 차단 → 아직 Ready 아님.
       return 'review_required'
-    case 'CHANGES_REQUESTED':
-      return 'changes_requested'
-    case 'APPROVED':
-      return 'approved'
+    case 'BEHIND':
+      // base 보다 뒤처져 업데이트 필요 → 아직 Ready 아님.
+      return 'open'
     default:
-      // 빈 문자열 = 필수 리뷰 설정 없음 → 승인 불필요, 바로 병합 가능.
-      return 'approved'
+      // UNKNOWN 등 GitHub 가 아직 계산 중 → 명시적 승인이 있으면 approved,
+      // 아니면 보수적으로 open 으로 둔다(섣불리 Ready to merge 로 띄우지 않는다).
+      return pr.reviewDecision === 'APPROVED' ? 'approved' : 'open'
   }
 }
 
@@ -86,7 +106,7 @@ const PR_LABELS: Record<PrState, string> = {
 /** worktree 의 현재 브랜치에 연결된 PR 상태를 조회한다(인자 없는 `gh pr view`). */
 export async function getPrStatus(worktreePath: string): Promise<PrStatus | null> {
   const { stdout, code } = await runLoginShell(
-    `gh pr view --json number,url,title,state,isDraft,reviewDecision,mergeable`,
+    `gh pr view --json number,url,title,state,isDraft,reviewDecision,mergeable,mergeStateStatus`,
     worktreePath
   )
   if (code !== 0) return null

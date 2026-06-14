@@ -29,6 +29,8 @@ import {
 import { IPC } from '@shared/types'
 import type {
   AppSettings,
+  CommandPanelKind,
+  CommandResult,
   CreateWorkspaceArgs,
   ImageAttachment,
   PermissionDecision,
@@ -410,6 +412,23 @@ export function registerIpc(ctx: IpcContext): void {
     if (!ws) return []
     return listSlashCommands(ws.worktreePath).catch(() => [])
   })
+
+  // 인터랙티브 명령(/mcp·/context·/reload-plugins 등) — 결과 카드용 데이터를 조회한다.
+  ipcMain.handle(
+    IPC.commandRun,
+    async (
+      _e,
+      workspaceId: string,
+      kind: CommandPanelKind
+    ): Promise<{ result?: CommandResult; error?: string }> => {
+      try {
+        const result = await ctx.sessions.runCommand(workspaceId, kind)
+        return { result }
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
 
   // ── 인터랙티브 터미널 (worktree PTY) ─────────────────────────────────────
 

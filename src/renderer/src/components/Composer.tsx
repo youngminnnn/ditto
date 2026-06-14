@@ -1,8 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Square, Terminal as TerminalIcon, MessageCircleQuestion, X, ImageIcon } from 'lucide-react'
+import {
+  Send,
+  Square,
+  Terminal as TerminalIcon,
+  MessageCircleQuestion,
+  X,
+  ImageIcon,
+  Loader2,
+  Plug,
+  RefreshCw,
+  Gauge,
+  Receipt,
+  Bot
+} from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
-import type { ChatItem, ImageAttachment, ImageMediaType, SlashCommandInfo, Workspace } from '@shared/types'
+import { INTERACTIVE_COMMANDS } from '@shared/types'
+import type {
+  ChatItem,
+  CommandPanelKind,
+  CommandResult,
+  ImageAttachment,
+  ImageMediaType,
+  SlashCommandInfo,
+  Workspace
+} from '@shared/types'
 
 /** Claude 가 받는 이미지 형식. 클립보드의 다른 형식은 붙여넣기 시 무시한다. */
 const IMAGE_TYPES: Record<string, ImageMediaType> = {
@@ -46,14 +68,20 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   // /btw 사이드 질문의 임시 답변(트랜스크립트와 분리, 닫으면 사라짐).
   const [sideAnswer, setSideAnswer] = useState<SideAnswer | null>(null)
 
+  // /mcp·/context 등 인터랙티브 명령 결과 카드(임시 표시, 닫으면 사라짐).
+  const [commandCard, setCommandCard] = useState<CommandCardState | null>(null)
+  // 카드 응답을 현재 요청과만 맞추기 위한 단조 토큰(워크스페이스/명령 전환 시 stale 응답 무시).
+  const cmdSeq = useRef(0)
+
   // 붙여넣은 이미지 첨부(전송 전 대기). 초안과 달리 워크스페이스 전환 시 비운다(다른 작업으로 새지 않도록).
   const [images, setImages] = useState<PendingImage[]>([])
   // 같은 워크스페이스 안에서 첨부 id 가 겹치지 않도록 하는 단조 카운터.
   const imgSeq = useRef(0)
 
-  // 워크스페이스를 바꾸면 이전 사이드 답변과 대기 중 첨부를 치운다(다른 작업으로 새지 않도록).
+  // 워크스페이스를 바꾸면 이전 사이드 답변·명령 카드·대기 중 첨부를 치운다(다른 작업으로 새지 않도록).
   useEffect(() => {
     setSideAnswer(null)
+    setCommandCard(null)
     setImages([])
   }, [workspace.id])
 
@@ -143,6 +171,16 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     const trimmed = text.trim()
     if (!trimmed && !images.length) return // 텍스트도 첨부도 없으면 무시.
 
+    // /mcp·/context·/reload-plugins 등 인터랙티브(TUI 전용) 명령은 일반 프롬프트로 보내면 동작하지
+    // 않으므로 인터셉트해 SDK 제어 메서드로 실행하고 결과를 카드로 보여 준다(첨부가 있으면 일반 전송).
+    const interactive = images.length ? null : matchInteractive(trimmed)
+    if (interactive) {
+      runInteractive(interactive)
+      setText('')
+      historyIdx.current = -1
+      return
+    }
+
     // /btw 는 사이드 질문으로 분기한다 — 일반 메시지로 보내면 현재 턴 뒤에 큐잉되어 메인 대화에
     // 쌓이므로(=오염), 맥락만 공유하는 임시 질의로 처리하고 답변은 별도 카드로 보여 준다.
     // (사이드 질문은 텍스트 전용 — 첨부가 있으면 일반 메시지로 보낸다.)
@@ -167,6 +205,22 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     setText('')
     setImages([])
     historyIdx.current = -1
+  }
+
+  /** 인터랙티브 명령을 실행하고 결과를 카드로 띄운다(사이드 답변 카드는 비켜 준다). */
+  const runInteractive = (cmd: (typeof INTERACTIVE_COMMANDS)[number]): void => {
+    setSideAnswer(null)
+    const seq = ++cmdSeq.current
+    setCommandCard({ kind: cmd.kind, title: `/${cmd.name}`, status: 'loading' })
+    void window.api.commands.run(workspace.id, cmd.kind).then(({ result, error }) => {
+      // 이 카드를 띄운 요청이 아직 최신일 때만 반영(워크스페이스/명령 전환 후 도착한 응답은 버린다).
+      if (cmdSeq.current !== seq) return
+      setCommandCard((prev) => {
+        if (!prev || prev.kind !== cmd.kind) return prev
+        if (error || !result) return { ...prev, status: 'error', error: error || 'No data returned.' }
+        return { ...prev, status: 'done', result }
+      })
+    })
   }
 
   /** 선택한 슬래시 명령을 입력창에 채운다(인자를 이어 쓸 수 있도록 공백을 붙이고 포커스 유지). */
@@ -208,10 +262,11 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       }
     }
 
-    // 사이드 답변 카드가 떠 있으면 Esc 로 닫는다(메뉴가 우선).
-    if (e.key === 'Escape' && sideAnswer && !menuOpen) {
+    // 명령 결과/사이드 답변 카드가 떠 있으면 Esc 로 닫는다(메뉴가 우선).
+    if (e.key === 'Escape' && !menuOpen && (commandCard || sideAnswer)) {
       e.preventDefault()
-      setSideAnswer(null)
+      if (commandCard) setCommandCard(null)
+      else setSideAnswer(null)
       return
     }
 
@@ -254,7 +309,10 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             onPick={acceptCommand}
           />
         )}
-        {sideAnswer && !menuOpen && (
+        {commandCard && !menuOpen && (
+          <CommandCard card={commandCard} onClose={() => setCommandCard(null)} />
+        )}
+        {sideAnswer && !menuOpen && !commandCard && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
         )}
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
@@ -444,6 +502,235 @@ function SideAnswerCard({
       </div>
     </div>
   )
+}
+
+/** "/mcp" 처럼 인자 없는 인터랙티브 명령이면 해당 정의를 돌려준다(아니면 null). */
+function matchInteractive(text: string): (typeof INTERACTIVE_COMMANDS)[number] | null {
+  const m = /^\/([\w-]+)\s*$/.exec(text)
+  if (!m) return null
+  return INTERACTIVE_COMMANDS.find((c) => c.name === m[1]) ?? null
+}
+
+/** 인터랙티브 명령 결과 카드의 임시 상태(트랜스크립트에 저장되지 않음). */
+type CommandCardState = {
+  kind: CommandPanelKind
+  title: string
+  status: 'loading' | 'done' | 'error'
+  result?: CommandResult
+  error?: string
+}
+
+const CARD_ICON: Record<CommandPanelKind, React.ReactNode> = {
+  mcp: <Plug size={13} className="text-violet-400 shrink-0" />,
+  context: <Gauge size={13} className="text-violet-400 shrink-0" />,
+  usage: <Receipt size={13} className="text-violet-400 shrink-0" />,
+  agents: <Bot size={13} className="text-violet-400 shrink-0" />,
+  reloadPlugins: <RefreshCw size={13} className="text-violet-400 shrink-0" />,
+  reloadSkills: <RefreshCw size={13} className="text-violet-400 shrink-0" />
+}
+
+/** 토큰 수를 1.2k 형태로 간결하게 표기. */
+function fmtTokens(n: number): string {
+  if (n < 1000) return String(n)
+  return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`
+}
+
+const MCP_STATUS_COLOR: Record<string, string> = {
+  connected: 'bg-emerald-400',
+  failed: 'bg-red-400',
+  'needs-auth': 'bg-amber-400',
+  pending: 'bg-neutral-400',
+  disabled: 'bg-neutral-600'
+}
+
+/**
+ * 입력창 위에 뜨는 인터랙티브 명령 결과 카드(/mcp·/context 등).
+ * /btw 카드와 같은 임시 표시 — 닫으면(Esc/✕) 사라지고 기록에 남지 않는다.
+ */
+function CommandCard({
+  card,
+  onClose
+}: {
+  card: CommandCardState
+  onClose: () => void
+}): React.JSX.Element {
+  return (
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-96 overflow-y-auto rounded-xl border border-violet-500/30 bg-[var(--bg-3)] shadow-2xl z-20">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-3)]">
+        {CARD_ICON[card.kind]}
+        <span className="text-[12px] font-medium text-violet-300 shrink-0">{card.title}</span>
+        {card.status === 'loading' && (
+          <Loader2 size={12} className="text-neutral-500 animate-spin" />
+        )}
+        <button
+          onClick={onClose}
+          title="Dismiss (Esc)"
+          className="ml-auto shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="px-3 py-2.5 text-[12.5px] leading-relaxed text-neutral-200">
+        {card.status === 'loading' ? (
+          <span className="text-neutral-500">Loading…</span>
+        ) : card.status === 'error' ? (
+          <span className="text-red-400">{card.error || 'Command failed.'}</span>
+        ) : (
+          card.result && <CommandResultView result={card.result} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** CommandResult 종류별 본문 렌더링. */
+function CommandResultView({ result }: { result: CommandResult }): React.JSX.Element {
+  switch (result.kind) {
+    case 'mcp':
+      return result.servers.length === 0 ? (
+        <Empty>No MCP servers configured.</Empty>
+      ) : (
+        <ul className="space-y-1.5">
+          {result.servers.map((s) => (
+            <li key={s.name} className="flex items-center gap-2">
+              <span
+                className={`h-2 w-2 rounded-full shrink-0 ${MCP_STATUS_COLOR[s.status] ?? 'bg-neutral-500'}`}
+                title={s.status}
+              />
+              <span className="font-medium text-neutral-100">{s.name}</span>
+              <span className="text-[11px] text-neutral-500">{s.status}</span>
+              {s.scope && <span className="text-[11px] text-neutral-600">· {s.scope}</span>}
+              {typeof s.toolCount === 'number' && (
+                <span className="text-[11px] text-neutral-500 ml-auto shrink-0">
+                  {s.toolCount} {s.toolCount === 1 ? 'tool' : 'tools'}
+                </span>
+              )}
+              {s.error && (
+                <span className="text-[11px] text-red-400 truncate" title={s.error}>
+                  {s.error}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )
+
+    case 'agents':
+      return result.agents.length === 0 ? (
+        <Empty>No subagents available.</Empty>
+      ) : (
+        <ul className="space-y-1.5">
+          {result.agents.map((a) => (
+            <li key={a.name}>
+              <div className="flex items-baseline gap-2">
+                <span className="font-medium text-neutral-100">{a.name}</span>
+                {a.model && <span className="text-[11px] text-neutral-500">{a.model}</span>}
+              </div>
+              <div className="text-[11.5px] text-neutral-500 leading-snug">{a.description}</div>
+            </li>
+          ))}
+        </ul>
+      )
+
+    case 'context': {
+      const c = result.context
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-2 rounded-full bg-[var(--surface-3)] overflow-hidden">
+              <div
+                className="h-full bg-violet-400"
+                style={{ width: `${Math.min(100, Math.round(c.percentage))}%` }}
+              />
+            </div>
+            <span className="text-[11px] text-neutral-400 shrink-0">
+              {fmtTokens(c.totalTokens)} / {fmtTokens(c.maxTokens)} ({Math.round(c.percentage)}%)
+            </span>
+          </div>
+          <div className="text-[11px] text-neutral-600">{c.model}</div>
+          <ul className="space-y-1">
+            {c.categories.slice(0, 8).map((cat) => (
+              <li key={cat.name} className="flex items-center justify-between gap-2">
+                <span className="text-neutral-300 truncate">{cat.name}</span>
+                <span className="text-[11px] text-neutral-500 shrink-0">{fmtTokens(cat.tokens)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )
+    }
+
+    case 'usage': {
+      const u = result.usage
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-neutral-400">Session cost</span>
+            <span className="font-medium text-neutral-100">${u.totalCostUsd.toFixed(4)}</span>
+          </div>
+          <div className="flex items-center justify-between text-[11.5px]">
+            <span className="text-neutral-500">Lines changed</span>
+            <span className="text-neutral-400">
+              <span className="text-emerald-400">+{u.linesAdded}</span>{' '}
+              <span className="text-red-400">−{u.linesRemoved}</span>
+            </span>
+          </div>
+          {u.subscriptionType && (
+            <div className="flex items-center justify-between text-[11.5px]">
+              <span className="text-neutral-500">Plan</span>
+              <span className="text-neutral-400 capitalize">{u.subscriptionType}</span>
+            </div>
+          )}
+          {u.rateLimitsAvailable && u.rateLimits.length > 0 && (
+            <div className="space-y-1 pt-1 border-t border-[var(--border)]">
+              {u.rateLimits.map((r) => (
+                <div key={r.label} className="flex items-center gap-2">
+                  <span className="text-[11px] text-neutral-500 w-24 shrink-0">{r.label}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                    <div
+                      className="h-full bg-violet-400"
+                      style={{ width: `${Math.min(100, Math.round(r.utilization ?? 0))}%` }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-neutral-500 shrink-0">
+                    {r.utilization == null ? '—' : `${Math.round(r.utilization)}%`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!u.rateLimitsAvailable && (
+            <div className="text-[11px] text-neutral-600 pt-1">
+              Plan rate limits not available for this session.
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    case 'reloadPlugins': {
+      const r = result.reload
+      const parts = [
+        `${r.pluginCount ?? 0} plugins`,
+        `${r.commandCount ?? 0} commands`,
+        `${r.agentCount ?? 0} agents`,
+        `${r.mcpServerCount ?? 0} MCP servers`
+      ]
+      return (
+        <div className="space-y-1">
+          <div className="text-emerald-400">Reloaded {parts.join(' · ')}.</div>
+          {!!r.errorCount && <div className="text-amber-500">{r.errorCount} error(s) during reload.</div>}
+        </div>
+      )
+    }
+
+    case 'reloadSkills':
+      return <div className="text-emerald-400">Reloaded {result.reload.skillCount ?? 0} skills.</div>
+  }
+}
+
+function Empty({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <span className="text-neutral-500">{children}</span>
 }
 
 const EMPTY: ChatItem[] = []

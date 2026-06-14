@@ -56,6 +56,14 @@ export class ClaudeSession {
 
   constructor(private deps: SessionDeps) {}
 
+  /**
+   * 현재 살아 있는 streaming query(없으면 null). 인터랙티브 명령(/mcp·/context 등)을 "지금 돌고
+   * 있는" 세션 위에서 실행하려는 manager 가 참조한다 — 라이브 쿼리가 없으면 단명 쿼리로 폴백한다.
+   */
+  get liveQuery(): Query | null {
+    return this.q
+  }
+
   /** 사용자 메시지를 보낸다. 첫 메시지면 query 를 시작한다. */
   send(text: string, images?: ImageAttachment[]): void {
     const imgs = images ?? []

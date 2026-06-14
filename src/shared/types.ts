@@ -268,6 +268,8 @@ export const IPC = {
   authGithubLogout: 'auth:githubLogout',
   // 슬래시 명령 목록 (입력창 자동완성)
   commandsList: 'commands:list',
+  /** 인터랙티브 명령(/mcp·/context·/reload-plugins 등) 실행 — 결과 카드를 위한 데이터 조회. */
+  commandRun: 'command:run',
   // 파일 브라우저 (All files 탭)
   fsList: 'fs:list',
   fsRead: 'fs:read',
@@ -396,6 +398,102 @@ export interface SlashCommandInfo {
   /** 인자 힌트 (예: "<file>"). */
   argumentHint?: string
 }
+
+// ── 인터랙티브(TUI 전용) 슬래시 명령 ─────────────────────────────────────────
+// /mcp·/context 같은 명령은 Claude Code TUI 에서 React 패널을 띄우는 local-jsx 타입이라
+// 일반 프롬프트로 보내면 동작하지 않는다(=/btw 와 같은 부류). 대신 Agent SDK 의 제어 메서드
+// (mcpServerStatus·getContextUsage·reloadPlugins 등)로 데이터를 받아 입력창 위 카드로 보여 준다.
+
+/** 인터랙티브 명령의 종류. 카드 렌더링과 main 측 분기를 가르는 단일 키. */
+export type CommandPanelKind =
+  | 'mcp'
+  | 'context'
+  | 'usage'
+  | 'agents'
+  | 'reloadPlugins'
+  | 'reloadSkills'
+
+/**
+ * 입력창 인터셉트(Composer)와 자동완성 보강(commands.ts)이 같은 목록을 보도록 하는 SSOT.
+ * name 은 앞의 '/' 를 뺀 명령 이름, kind 는 main 분기 키.
+ */
+export const INTERACTIVE_COMMANDS: {
+  name: string
+  kind: CommandPanelKind
+  description: string
+}[] = [
+  { name: 'mcp', kind: 'mcp', description: 'Show MCP server connection status and tools' },
+  { name: 'context', kind: 'context', description: 'Visualize current context window usage' },
+  { name: 'usage', kind: 'usage', description: 'Show session cost and plan usage limits' },
+  { name: 'agents', kind: 'agents', description: 'List subagents available to this session' },
+  { name: 'reload-plugins', kind: 'reloadPlugins', description: 'Reload plugins from disk' },
+  { name: 'reload-skills', kind: 'reloadSkills', description: 'Reload skills from disk' }
+]
+
+/** MCP 서버 1개의 연결 상태(표시용으로 추린 것). */
+export interface McpServerInfo {
+  name: string
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled'
+  /** 설정 스코프(project/user/local/claudeai/managed 등). */
+  scope?: string
+  /** 연결된 경우 제공 도구 수. */
+  toolCount?: number
+  /** failed 인 경우 오류 메시지. */
+  error?: string
+  /** 연결된 서버 버전(있으면). */
+  version?: string
+}
+
+/** /context — 컨텍스트 창 사용량 요약(상위 카테고리만). */
+export interface ContextUsageInfo {
+  totalTokens: number
+  maxTokens: number
+  /** 0–100 사용률. */
+  percentage: number
+  model: string
+  /** 토큰이 큰 순으로 정렬된 카테고리(시스템 프롬프트·도구·메시지 등). */
+  categories: { name: string; tokens: number }[]
+}
+
+/** /usage — 세션 비용 + (가능하면) 요금제 사용률 창. */
+export interface UsageInfo {
+  totalCostUsd: number
+  linesAdded: number
+  linesRemoved: number
+  /** 'pro'/'max'/'team'/'enterprise' 또는 API 키 세션이면 null. */
+  subscriptionType: string | null
+  /** 요금제 한도가 적용되지 않으면(API 키 등) false. */
+  rateLimitsAvailable: boolean
+  /** 5시간·7일 등 사용률 창(있을 때만). */
+  rateLimits: { label: string; utilization: number | null; resetsAt: string | null }[]
+}
+
+/** /agents — 이 세션에서 쓸 수 있는 서브에이전트 1개. */
+export interface AgentInfoLite {
+  name: string
+  description: string
+  /** 모델 별칭(생략 시 부모 모델 상속). */
+  model?: string
+}
+
+/** /reload-plugins · /reload-skills 결과 요약. */
+export interface ReloadResult {
+  pluginCount?: number
+  commandCount?: number
+  agentCount?: number
+  mcpServerCount?: number
+  skillCount?: number
+  errorCount?: number
+}
+
+/** 인터랙티브 명령 실행 결과. kind 로 카드 렌더링을 분기한다. */
+export type CommandResult =
+  | { kind: 'mcp'; servers: McpServerInfo[] }
+  | { kind: 'context'; context: ContextUsageInfo }
+  | { kind: 'usage'; usage: UsageInfo }
+  | { kind: 'agents'; agents: AgentInfoLite[] }
+  | { kind: 'reloadPlugins'; reload: ReloadResult }
+  | { kind: 'reloadSkills'; reload: ReloadResult }
 
 // ── 파일 브라우저 (All files 탭) ──────────────────────────────────────────
 

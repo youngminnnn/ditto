@@ -7,7 +7,9 @@ export interface ModelOption {
   label: string
 }
 
+// 2026-06-14 기준 라인업. Fable 5 는 2026-06-09 일반 출시된 최상위 모델(1M 컨텍스트 기본).
 export const MODEL_OPTIONS: ModelOption[] = [
+  { id: 'claude-fable-5', label: 'Fable 5 (1M context)' },
   { id: 'claude-opus-4-8[1m]', label: 'Opus 4.8 (1M context)' },
   { id: 'claude-opus-4-8', label: 'Opus 4.8' },
   { id: 'claude-opus-4-7[1m]', label: 'Opus 4.7 (1M context)' },

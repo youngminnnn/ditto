@@ -92,6 +92,12 @@ export interface AppSettings {
   /** 세션 응답이 완료되면 소리로 알림. */
   soundOnComplete: boolean
   /**
+   * Claude Code CLI 처럼, 한 턴이 끝났을 때 컨텍스트 사용량이 임계치를 넘으면 대화를
+   * 자동으로 압축(/compact)한다. 끄면 사용량만 표시하고 압축은 수동(/compact)으로만.
+   * 임계치 자체는 사용자에게 노출하지 않는 내부 상수다(session.ts 의 AUTO_COMPACT_THRESHOLD).
+   */
+  autoCompact: boolean
+  /**
    * true 면 새 workspace 생성 시 이름·베이스 브랜치를 직접 입력하는 모달을 띄운다.
    * false(기본) 면 이름을 자동 생성하고 베이스는 리포 기본 브랜치(main/origin)로 즉시 만든다.
    */
@@ -161,6 +167,13 @@ export type ChatEvent =
   | { type: 'status'; status: WorkspaceStatus }
   /** 세션 ID·모델 확정/갱신 (init 메시지 기준). */
   | { type: 'session'; sessionId: string; model?: string }
+  /**
+   * 한 턴이 끝난 뒤의 컨텍스트 윈도 사용량(마지막 요청의 입력 토큰 합 / 모델 컨텍스트 윈도).
+   * 입력창의 사용량 미터와 자동 압축 판단의 단일 출처.
+   */
+  | { type: 'context'; usedTokens: number; maxTokens: number; percentage: number }
+  /** 대화 압축(/compact) 진행 상태. auto = 임계치 초과로 앱이 트리거한 자동 압축. */
+  | { type: 'compacting'; active: boolean; trigger?: 'auto' | 'manual' }
 
 // ── 권한 프롬프트 (canUseTool → UI) ──────────────────────────────────────
 

@@ -385,24 +385,27 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           </div>
         </div>
       </div>
-      <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px]">
-        {bashMode ? (
-          <span className="text-emerald-400 inline-flex items-center gap-1">
-            <TerminalIcon size={11} />
-            Run in terminal <span className="text-neutral-600">(Enter to run · runs in this workspace)</span>
-          </span>
-        ) : (() => {
-          const footer = PERMISSION_FOOTER[workspace.permissionMode]
-          const accent = workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-amber-400'
-          return footer ? (
-            <span className={accent}>
-              {footer.symbol} {footer.text}{' '}
-              <span className="text-neutral-600">(shift+tab to cycle)</span>
+      <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px] flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          {bashMode ? (
+            <span className="text-emerald-400 inline-flex items-center gap-1">
+              <TerminalIcon size={11} />
+              Run in terminal <span className="text-neutral-600">(Enter to run · runs in this workspace)</span>
             </span>
-          ) : (
-            <span className="text-neutral-600">shift+tab to cycle permission modes</span>
-          )
-        })()}
+          ) : (() => {
+            const footer = PERMISSION_FOOTER[workspace.permissionMode]
+            const accent = workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-amber-400'
+            return footer ? (
+              <span className={accent}>
+                {footer.symbol} {footer.text}{' '}
+                <span className="text-neutral-600">(shift+tab to cycle)</span>
+              </span>
+            ) : (
+              <span className="text-neutral-600">shift+tab to cycle permission modes</span>
+            )
+          })()}
+        </div>
+        <ContextMeter workspaceId={workspace.id} />
       </div>
     </div>
   )
@@ -760,6 +763,45 @@ function CommandResultView({ result }: { result: CommandResult }): React.JSX.Ele
 
 function Empty({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <span className="text-neutral-500">{children}</span>
+}
+
+/**
+ * 입력창 푸터 우측의 컨텍스트 사용량 미터(Claude Code CLI 의 컨텍스트 게이지에 대응).
+ * 마지막 턴 기준 사용률을 막대 + 퍼센트로 보여 주고, 자동 압축이 도는 동안에는 진행 표시로 바뀐다.
+ * 사용량 데이터가 아직 없으면(첫 턴 전) 아무것도 그리지 않는다.
+ */
+function ContextMeter({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
+  const usage = useStore((s) => s.contextUsage[workspaceId])
+  const compacting = useStore((s) => s.compacting[workspaceId] ?? false)
+
+  if (compacting) {
+    return (
+      <span className="shrink-0 flex items-center gap-1.5 text-[11px] text-violet-400">
+        <span className="h-2.5 w-2.5 rounded-full border-2 border-violet-400/40 border-t-violet-400 animate-spin" />
+        Compacting…
+      </span>
+    )
+  }
+
+  if (!usage || usage.maxTokens <= 0) return null
+
+  const pct = Math.min(100, Math.round(usage.percentage * 100))
+  // 70% 미만 중립, 70~89% 주의(amber), 90%+ 위험(red).
+  const tone =
+    pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-neutral-500'
+  const barTone = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-neutral-500'
+
+  return (
+    <span
+      className={'shrink-0 flex items-center gap-1.5 ' + tone}
+      title={`Context: ${usage.usedTokens.toLocaleString()} / ${usage.maxTokens.toLocaleString()} tokens (${pct}%)`}
+    >
+      <span className="h-1 w-16 rounded-full bg-[var(--surface-3)] overflow-hidden">
+        <span className={'block h-full rounded-full ' + barTone} style={{ width: `${pct}%` }} />
+      </span>
+      {pct}%
+    </span>
+  )
 }
 
 const EMPTY: ChatItem[] = []

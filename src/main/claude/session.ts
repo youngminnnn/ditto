@@ -1,5 +1,11 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { Query, SDKMessage, SDKUserMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk'
+import type {
+  Query,
+  SDKMessage,
+  SDKUserMessage,
+  PermissionResult,
+  ModelUsage
+} from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
 import { resolveClaudeExecutable } from './executable'
 import { MCP_SETTING_SOURCES, resolveUserMcpServers } from './mcp'
@@ -18,6 +24,8 @@ export interface SessionDeps {
   repoPath: string | null
   model: string | null
   permissionMode: PermissionMode
+  /** true 면 컨텍스트 사용률이 임계치를 넘었을 때 턴 종료 후 /compact 를 자동 주입한다. */
+  autoCompact: boolean
   /** 이전 실행에서 이어갈 Claude 세션 ID. 없으면 새 세션. */
   resumeSessionId: string | null
   emit: (event: ChatEvent) => void
@@ -33,6 +41,12 @@ type Block = { type: string; [k: string]: unknown }
 // 패키징 빌드에서 SDK 가 app.asar 안 경로로 CLI 를 spawn 해 ENOTDIR 로 실패하지 않도록,
 // app.asar.unpacked 의 실제 바이너리 경로를 1회 계산해 둔다(dev 에서는 null → SDK 기본값).
 const claudeExecutable = resolveClaudeExecutable()
+
+/**
+ * 자동 압축을 트리거하는 컨텍스트 사용률(퍼센트). 사용자에게 노출·수정시키지 않는 내부 상수다.
+ * Claude Code 가 한계 직전(다음 응답을 더 못 담는 시점, 대략 ~92~95%)에 압축하는 동작에 맞춘 근사값.
+ */
+const AUTO_COMPACT_THRESHOLD = 92
 
 /**
  * 하나의 workspace 에 묶인 단일 Claude Code 세션.
@@ -53,6 +67,11 @@ export class ClaudeSession {
   private currentApiMsgId: string | null = null
   /** 사용자가 "always allow" 한 도구 이름. 이 세션 동안 다시 묻지 않는다. */
   private alwaysAllow = new Set<string>()
+  /**
+   * 자동 압축 /compact 를 주입해 두고 그 결과(result)를 기다리는 중인지.
+   * 압축 턴의 result·boundary 가 다시 임계치를 넘겨 무한 압축 루프를 도는 것을 막는다.
+   */
+  private autoCompactInFlight = false
 
   constructor(private deps: SessionDeps) {}
 
@@ -244,6 +263,25 @@ export class ClaudeSession {
         text: `Permission denied: ${msg.tool_name}`,
         ts: Date.now()
       })
+    } else if (msg.subtype === 'status') {
+      // CLI 가 압축을 시작하면 status='compacting' 을 보낸다(수동 /compact 포함). UI 배지용.
+      if (msg.status === 'compacting') this.deps.emit({ type: 'compacting', active: true })
+    } else if (msg.subtype === 'compact_boundary') {
+      // 압축 완료 — 토큰 변화를 기록으로 남기고 진행 배지를 내린다. 자동/수동 모두 여기로 온다.
+      const meta = msg.compact_metadata
+      const pre = meta?.pre_tokens
+      const post = meta?.post_tokens
+      const delta =
+        typeof pre === 'number' && typeof post === 'number'
+          ? ` (${formatTokens(pre)} → ${formatTokens(post)} tokens)`
+          : ''
+      this.emitItem({
+        id: `compacted:${msg.uuid}`,
+        type: 'system',
+        text: `Compacted conversation${delta}.`,
+        ts: Date.now()
+      })
+      this.deps.emit({ type: 'compacting', active: false, trigger: meta?.trigger })
     }
   }
 
@@ -342,7 +380,58 @@ export class ClaudeSession {
       costUsd: msg.total_cost_usd,
       ts: Date.now()
     })
+
+    // 이 턴의 컨텍스트 사용량을 계산해 UI 미터로 보낸다(성공 턴에만 modelUsage 가 의미 있다).
+    const usage =
+      msg.subtype === 'success'
+        ? computeContextUsage((msg as { modelUsage?: Record<string, ModelUsage> }).modelUsage)
+        : null
+    if (usage) {
+      this.deps.emit({
+        type: 'context',
+        usedTokens: usage.used,
+        maxTokens: usage.max,
+        percentage: usage.percentage
+      })
+    }
+
+    // 방금 끝난 게 우리가 주입한 자동 압축 턴이라면, 재평가하지 않고 플래그만 풀어 준다
+    // (압축 직후 result 의 토큰은 요약 생성분이라 다시 임계치를 넘길 수 있어 루프가 된다).
+    if (this.autoCompactInFlight) {
+      this.autoCompactInFlight = false
+      this.deps.emit({ type: 'compacting', active: false, trigger: 'auto' })
+      this.deps.emit({ type: 'status', status: 'idle' })
+      return
+    }
+
     this.deps.emit({ type: 'status', status: 'idle' })
+
+    // 임계치를 넘었으면 다음 턴 전에 자동으로 압축한다(Claude Code CLI 의 auto-compact).
+    if (usage && this.deps.autoCompact && usage.percentage * 100 >= AUTO_COMPACT_THRESHOLD) {
+      this.triggerAutoCompact()
+    }
+  }
+
+  /** 입력 큐에 /compact 를 흘려보내 대화를 압축한다. idle 상태(턴 종료 직후)에서만 호출한다. */
+  private triggerAutoCompact(): void {
+    if (this.autoCompactInFlight || !this.q) return
+    this.autoCompactInFlight = true
+
+    // 임계치 수치를 드러내지 않도록 퍼센트 없이 일반 문구로 안내한다.
+    this.emitItem({
+      id: `compacting:${Date.now()}`,
+      type: 'system',
+      text: 'Auto-compacting conversation to free up space…',
+      ts: Date.now()
+    })
+    this.deps.emit({ type: 'compacting', active: true, trigger: 'auto' })
+    this.deps.emit({ type: 'status', status: 'running' })
+
+    this.input.push({
+      type: 'user',
+      message: { role: 'user', content: '/compact' },
+      parent_tool_use_id: null
+    })
   }
 
   /** 항목을 영속화하고 renderer 로 보낸다. */
@@ -350,6 +439,34 @@ export class ClaudeSession {
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
   }
+}
+
+/**
+ * result 의 modelUsage 로 현재 컨텍스트 윈도 점유율을 계산한다.
+ * 마지막 요청의 입력 토큰(신규 + 캐시읽기 + 캐시생성) 합이 곧 컨텍스트에 들어 있는 양이다.
+ * 서브에이전트 등 여러 모델이 섞이면, 점유율이 가장 높은(=메인 대화) 항목을 채택한다.
+ */
+function computeContextUsage(
+  modelUsage: Record<string, ModelUsage> | undefined
+): { used: number; max: number; percentage: number } | null {
+  if (!modelUsage) return null
+  let best: { used: number; max: number; percentage: number } | null = null
+  for (const u of Object.values(modelUsage)) {
+    const max = u.contextWindow || 0
+    if (max <= 0) continue
+    const used =
+      (u.inputTokens || 0) + (u.cacheReadInputTokens || 0) + (u.cacheCreationInputTokens || 0)
+    const percentage = used / max
+    if (!best || percentage > best.percentage) best = { used, max, percentage }
+  }
+  return best
+}
+
+/** 토큰 수를 1.2k / 45k / 1.0M 처럼 짧게 표기한다(압축 전후 안내 문구용). */
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  return String(n)
 }
 
 /** tool_result 의 content(string | 블록 배열)를 표시용 텍스트로 정규화한다. */

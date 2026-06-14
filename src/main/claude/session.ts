@@ -3,8 +3,7 @@ import type {
   Query,
   SDKMessage,
   SDKUserMessage,
-  PermissionResult,
-  ModelUsage
+  PermissionResult
 } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
 import { resolveClaudeExecutable } from './executable'
@@ -45,8 +44,20 @@ const claudeExecutable = resolveClaudeExecutable()
 /**
  * 자동 압축을 트리거하는 컨텍스트 사용률(퍼센트). 사용자에게 노출·수정시키지 않는 내부 상수다.
  * Claude Code 가 한계 직전(다음 응답을 더 못 담는 시점, 대략 ~92~95%)에 압축하는 동작에 맞춘 근사값.
+ * getContextUsage() 의 percentage(= /context 카드와 같은 기준)와 직접 비교한다.
  */
 const AUTO_COMPACT_THRESHOLD = 92
+
+/** getContextUsage 제어 요청 상한. 지연돼도 미터·자동압축 판단이 멈추지 않도록 둔다. */
+const CONTEXT_USAGE_TIMEOUT_MS = 5000
+
+/** p 가 ms 안에 끝나지 않으면 reject 한다(타임아웃 시 호출부가 폴백 경로로 빠지도록). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+  ])
+}
 
 /**
  * 하나의 workspace 에 묶인 단일 Claude Code 세션.
@@ -395,33 +406,59 @@ export class ClaudeSession {
       ts: Date.now()
     })
 
-    // 이 턴의 컨텍스트 사용량을 계산해 UI 미터로 보낸다(성공 턴에만 modelUsage 가 의미 있다).
-    const usage =
-      msg.subtype === 'success'
-        ? computeContextUsage((msg as { modelUsage?: Record<string, ModelUsage> }).modelUsage)
-        : null
-    if (usage) {
-      this.deps.emit({
-        type: 'context',
-        usedTokens: usage.used,
-        maxTokens: usage.max,
-        percentage: usage.percentage
-      })
-    }
-
     // 방금 끝난 게 우리가 주입한 자동 압축 턴이라면, 재평가하지 않고 플래그만 풀어 준다
     // (압축 직후 result 의 토큰은 요약 생성분이라 다시 임계치를 넘길 수 있어 루프가 된다).
-    if (this.autoCompactInFlight) {
+    const wasAutoCompact = this.autoCompactInFlight
+    if (wasAutoCompact) {
       this.autoCompactInFlight = false
       this.deps.emit({ type: 'compacting', active: false, trigger: 'auto' })
-      this.deps.emit({ type: 'status', status: 'idle' })
-      return
     }
 
     this.deps.emit({ type: 'status', status: 'idle' })
 
+    // 컨텍스트 미터를 갱신한다. 압축 턴 직후가 아니면 임계치 초과 시 자동 압축도 트리거한다.
+    // (성공 턴에만 사용량이 의미 있다.)
+    if (msg.subtype === 'success') {
+      void this.refreshContextUsage({ allowAutoCompact: !wasAutoCompact })
+    }
+  }
+
+  /**
+   * 상태줄 컨텍스트 미터를 SDK 의 getContextUsage 로 갱신한다.
+   *
+   * /context 카드와 **같은 출처**(getContextUsage)를 써서 미터 수치가 /context 와 항상
+   * 일치하게 한다. 과거에는 result 의 modelUsage 를 `used / contextWindow`(전체 윈도 대비
+   * 평평한 %)로 직접 계산했는데, Claude Code 는 `(윈도 − 출력 버퍼)` 기준 + 보정 로직으로
+   * 퍼센트를 내므로 둘이 크게 어긋났다(미터가 /context 보다 한참 낮게 표시).
+   *
+   * 라이브 쿼리가 없거나 제어 응답이 실패하면 미터는 이전 값을 유지한다.
+   */
+  private async refreshContextUsage(opts: { allowAutoCompact: boolean }): Promise<void> {
+    const q = this.q
+    if (!q) return
+
+    let ctx: Awaited<ReturnType<Query['getContextUsage']>>
+    try {
+      ctx = await withTimeout(q.getContextUsage(), CONTEXT_USAGE_TIMEOUT_MS)
+    } catch {
+      return
+    }
+
+    const max = ctx.maxTokens || 0
+    if (max <= 0) return
+
+    // getContextUsage 의 percentage 는 0~100 스케일. 미터/스토어는 0~1 fraction 을 기대한다.
+    const fraction = Math.min(1, Math.max(0, ctx.percentage / 100))
+    this.deps.emit({
+      type: 'context',
+      usedTokens: ctx.totalTokens,
+      maxTokens: max,
+      percentage: fraction
+    })
+
     // 임계치를 넘었으면 다음 턴 전에 자동으로 압축한다(Claude Code CLI 의 auto-compact).
-    if (usage && this.deps.autoCompact && usage.percentage * 100 >= AUTO_COMPACT_THRESHOLD) {
+    // /context 와 동일한 점유율(ctx.percentage, 0~100)을 기준으로 판단한다.
+    if (opts.allowAutoCompact && this.deps.autoCompact && ctx.percentage >= AUTO_COMPACT_THRESHOLD) {
       this.triggerAutoCompact()
     }
   }
@@ -453,27 +490,6 @@ export class ClaudeSession {
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
   }
-}
-
-/**
- * result 의 modelUsage 로 현재 컨텍스트 윈도 점유율을 계산한다.
- * 마지막 요청의 입력 토큰(신규 + 캐시읽기 + 캐시생성) 합이 곧 컨텍스트에 들어 있는 양이다.
- * 서브에이전트 등 여러 모델이 섞이면, 점유율이 가장 높은(=메인 대화) 항목을 채택한다.
- */
-function computeContextUsage(
-  modelUsage: Record<string, ModelUsage> | undefined
-): { used: number; max: number; percentage: number } | null {
-  if (!modelUsage) return null
-  let best: { used: number; max: number; percentage: number } | null = null
-  for (const u of Object.values(modelUsage)) {
-    const max = u.contextWindow || 0
-    if (max <= 0) continue
-    const used =
-      (u.inputTokens || 0) + (u.cacheReadInputTokens || 0) + (u.cacheCreationInputTokens || 0)
-    const percentage = used / max
-    if (!best || percentage > best.percentage) best = { used, max, percentage }
-  }
-  return best
 }
 
 /** 토큰 수를 1.2k / 45k / 1.0M 처럼 짧게 표기한다(압축 전후 안내 문구용). */

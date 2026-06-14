@@ -176,6 +176,31 @@ export type ChatItem =
     }
   | { id: string; type: 'error'; text: string; ts: number }
   | { id: string; type: 'system'; text: string; ts: number }
+  /**
+   * 동적 워크플로우(대규모 서브에이전트 조율) 1회 실행의 진행 카드.
+   * 모델이 Workflow 도구로 시작한 백그라운드 실행을 SDK 의 task_* 시스템 메시지로 추적해
+   * 하나의 항목(taskId 기준 upsert)으로 라이브 갱신한다 — 시작 → 진행(토큰·도구) → 종료(요약).
+   */
+  | {
+      id: string
+      type: 'task'
+      /** SDK task_id. 같은 실행의 갱신을 하나로 합치는 키(항목 id 는 `task:${taskId}`). */
+      taskId: string
+      /** 워크플로우 스크립트의 meta.name (없으면 'workflow'). */
+      name: string
+      /** 사람이 읽는 현재 단계/작업 설명. */
+      description: string
+      status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused'
+      /** 마지막 진행 요약 또는 종료 시 최종 요약. */
+      summary?: string
+      /** 누적 토큰 사용량(있을 때). */
+      totalTokens?: number
+      /** 누적 도구 호출 수(있을 때). */
+      toolUses?: number
+      /** 종료까지 걸린 시간(ms, 종료 알림에서). */
+      durationMs?: number
+      ts: number
+    }
 
 /** main → renderer 스트리밍 이벤트. renderer 는 이를 트랜스크립트에 반영한다. */
 export type ChatEvent =

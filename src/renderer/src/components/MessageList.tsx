@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon } from 'lucide-react'
+import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon, Workflow, XCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { formatTime } from '../lib/format'
 import type { ChatItem } from '@shared/types'
@@ -160,9 +160,82 @@ function Item({
       )
     case 'system':
       return <div className="text-[11.5px] text-neutral-500 text-center py-1">{item.text}</div>
+    case 'task':
+      return <TaskCard item={item} />
     default:
       return null
   }
+}
+
+/**
+ * 동적 워크플로우(대규모 서브에이전트 조율) 1회 실행의 진행 카드.
+ * task_started → progress → notification 흐름으로 라이브 갱신되며, 진행 중에는 현재 단계와
+ * 누적 토큰/도구 호출을, 종료 시에는 상태와 최종 요약을 보여 준다.
+ */
+function TaskCard({ item }: { item: Extract<ChatItem, { type: 'task' }> }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const running = item.status === 'running' || item.status === 'paused'
+  const failed = item.status === 'failed' || item.status === 'stopped'
+
+  const stats: string[] = []
+  if (typeof item.totalTokens === 'number') stats.push(`${formatTokenCount(item.totalTokens)} tokens`)
+  if (typeof item.toolUses === 'number') stats.push(`${item.toolUses} tool ${item.toolUses === 1 ? 'use' : 'uses'}`)
+  if (typeof item.durationMs === 'number') stats.push(`${(item.durationMs / 1000).toFixed(1)}s`)
+
+  return (
+    <div className="rounded-lg border border-[var(--border-3)] bg-[var(--surface-2)] px-3 py-2 text-[12px]">
+      <div className="flex items-center gap-2">
+        {running ? (
+          <Loader2 size={13} className="text-violet-400 shrink-0 animate-spin" />
+        ) : failed ? (
+          <XCircle size={13} className="text-red-400 shrink-0" />
+        ) : (
+          <Check size={13} className="text-emerald-400 shrink-0" />
+        )}
+        <Workflow size={13} className="text-violet-400/80 shrink-0" />
+        <span className="font-medium text-neutral-200">Workflow</span>
+        <span className="text-neutral-400 truncate">{item.name}</span>
+        <span
+          className={
+            'ml-auto shrink-0 text-[10.5px] uppercase tracking-wide ' +
+            (running ? 'text-violet-400' : failed ? 'text-red-400' : 'text-emerald-400')
+          }
+        >
+          {item.status}
+        </span>
+      </div>
+
+      <div className="mt-1 pl-[21px] text-neutral-400 truncate">{item.description}</div>
+
+      {stats.length > 0 && (
+        <div className="mt-1 pl-[21px] text-[11px] text-neutral-500">{stats.join(' · ')}</div>
+      )}
+
+      {item.summary && (
+        <div className="mt-1.5 pl-[21px]">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-300"
+          >
+            <ChevronRight size={11} className={open ? 'rotate-90 transition' : 'transition'} />
+            {open ? 'Hide summary' : 'Show summary'}
+          </button>
+          {open && (
+            <div className="mt-1 text-[11.5px] text-neutral-400 whitespace-pre-wrap border-l border-[var(--border)] pl-2">
+              {item.summary}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 토큰 수를 1.2k / 45k / 1.0M 처럼 짧게 표기한다. */
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  return String(n)
 }
 
 function Thinking({ text }: { text: string }): React.JSX.Element {

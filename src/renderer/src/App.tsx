@@ -30,6 +30,19 @@ export default function App(): React.JSX.Element {
   const rightPanelOpen = useStore((s) => s.rightPanelOpen)
   const rightBase = useRef(rightWidth)
 
+  // 사이드바 오른쪽의 메인 컨텐츠 영역 너비를 측정한다. 우측 작업 패널은 고정 px 라서
+  // 창이 좁아지면 채팅이 0 으로 찌그러지므로, 측정한 너비로 패널 폭을 동적으로 제한한다.
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [contentW, setContentW] = useState(0)
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setContentW(el.clientWidth))
+    ro.observe(el)
+    setContentW(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
+
   const [showSettings, setShowSettings] = useState(false)
   const [newWsRepoId, setNewWsRepoId] = useState<string | null>(null)
   const [configRepoId, setConfigRepoId] = useState<string | null>(null)
@@ -127,6 +140,12 @@ export default function App(): React.JSX.Element {
   const selected = app.workspaces.find((w) => w.id === selectedId && !w.archived) ?? null
   const claudeMissing = app.settings.onboarded && authStatus !== null && !authStatus.claude.loggedIn
 
+  // 우측 패널이 차지할 수 있는 최대 폭 = 사용 가능한 너비 - 채팅 최소 너비.
+  // 창이 좁아지면 maxRight 가 줄어 패널이 따라 좁아지고, 다시 넓히면 저장된 rightWidth 로 복원된다.
+  const MIN_CHAT_WIDTH = 360
+  const maxRight = Math.max(320, contentW - MIN_CHAT_WIDTH)
+  const effectiveRightWidth = contentW ? Math.min(rightWidth, maxRight) : rightWidth
+
   // 약관 미동의(또는 버전 불일치)면 동의 단계부터, 계정 연결이 안 끝났으면 연동 단계를 띄운다.
   const needsConsent = app.settings.acceptedTermsVersion !== CURRENT_TERMS_VERSION
   const needsOnboarding = !app.settings.onboarded
@@ -157,7 +176,7 @@ export default function App(): React.JSX.Element {
 
       <div className="flex-1 flex min-h-0">
         <Sidebar onNewWorkspace={handleNewWorkspace} onConfigRepo={setConfigRepoId} />
-        <div className="flex-1 min-w-0 border-l border-[var(--border)] flex">
+        <div ref={contentRef} className="flex-1 min-w-0 border-l border-[var(--border)] flex">
           {selected ? (
             <>
               <div className="flex-1 min-w-0">
@@ -169,10 +188,11 @@ export default function App(): React.JSX.Element {
                     axis="x"
                     onStart={() => (rightBase.current = useStore.getState().rightWidth)}
                     // 분할바를 오른쪽으로 끌면(dx>0) 우측 패널이 좁아진다.
-                    onDelta={(dx) => setRightWidth(rightBase.current - dx)}
+                    // 채팅이 maxRight 미만으로 줄지 않도록 드래그 폭도 함께 제한한다.
+                    onDelta={(dx) => setRightWidth(Math.min(rightBase.current - dx, maxRight))}
                   />
                   <div
-                    style={{ width: rightWidth }}
+                    style={{ width: effectiveRightWidth }}
                     className="shrink-0 border-l border-[var(--border)] min-w-0"
                   >
                     <WorkArea key={selected.id} workspace={selected} />

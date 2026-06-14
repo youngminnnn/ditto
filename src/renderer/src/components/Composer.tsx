@@ -475,6 +475,10 @@ function SlashMenu({
   onHover: (idx: number) => void
   onPick: (cmd: SlashCommandInfo) => void
 }): React.JSX.Element {
+  const activeRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [selectedIdx])
   return (
     <div className="absolute bottom-full mb-2 left-0 right-0 max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-3)] shadow-2xl py-1 z-20">
       {loading ? (
@@ -485,6 +489,9 @@ function SlashMenu({
           return (
             <button
               key={cmd.name}
+              ref={(el) => {
+                if (active) activeRef.current = el
+              }}
               onMouseEnter={() => onHover(i)}
               onMouseDown={(e) => {
                 // textarea 가 blur 되지 않도록 기본 동작을 막고 직접 처리.

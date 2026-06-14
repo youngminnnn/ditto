@@ -15,6 +15,13 @@ import { playNotification } from './lib/sound'
 
 export const scriptKey = (workspaceId: string, kind: ScriptKind): string => `${workspaceId}:${kind}`
 
+/** 컨텍스트 윈도 사용량 스냅샷(마지막 턴). percentage 는 0~1. */
+export interface ContextUsage {
+  usedTokens: number
+  maxTokens: number
+  percentage: number
+}
+
 export type ToastKind = 'info' | 'success' | 'error'
 export interface Toast {
   id: string
@@ -55,6 +62,10 @@ interface UIState {
   prStatus: Record<string, PrStatus | null>
   permissions: PermissionRequest[]
   authStatus: AuthStatus | null
+  /** workspace 별 컨텍스트 윈도 사용량(마지막 턴 기준). 입력창 사용량 미터용. */
+  contextUsage: Record<string, ContextUsage>
+  /** workspace 별 대화 압축 진행 여부(자동/수동 /compact 진행 중이면 true). */
+  compacting: Record<string, boolean>
   /** 응답이 완료됐지만 사용자가 아직 보지 않은 workspace. */
   unread: Record<string, boolean>
   /** workspace 전환에도 살아남아야 하는 입력창 초안. */
@@ -128,6 +139,8 @@ export const useStore = create<UIState>((set, get) => ({
   prStatus: {},
   permissions: [],
   authStatus: null,
+  contextUsage: {},
+  compacting: {},
   unread: {},
   drafts: {},
   scrollPositions: {},
@@ -262,6 +275,19 @@ export const useStore = create<UIState>((set, get) => ({
             set({ unread: { ...s.unread, [workspaceId]: true } })
           }
         }
+      } else if (event.type === 'context') {
+        set({
+          contextUsage: {
+            ...get().contextUsage,
+            [workspaceId]: {
+              usedTokens: event.usedTokens,
+              maxTokens: event.maxTokens,
+              percentage: event.percentage
+            }
+          }
+        })
+      } else if (event.type === 'compacting') {
+        set({ compacting: { ...get().compacting, [workspaceId]: event.active } })
       }
     })
 

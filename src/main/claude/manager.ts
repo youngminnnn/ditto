@@ -63,6 +63,7 @@ export class SessionManager {
       // workspace 오버라이드가 있으면 우선, 없으면 전역 설정 모델.
       model: ws.model ?? settings.model,
       permissionMode: ws.permissionMode,
+      autoCompact: settings.autoCompact,
       resumeSessionId: ws.sessionId,
       emit: (event) => this.emit(workspaceId, event),
       persist: (item) => getTranscripts().upsert(workspaceId, item),

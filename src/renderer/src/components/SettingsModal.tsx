@@ -18,6 +18,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   const [mode, setMode] = useState<PermissionMode>(settings.defaultPermissionMode)
   const [manualWorkspaceSetup, setManualWorkspaceSetup] = useState(settings.manualWorkspaceSetup)
   const [soundOnComplete, setSoundOnComplete] = useState(settings.soundOnComplete)
+  const [autoCompact, setAutoCompact] = useState(settings.autoCompact)
   const [model, setModel] = useState(settings.model ?? MODEL_OPTIONS[0].id)
   const [theme, setTheme] = useState<ThemePreference>(settings.theme)
 
@@ -36,6 +37,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
       defaultPermissionMode: mode,
       manualWorkspaceSetup,
       soundOnComplete,
+      autoCompact,
       model,
       theme
     })
@@ -160,6 +162,22 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               Default for new workspaces. Each workspace can override this from its header dropdown.
             </p>
           </div>
+
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoCompact}
+              onChange={(e) => setAutoCompact(e.target.checked)}
+              className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
+            />
+            <span className="text-[12.5px] text-neutral-300">
+              Auto-compact conversation when context fills
+              <span className="block text-[11px] text-neutral-600">
+                Like Claude Code, summarizes the conversation as it approaches the context limit so
+                long sessions keep room to continue.
+              </span>
+            </span>
+          </label>
         </Section>
       </div>
     </Modal>

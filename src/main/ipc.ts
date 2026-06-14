@@ -457,7 +457,13 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle(IPC.authGetStatus, () => getAuthStatus())
   ipcMain.handle(IPC.authClaudeLogin, () => claudeLogin())
-  ipcMain.handle(IPC.authClaudeLogout, () => claudeLogout())
+  ipcMain.handle(IPC.authClaudeLogout, () => {
+    claudeLogout()
+    // 로그아웃하면 진행 중이던 세션은 인증이 끊겨 더 진행되지도 중단되지도 않는다.
+    // 세션을 정리하고 '진행 중' 표시를 idle 로 되돌려, 재로그인 후 유령 상태가 남지 않게 한다.
+    ctx.sessions.abortAll()
+    broadcastState()
+  })
   ipcMain.handle(IPC.authGithubLogin, () => githubLogin())
   ipcMain.handle(IPC.authGithubLogout, () => githubLogout())
 }

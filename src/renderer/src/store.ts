@@ -98,6 +98,13 @@ interface UIState {
   refreshScriptStatus: (workspaceId: string) => Promise<void>
   refreshAuth: () => Promise<void>
   dismissPermission: (requestId: string) => void
+  /**
+   * 대기 중인 모든 권한 요청을 한 번에 허용한다(병렬 세션의 권한 피로 완화).
+   * AskUserQuestion 은 사용자의 답을 입력에 주입해야 하므로 일괄 승인에서 제외하고 그대로 남긴다.
+   */
+  approveAllPermissions: () => void
+  /** 일괄 승인 가능한(=AskUserQuestion 이 아닌) 대기 권한 수. */
+  approvablePermissionCount: () => number
   nextUnreadId: () => string | null
   /** 다른 workspace 중 권한 대기 중인 첫 항목. */
   nextPendingPermissionId: () => string | null
@@ -399,6 +406,20 @@ export const useStore = create<UIState>((set, get) => ({
   dismissPermission: (requestId) => {
     set({ permissions: get().permissions.filter((p) => p.requestId !== requestId) })
   },
+
+  approveAllPermissions: () => {
+    const all = get().permissions
+    // AskUserQuestion 은 답을 받아야 하는 질문이라 자동 허용 대상이 아니다 — 남겨 둔다.
+    const approvable = all.filter((p) => p.toolName !== 'AskUserQuestion')
+    if (!approvable.length) return
+    for (const p of approvable) {
+      void window.api.permission.respond(p.requestId, { behavior: 'allow' })
+    }
+    set({ permissions: all.filter((p) => p.toolName === 'AskUserQuestion') })
+  },
+
+  approvablePermissionCount: () =>
+    get().permissions.filter((p) => p.toolName !== 'AskUserQuestion').length,
 
   /** 미확인 세션 중 선택 후보 하나(사이드바 순서 기준 첫 항목). */
   nextUnreadId: () => {

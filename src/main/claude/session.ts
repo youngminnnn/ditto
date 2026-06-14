@@ -69,8 +69,11 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  * SDK 메시지(stream_event/assistant/user/result)를 renderer 가 그릴 수 있는
  * ChatEvent 로 변환하고, 권위 있는 항목은 트랜스크립트에 영속화한다.
  *
- * 참고: 앱 재시작 간 세션 resume 은 v1 범위 밖이다. UI 기록은 영속화되지만
- * 에이전트 맥락은 실행마다 새로 시작한다(replay 중복 렌더링을 피하기 위한 결정).
+ * 에이전트 맥락 보존: 이전 실행의 세션 ID(resumeSessionId)가 있으면 query 시작 시 resume 로
+ * 디스크의 대화 맥락을 이어받는다 — 앱 재시작·모델 변경 후에도 같은 대화를 계속할 수 있다
+ * (과거 메시지는 재방출되지 않아 중복 렌더링이 없다). resume 대상 세션이 사라졌거나(예: ~/.claude
+ * 정리, 다른 머신) 손상돼 첫 메시지 전에 실패하면, 맥락만 잃고 새 세션으로 1회 폴백해
+ * 사용자가 막히지 않게 한다(retryWithoutResume).
  */
 export class ClaudeSession {
   private input = new AsyncQueue<SDKUserMessage>()
@@ -83,6 +86,10 @@ export class ClaudeSession {
    * 압축 턴의 result·boundary 가 다시 임계치를 넘겨 무한 압축 루프를 도는 것을 막는다.
    */
   private autoCompactInFlight = false
+  /** 이번 query 에서 SDK 메시지를 하나라도 받았는지(= 세션이 정상 시작됐는지). resume 폴백 판단용. */
+  private sawAnyMessage = false
+  /** resume 실패로 새 세션 폴백을 이미 1회 시도했는지(무한 재시도 방지). */
+  private resumeRetried = false
 
   constructor(private deps: SessionDeps) {}
 
@@ -161,6 +168,8 @@ export class ClaudeSession {
   // ── query 루프 ─────────────────────────────────────────────────────────
 
   private async run(): Promise<void> {
+    // resume 실패 시 새 세션으로 폴백할지. finally 이후에 재시도해 this.q 클로버를 피한다.
+    let retrying = false
     try {
       // 사용자가 claude CLI 용으로 등록한 MCP 서버(user/project/local 스코프)를 명시 주입한다.
       // cwd 가 worktree 라 SDK 자동 탐색만으로는 원본 repo 의 project 스코프 서버가 누락되기 때문.
@@ -183,19 +192,38 @@ export class ClaudeSession {
       })
 
       for await (const msg of this.q) {
+        this.sawAnyMessage = true
         this.handleMessage(msg)
       }
     } catch (err) {
-      this.emitItem({
-        id: `error:${Date.now()}`,
-        type: 'error',
-        text: err instanceof Error ? err.message : String(err),
-        ts: Date.now()
-      })
-      this.deps.emit({ type: 'status', status: 'error' })
+      // resume 대상 세션이 사라졌거나 손상돼 첫 메시지 전에 실패한 경우, 맥락만 포기하고
+      // 새 세션으로 1회 폴백한다 — 보존하려던 맥락 때문에 오히려 워크스페이스가 막히는 것을 막는다.
+      if (this.deps.resumeSessionId && !this.sawAnyMessage && !this.resumeRetried) {
+        retrying = true
+        this.resumeRetried = true
+        this.deps.resumeSessionId = null
+        this.emitItem({
+          id: `system:resume-fallback:${Date.now()}`,
+          type: 'system',
+          text: "Couldn't restore the previous session context — continuing in a fresh session.",
+          ts: Date.now()
+        })
+      } else {
+        this.emitItem({
+          id: `error:${Date.now()}`,
+          type: 'error',
+          text: err instanceof Error ? err.message : String(err),
+          ts: Date.now()
+        })
+        this.deps.emit({ type: 'status', status: 'error' })
+      }
     } finally {
       this.q = null
     }
+
+    // 폴백 재시도는 finally 가 this.q 를 비운 뒤에 시작해, 새 query 핸들이 덮어써지지 않게 한다.
+    // input 큐는 그대로라 폴백 세션이 같은(아직 처리되지 않은) 사용자 메시지를 이어 처리한다.
+    if (retrying) this.run()
   }
 
   // ── 권한 콜백 ──────────────────────────────────────────────────────────

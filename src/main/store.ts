@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFileAtomic } from './fsutil'
+import { BASE_DEV_PORT } from '@shared/types'
 import type { AppState, AppSettings, PermissionMode, Repo, Workspace } from '@shared/types'
 
 const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
@@ -10,7 +11,7 @@ const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
  * 디스크 영속 형식의 현재 스키마 버전. 영속 데이터 모양이 바뀔 때마다 1 올리고,
  * MIGRATIONS 에 직전 버전 → 새 버전 변환 함수를 추가한다.
  */
-const CURRENT_SCHEMA_VERSION = 2
+const CURRENT_SCHEMA_VERSION = 3
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
@@ -77,6 +78,24 @@ const MIGRATIONS: Array<(raw: Record<string, unknown>) => Record<string, unknown
     const workspaces = ((raw.workspaces as Partial<Workspace>[]) ?? []).map((w) => ({
       ...w,
       displayName: w.displayName ?? null
+    }))
+    return { ...raw, workspaces }
+  },
+  // v2 → v3: workspace 별 dev 서버 포트(devPort) 도입. 병렬 dev 서버 포트 충돌을 막기 위해
+  // 기존 workspace 에도 BASE_DEV_PORT 부터 비어 있는 포트를 하나씩 배정한다(이미 값이 있으면 보존).
+  (raw) => {
+    const list = (raw.workspaces as Partial<Workspace>[]) ?? []
+    const used = new Set<number>()
+    for (const w of list) if (typeof w.devPort === 'number') used.add(w.devPort)
+    const alloc = (): number => {
+      let port = BASE_DEV_PORT
+      while (used.has(port)) port++
+      used.add(port)
+      return port
+    }
+    const workspaces = list.map((w) => ({
+      ...w,
+      devPort: typeof w.devPort === 'number' ? w.devPort : alloc()
     }))
     return { ...raw, workspaces }
   }

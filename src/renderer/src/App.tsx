@@ -66,6 +66,24 @@ export default function App(): React.JSX.Element {
 
       if (!e.metaKey) return
 
+      // ⇧⌘A: 대기 중인 모든 권한을 한 번에 승인(병렬 세션 권한 피로 완화). 확인 후 실행.
+      if (e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        const count = st.approvablePermissionCount()
+        if (count > 0) {
+          void st
+            .confirm({
+              title: `Approve ${count} pending permission${count > 1 ? 's' : ''}?`,
+              body: 'Allows every waiting tool request across all workspaces at once. Questions that need an answer are left untouched.',
+              confirmLabel: 'Approve all'
+            })
+            .then((ok) => {
+              if (ok) useStore.getState().approveAllPermissions()
+            })
+        }
+        return
+      }
+
       // ⌘J: 우측 작업 패널 표시/숨김 토글.
       if (e.key === 'j') {
         e.preventDefault()

@@ -30,6 +30,19 @@ export interface Repo {
 export type WorkspaceStatus = 'idle' | 'running' | 'error'
 
 /**
+ * 병렬 dev 서버 포트 배정의 시작점. workspace 마다 이 값부터 비어 있는 포트를 하나씩 올려
+ * 배정해, 여러 workspace 의 dev 스크립트가 동시에 떠도 충돌하지 않게 한다.
+ */
+export const BASE_DEV_PORT = 3100
+
+/** 이미 사용 중인 포트 집합을 피해 BASE_DEV_PORT 부터 비어 있는 첫 포트를 고른다. */
+export function allocateDevPort(used: Set<number>): number {
+  let port = BASE_DEV_PORT
+  while (used.has(port)) port++
+  return port
+}
+
+/**
  * workspace 의 표시 이름을 결정하는 단일 출처(SSOT).
  * 우선순위: 사용자가 지정한 표시 이름(displayName) → PR 제목 → worktree 이름(name).
  * 즉 기본 규칙(최초엔 worktree 이름, PR 생성 시 PR 제목)은 유지하되,
@@ -60,6 +73,13 @@ export interface Workspace {
   baseBranch: string
   /** worktree 절대 경로 */
   worktreePath: string
+  /**
+   * 이 workspace 전용 dev 서버 포트. 병렬로 여러 workspace 의 dev 스크립트를 띄울 때
+   * 같은 기본 포트(3000/5173 등)를 다투지 않도록, 생성 시 고유 포트를 배정한다.
+   * setup/dev 스크립트에 `$PORT`·`$DITTO_DEV_PORT` 환경변수로 주입된다.
+   * 레거시 workspace(배정 전)는 null 일 수 있으며, dev 실행 시 lazy 하게 배정·영속된다.
+   */
+  devPort: number | null
   /** resume 용 Claude 세션 ID. 아직 세션을 시작하지 않았으면 null. */
   sessionId: string | null
   permissionMode: PermissionMode

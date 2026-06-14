@@ -27,7 +27,7 @@ import {
   githubLogin,
   githubLogout
 } from './auth'
-import { IPC } from '@shared/types'
+import { IPC, allocateDevPort } from '@shared/types'
 import type {
   AppSettings,
   CommandPanelKind,
@@ -65,6 +65,34 @@ export function registerIpc(ctx: IpcContext): void {
 
   const repoFor = (repoId: string): Repo | undefined =>
     store.getState().repos.find((r) => r.id === repoId)
+
+  /** workspace 별 스크립트에 주입할 환경변수. dev 서버가 충돌 없이 고유 포트를 쓰게 한다. */
+  const scriptEnvFor = (port: number): Record<string, string> => ({
+    PORT: String(port),
+    DITTO_DEV_PORT: String(port)
+  })
+
+  /**
+   * workspace 의 dev 포트를 반환한다. 아직 배정 전(레거시)이면 다른 workspace 와 겹치지 않는
+   * 포트를 BASE_DEV_PORT 부터 골라 배정·영속한 뒤 반환한다.
+   */
+  const ensureDevPort = (workspaceId: string): number | null => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return null
+    if (typeof ws.devPort === 'number') return ws.devPort
+    const used = new Set<number>(
+      store
+        .getState()
+        .workspaces.map((w) => w.devPort)
+        .filter((p): p is number => typeof p === 'number')
+    )
+    const port = allocateDevPort(used)
+    store.update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) w.devPort = port
+    })
+    return port
+  }
 
   // ── 리포 ───────────────────────────────────────────────────────────────
 
@@ -168,6 +196,14 @@ export function registerIpc(ctx: IpcContext): void {
 
       const settings = store.getState().settings
       const id = randomUUID()
+      // 병렬 dev 서버 포트 충돌을 막기 위해 생성 시점에 고유 포트를 배정한다.
+      const used = new Set<number>(
+        store
+          .getState()
+          .workspaces.map((w) => w.devPort)
+          .filter((p): p is number => typeof p === 'number')
+      )
+      const devPort = allocateDevPort(used)
       store.update((st) =>
         st.workspaces.push({
           id,
@@ -177,6 +213,7 @@ export function registerIpc(ctx: IpcContext): void {
           branch,
           baseBranch,
           worktreePath,
+          devPort,
           sessionId: null,
           permissionMode: settings.defaultPermissionMode,
           model: null,
@@ -189,9 +226,9 @@ export function registerIpc(ctx: IpcContext): void {
       )
       broadcastState()
 
-      // 셋업 스크립트가 설정돼 있으면 생성 직후 실행.
+      // 셋업 스크립트가 설정돼 있으면 생성 직후 실행(dev 와 같은 포트 env 를 주입).
       if (repo.setupScript.trim()) {
-        ctx.scripts.run(id, 'setup', repo.setupScript, worktreePath)
+        ctx.scripts.run(id, 'setup', repo.setupScript, worktreePath, scriptEnvFor(devPort))
       }
 
       // name·branch 를 함께 반환해 호출 측이 별도 getState 왕복 없이 토스트를 만들 수 있게 한다.
@@ -365,7 +402,11 @@ export function registerIpc(ctx: IpcContext): void {
     const repo = repoFor(ws.repoId)
     if (!repo) return
     const command = kind === 'setup' ? repo.setupScript : repo.devScript
-    ctx.scripts.run(workspaceId, kind, command, ws.worktreePath)
+    // 고유 포트를 env(PORT/DITTO_DEV_PORT)로 주입한다. 레거시 workspace 는 여기서 lazy 배정.
+    const port = ensureDevPort(workspaceId)
+    const env = port != null ? scriptEnvFor(port) : undefined
+    if (env) broadcastState()
+    ctx.scripts.run(workspaceId, kind, command, ws.worktreePath, env)
   })
 
   ipcMain.handle(IPC.scriptStop, (_e, workspaceId: string, kind: ScriptKind) => {

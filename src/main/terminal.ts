@@ -6,10 +6,29 @@ type Dispatch = (channel: string, payload: unknown) => void
 /** 재부착 시 재생할 출력 버퍼 상한(바이트 근사). 초과분은 앞에서 잘라낸다. */
 const BUFFER_LIMIT = 256 * 1024
 
+/**
+ * 출력 코얼레싱 주기(ms). PTY 데이터를 매 청크마다 즉시 renderer 로 보내지 않고 이 간격으로
+ * 모아 한 번에 보낸다 — 출력이 폭주하면(빌드/dev 서버 로그, 무한 출력 명령) 매 청크가 별도
+ * IPC 메시지가 되어 느린 renderer 뒤로 메인 프로세스 송신 큐가 무한 적재되고, 결국 메인
+ * V8 힙 OOM 으로 앱 전체가 죽는다(관측된 크래시). 모아 보내면 메시지 수가 급감해 큐 적체와
+ * 메모리 압력을 함께 억제한다.
+ */
+const FLUSH_INTERVAL_MS = 16
+
+/**
+ * 한 번의 flush 로 보낼 누적 출력 상한(바이트 근사). 초과분은 앞에서 잘라 tail 만 남긴다
+ * (replay 버퍼와 동일한 절사 정책). flush 사이에 폭주해도 단일 payload·메인 메모리를 묶어 둔다.
+ */
+const PENDING_LIMIT = 512 * 1024
+
 interface Term {
   proc: pty.IPty
   /** 최근 출력 누적. workspace 전환 후 돌아왔을 때 화면을 복원하기 위해 보관한다. */
   buffer: string
+  /** 아직 renderer 로 보내지 않고 모아 둔 출력. flush 시 한 번에 보낸다. */
+  pending: string
+  /** 예약된 flush 타이머(없으면 null). 청크당 하나만 잡고 재사용한다. */
+  flushTimer: ReturnType<typeof setTimeout> | null
 }
 
 /**
@@ -43,18 +62,24 @@ export class TerminalManager {
       cwd,
       env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
     })
-    term = { proc, buffer: '' }
+    term = { proc, buffer: '', pending: '', flushTimer: null }
     this.terms.set(workspaceId, term)
 
     proc.onData((data) => {
       const t = this.terms.get(workspaceId)
-      if (t) {
-        t.buffer += data
-        if (t.buffer.length > BUFFER_LIMIT) t.buffer = t.buffer.slice(-BUFFER_LIMIT)
-      }
-      this.dispatch(IPC.evtTerminalData, { workspaceId, data })
+      if (!t) return
+      t.buffer += data
+      if (t.buffer.length > BUFFER_LIMIT) t.buffer = t.buffer.slice(-BUFFER_LIMIT)
+      // 즉시 보내지 않고 모아 둔다 — 폭주 시 IPC 메시지 홍수로 메인 힙이 OOM 되는 것을 막는다.
+      t.pending += data
+      if (t.pending.length > PENDING_LIMIT) t.pending = t.pending.slice(-PENDING_LIMIT)
+      this.scheduleFlush(workspaceId)
     })
     proc.onExit(({ exitCode }) => {
+      // 종료 직전 남은 출력을 마저 비우고 타이머를 정리한 뒤 종료를 알린다.
+      this.flush(workspaceId)
+      const t = this.terms.get(workspaceId)
+      if (t?.flushTimer) clearTimeout(t.flushTimer)
       this.terms.delete(workspaceId)
       this.dispatch(IPC.evtTerminalExit, { workspaceId, code: exitCode })
     })
@@ -71,6 +96,14 @@ export class TerminalManager {
     // 이미 떠 있던 PTY 면 요청 크기에 맞춰 다시 맞춘다.
     if (existed) this.safeResize(term, cols, rows)
 
+    // reset 재생 전에 대기 중 flush 를 취소·비운다 — buffer 가 이미 그 내용을 포함하므로
+    // 재생 직후 pending 을 또 보내면 같은 출력이 중복된다.
+    if (term.flushTimer) {
+      clearTimeout(term.flushTimer)
+      term.flushTimer = null
+    }
+    term.pending = ''
+
     // 누적 버퍼를 화면 복원용으로 재생(reset). 실시간 출력과 같은 채널이라 순서가 보장된다.
     this.dispatch(IPC.evtTerminalData, { workspaceId, data: term.buffer, reset: true })
   }
@@ -86,6 +119,27 @@ export class TerminalManager {
     const term = this.ensure(workspaceId, cwd, 80, 24)
     // 캐리지 리턴으로 셸에 한 줄을 제출한다. 줄 끝의 개행은 셸이 알아서 처리한다.
     term.proc.write(`${cmd}\r`)
+  }
+
+  /** 다음 flush 가 예약돼 있지 않으면 하나 예약한다(청크당 하나만, 주기적으로 묶어 보냄). */
+  private scheduleFlush(workspaceId: string): void {
+    const term = this.terms.get(workspaceId)
+    if (!term || term.flushTimer) return
+    term.flushTimer = setTimeout(() => this.flush(workspaceId), FLUSH_INTERVAL_MS)
+  }
+
+  /** 모아 둔 출력을 한 번의 IPC 메시지로 renderer 에 보낸다. */
+  private flush(workspaceId: string): void {
+    const term = this.terms.get(workspaceId)
+    if (!term) return
+    if (term.flushTimer) {
+      clearTimeout(term.flushTimer)
+      term.flushTimer = null
+    }
+    if (!term.pending) return
+    const data = term.pending
+    term.pending = ''
+    this.dispatch(IPC.evtTerminalData, { workspaceId, data })
   }
 
   write(workspaceId: string, data: string): void {
@@ -109,6 +163,7 @@ export class TerminalManager {
   disposeWorkspace(workspaceId: string): void {
     const term = this.terms.get(workspaceId)
     if (!term) return
+    if (term.flushTimer) clearTimeout(term.flushTimer)
     this.terms.delete(workspaceId)
     try {
       term.proc.kill()

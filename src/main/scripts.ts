@@ -4,9 +4,25 @@ import type { ScriptKind, ScriptStatus } from '@shared/types'
 
 type Dispatch = (channel: string, payload: unknown) => void
 
+/**
+ * 출력 코얼레싱 주기(ms). 스크립트 stdout/stderr 를 매 청크마다 즉시 renderer 로 보내지 않고
+ * 이 간격으로 모아 보낸다 — dev 서버나 빌드가 로그를 폭주시키면 매 청크가 별도 IPC 메시지가
+ * 되어, 느린 renderer 뒤로 메인 프로세스 송신 큐가 무한 적재되고 결국 메인 V8 힙 OOM 으로
+ * 앱 전체가 죽는다(관측된 크래시). 모아 보내면 메시지 수가 급감해 큐 적체를 억제한다.
+ */
+const FLUSH_INTERVAL_MS = 16
+
+/** flush 사이에 모아 둘 스트림별 출력 상한(바이트 근사). 초과분은 앞에서 잘라 tail 만 남긴다. */
+const PENDING_LIMIT = 512 * 1024
+
 interface Running {
   proc: ChildProcess
   exitCode: number | null
+  /** 아직 보내지 않고 모아 둔 출력. flush 시 스트림별로 한 번에 보낸다. */
+  pendingOut: string
+  pendingErr: string
+  /** 예약된 flush 타이머(없으면 null). */
+  flushTimer: ReturnType<typeof setTimeout> | null
 }
 
 /**
@@ -50,23 +66,23 @@ export class ScriptRunner {
     const shell = process.env.SHELL || '/bin/zsh'
     // detached 로 새 프로세스 그룹을 만든다 — 중지 시 자식이 띄운 손자까지 그룹 단위로 정리한다.
     const proc = spawn(shell, ['-lc', command], { cwd, detached: true })
-    this.running.set(this.key(workspaceId, kind), { proc, exitCode: null })
+    const key = this.key(workspaceId, kind)
+    this.running.set(key, { proc, exitCode: null, pendingOut: '', pendingErr: '', flushTimer: null })
 
+    // 즉시 보내지 않고 모아 둔다 — 폭주 시 IPC 메시지 홍수로 메인 힙이 OOM 되는 것을 막는다.
     proc.stdout?.on('data', (data: Buffer) => {
-      this.dispatch(IPC.evtScriptOutput, {
-        workspaceId,
-        kind,
-        stream: 'stdout',
-        chunk: data.toString()
-      })
+      const entry = this.running.get(key)
+      if (!entry) return
+      entry.pendingOut += data.toString()
+      if (entry.pendingOut.length > PENDING_LIMIT) entry.pendingOut = entry.pendingOut.slice(-PENDING_LIMIT)
+      this.scheduleFlush(workspaceId, kind)
     })
     proc.stderr?.on('data', (data: Buffer) => {
-      this.dispatch(IPC.evtScriptOutput, {
-        workspaceId,
-        kind,
-        stream: 'stderr',
-        chunk: data.toString()
-      })
+      const entry = this.running.get(key)
+      if (!entry) return
+      entry.pendingErr += data.toString()
+      if (entry.pendingErr.length > PENDING_LIMIT) entry.pendingErr = entry.pendingErr.slice(-PENDING_LIMIT)
+      this.scheduleFlush(workspaceId, kind)
     })
     proc.on('error', (err) => {
       this.dispatch(IPC.evtScriptOutput, {
@@ -77,10 +93,43 @@ export class ScriptRunner {
       })
     })
     proc.on('close', (code) => {
-      const entry = this.running.get(this.key(workspaceId, kind))
-      if (entry) entry.exitCode = code
+      // 종료 직전 남은 출력을 마저 비운 뒤 종료를 알린다(순서 보장).
+      this.flush(workspaceId, kind)
+      const entry = this.running.get(key)
+      if (entry) {
+        if (entry.flushTimer) clearTimeout(entry.flushTimer)
+        entry.flushTimer = null
+        entry.exitCode = code
+      }
       this.dispatch(IPC.evtScriptExit, { workspaceId, kind, code })
     })
+  }
+
+  /** 다음 flush 가 예약돼 있지 않으면 하나 예약한다(주기적으로 묶어 보냄). */
+  private scheduleFlush(workspaceId: string, kind: ScriptKind): void {
+    const entry = this.running.get(this.key(workspaceId, kind))
+    if (!entry || entry.flushTimer) return
+    entry.flushTimer = setTimeout(() => this.flush(workspaceId, kind), FLUSH_INTERVAL_MS)
+  }
+
+  /** 모아 둔 stdout/stderr 를 스트림별로 한 번의 IPC 메시지로 보낸다. */
+  private flush(workspaceId: string, kind: ScriptKind): void {
+    const entry = this.running.get(this.key(workspaceId, kind))
+    if (!entry) return
+    if (entry.flushTimer) {
+      clearTimeout(entry.flushTimer)
+      entry.flushTimer = null
+    }
+    if (entry.pendingOut) {
+      const chunk = entry.pendingOut
+      entry.pendingOut = ''
+      this.dispatch(IPC.evtScriptOutput, { workspaceId, kind, stream: 'stdout', chunk })
+    }
+    if (entry.pendingErr) {
+      const chunk = entry.pendingErr
+      entry.pendingErr = ''
+      this.dispatch(IPC.evtScriptOutput, { workspaceId, kind, stream: 'stderr', chunk })
+    }
   }
 
   /**
@@ -115,7 +164,10 @@ export class ScriptRunner {
 
   stop(workspaceId: string, kind: ScriptKind): void {
     const entry = this.running.get(this.key(workspaceId, kind))
-    if (entry) killProcessGroup(entry.proc)
+    if (entry) {
+      if (entry.flushTimer) clearTimeout(entry.flushTimer)
+      killProcessGroup(entry.proc)
+    }
     this.running.delete(this.key(workspaceId, kind))
   }
 

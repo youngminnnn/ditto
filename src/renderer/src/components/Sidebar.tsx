@@ -12,6 +12,8 @@ import {
   ShieldQuestion
 } from 'lucide-react'
 import { useStore } from '../store'
+import { useNow } from '../lib/useNow'
+import { formatDuration } from '../lib/format'
 import type { Workspace } from '@shared/types'
 
 export default function Sidebar({
@@ -24,6 +26,18 @@ export default function Sidebar({
   const app = useStore((s) => s.app)!
   const pending = useStore((s) => s.pending)
   const pushToast = useStore((s) => s.pushToast)
+
+  // 실행 중인 세션이 하나라도 있으면 1초마다 갱신해 경과 시간을 흐르게 한다.
+  const anyRunning = app.workspaces.some((w) => !w.archived && w.status === 'running')
+  const now = useNow(1000, anyRunning)
+
+  // ⌘1–9 단축키(App.tsx)는 archived 제외 전체 워크스페이스의 평탄한 순서에 매핑된다.
+  // 같은 순서로 앞 9개에 번호를 매겨 사이드바 행에 배지로 노출, 화면-키맵 불일치를 없앤다.
+  const shortcutById = new Map<string, number>()
+  app.workspaces
+    .filter((w) => !w.archived)
+    .slice(0, 9)
+    .forEach((w, i) => shortcutById.set(w.id, i + 1))
 
   const addRepo = async (): Promise<void> => {
     const res = await window.api.repo.add()
@@ -100,7 +114,12 @@ export default function Sidebar({
                   <p className="px-3 py-1 text-[11px] text-neutral-600">No workspaces</p>
                 )}
                 {active.map((ws) => (
-                  <WorkspaceRow key={ws.id} workspace={ws} />
+                  <WorkspaceRow
+                    key={ws.id}
+                    workspace={ws}
+                    shortcut={shortcutById.get(ws.id)}
+                    now={now}
+                  />
                 ))}
                 {repoPending.map((p) => (
                   <PendingRow key={p.id} name={p.name} />
@@ -116,12 +135,21 @@ export default function Sidebar({
   )
 }
 
-function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Element {
+function WorkspaceRow({
+  workspace,
+  shortcut,
+  now
+}: {
+  workspace: Workspace
+  shortcut?: number
+  now: number
+}): React.JSX.Element {
   const selectedId = useStore((s) => s.selectedWorkspaceId)
   const select = useStore((s) => s.selectWorkspace)
   const git = useStore((s) => s.gitStatus[workspace.id])
   const pr = useStore((s) => s.prStatus[workspace.id])
   const unread = useStore((s) => s.unread[workspace.id])
+  const runningSince = useStore((s) => s.runningSince[workspace.id])
   const confirm = useStore((s) => s.confirm)
   const awaitingPermission = useStore((s) =>
     s.permissions.some((p) => p.workspaceId === workspace.id)
@@ -174,8 +202,24 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
           {git && git.changedFiles > 0 && (
             <span className="text-amber-500/80 shrink-0">·{git.changedFiles}</span>
           )}
+          {workspace.status === 'running' && runningSince && (
+            <span
+              className="text-blue-400/80 shrink-0 tabular-nums"
+              title="Running time of the current turn"
+            >
+              · {formatDuration(now - runningSince)}
+            </span>
+          )}
         </div>
       </div>
+      {shortcut !== undefined && (
+        <kbd
+          className="shrink-0 text-[9.5px] leading-none font-medium text-neutral-600 group-hover/ws:hidden tabular-nums"
+          title={`Switch with ⌘${shortcut}`}
+        >
+          ⌘{shortcut}
+        </kbd>
+      )}
       {awaitingPermission && !active && (
         <span className="text-amber-400 shrink-0 group-hover/ws:hidden" title="Waiting for your permission">
           <ShieldQuestion size={13} />

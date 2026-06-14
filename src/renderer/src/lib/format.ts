@@ -22,3 +22,20 @@ export function formatCost(usd: number): string {
   if (!usd) return ''
   return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
 }
+
+/**
+ * 경과 시간(ms)을 짧은 표시 문자열로(실행 중 세션의 진행 시간용).
+ * 1분 미만은 초, 1시간 미만은 분(+초), 그 이상은 시(+분).
+ */
+export function formatDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) {
+    const rem = s % 60
+    return rem ? `${m}m ${rem}s` : `${m}m`
+  }
+  const h = Math.floor(m / 60)
+  const remM = m % 60
+  return remM ? `${h}h ${remM}m` : `${h}h`
+}

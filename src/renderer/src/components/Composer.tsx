@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, Square, Terminal as TerminalIcon, MessageCircleQuestion, X } from 'lucide-react'
+import { Send, Square, Terminal as TerminalIcon, MessageCircleQuestion, X, Clock } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
 import type { ChatItem, SlashCommandInfo, Workspace } from '@shared/types'
@@ -9,6 +9,9 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   const text = useStore((s) => s.drafts[workspace.id] ?? '')
   const setDraft = useStore((s) => s.setDraft)
   const items = useStore((s) => s.transcripts[workspace.id]) ?? EMPTY
+  const queue = useStore((s) => s.messageQueue[workspace.id]) ?? EMPTY_QUEUE
+  const enqueueMessage = useStore((s) => s.enqueueMessage)
+  const removeQueued = useStore((s) => s.removeQueued)
   const taRef = useRef<HTMLTextAreaElement>(null)
   // ↑ 로 이전 사용자 메시지를 불러올 때의 커서(끝에서부터). -1 = 미사용.
   const historyIdx = useRef(-1)
@@ -104,8 +107,10 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       return
     }
 
-    // 실행 중이어도 전송을 허용한다 — 세션 입력 큐에 적재돼 현재 응답 뒤에 이어 처리된다.
-    void window.api.chat.send(workspace.id, trimmed)
+    // 실행 중이면 백엔드로 바로 보내지 않고 대기 큐에 넣는다 — 칩으로 표시되고 취소할 수 있으며,
+    // 현재 턴이 끝나면(idle) 순서대로 자동 전송된다. 실행 중이 아니면 즉시 전송.
+    if (running) enqueueMessage(workspace.id, trimmed)
+    else void window.api.chat.send(workspace.id, trimmed)
     setText('')
     historyIdx.current = -1
   }
@@ -197,6 +202,29 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
         )}
         {sideAnswer && !menuOpen && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
+        )}
+        {queue.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {queue.map((m, i) => (
+              <div
+                key={i}
+                className="group/q flex items-center gap-2 bg-[#15171c] border border-[#23262d] rounded-lg pl-2.5 pr-1.5 py-1.5"
+              >
+                <Clock size={12} className="text-amber-400/80 shrink-0" />
+                <span className="flex-1 min-w-0 truncate text-[12px] text-neutral-300" title={m}>
+                  {m}
+                </span>
+                <span className="text-[10px] text-neutral-600 shrink-0">queued</span>
+                <button
+                  onClick={() => removeQueued(workspace.id, i)}
+                  title="Cancel this queued message"
+                  className="shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[#1c1f25] hover:text-neutral-200"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
         <div className="flex items-end gap-2 bg-[#15171c] border border-[#23262d] rounded-xl px-3 py-2 focus-within:border-[#384050] transition-colors">
           <textarea
@@ -354,3 +382,4 @@ function SideAnswerCard({
 }
 
 const EMPTY: ChatItem[] = []
+const EMPTY_QUEUE: string[] = []

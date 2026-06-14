@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { ShieldQuestion } from 'lucide-react'
 import { useStore } from '../store'
+import { summarizePermission } from '../lib/permission'
 import type { PermissionRequest } from '@shared/types'
 
 export default function PermissionPrompt({
@@ -35,7 +36,7 @@ export default function PermissionPrompt({
   }, [request.requestId])
 
   const heading = request.title ?? `Allow ${request.displayName ?? request.toolName}?`
-  const detail = summarize(request)
+  const detail = summarizePermission(request)
 
   return (
     <div className="shrink-0 mx-4 mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
@@ -74,18 +75,4 @@ export default function PermissionPrompt({
       </div>
     </div>
   )
-}
-
-function summarize(request: PermissionRequest): string {
-  const input = request.input
-  if (input && typeof input === 'object') {
-    const obj = input as Record<string, unknown>
-    for (const key of ['command', 'file_path', 'path', 'url', 'pattern', 'query', 'description']) {
-      if (typeof obj[key] === 'string' && obj[key]) return obj[key] as string
-    }
-    // 알려진 키가 없으면 입력 전체를 간결한 JSON 으로(빈 객체는 제외).
-    const keys = Object.keys(obj)
-    if (keys.length) return JSON.stringify(obj, null, 2)
-  }
-  return request.decisionReason ?? ''
 }

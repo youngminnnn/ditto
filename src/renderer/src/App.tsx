@@ -9,6 +9,7 @@ import ChatView from './components/ChatView'
 import WorkArea from './components/WorkArea'
 import Splitter from './components/Splitter'
 import EmptyState from './components/EmptyState'
+import Overview from './components/Overview'
 import SettingsModal from './components/SettingsModal'
 import NewWorkspaceModal from './components/NewWorkspaceModal'
 import RepoConfigModal from './components/RepoConfigModal'
@@ -141,6 +142,8 @@ export default function App(): React.JSX.Element {
                 <WorkArea key={selected.id} workspace={selected} />
               </div>
             </>
+          ) : app.workspaces.some((w) => !w.archived) ? (
+            <Overview />
           ) : (
             <EmptyState />
           )}

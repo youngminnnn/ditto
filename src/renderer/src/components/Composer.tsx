@@ -199,14 +199,15 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     return () => window.removeEventListener('keydown', onEsc)
   }, [menuOpen, commandCard, sideAnswer])
 
-  /** "!명령" 을 터미널 PTY 에서 실행한다(Claude Code CLI bash 모드). 실행했으면 true. */
+  /**
+   * "!명령" 을 1회 실행한다(Claude Code CLI bash 모드). 실행했으면 true.
+   * 우측 터미널 패널이 아니라 대화 흐름 안에 명령/출력을 인라인으로 보여 준다.
+   */
   const runBash = (trimmed: string): boolean => {
     if (images.length || !trimmed.startsWith('!')) return false
     const command = trimmed.slice(1).trim()
     if (!command) return true // "!" 만 입력 — 메시지로 새지 않도록 삼키되 아무것도 실행 안 함.
-    // 출력이 보이도록 우측 터미널 패널을 연다(닫혀 있었다면).
-    useStore.setState({ rightPanelOpen: true })
-    void window.api.terminal.runCommand(workspace.id, command)
+    void window.api.terminal.exec(workspace.id, command)
     return true
   }
 
@@ -453,7 +454,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           {bashMode ? (
             <span className="text-[var(--success-400)] inline-flex items-center gap-1">
               <TerminalIcon size={11} />
-              Run in terminal <span className="text-neutral-600">(Enter to run · runs in this workspace)</span>
+              Run command <span className="text-neutral-600">(Enter to run · output shows here in the chat)</span>
             </span>
           ) : (() => {
             const footer = PERMISSION_FOOTER[workspace.permissionMode]

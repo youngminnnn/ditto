@@ -44,6 +44,19 @@ export interface SessionDeps {
 
 type Block = { type: string; [k: string]: unknown }
 
+/** 진행 중 워크플로우 1건의 누적 상태(여러 task_* 메시지를 병합해 하나의 카드로 보여 주기 위함). */
+interface WorkflowTaskState {
+  taskId: string
+  name: string
+  description: string
+  status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused'
+  summary?: string
+  totalTokens?: number
+  toolUses?: number
+  durationMs?: number
+  ts: number
+}
+
 // 패키징 빌드에서 SDK 가 app.asar 안 경로로 CLI 를 spawn 해 ENOTDIR 로 실패하지 않도록,
 // app.asar.unpacked 의 실제 바이너리 경로를 1회 계산해 둔다(dev 에서는 null → SDK 기본값).
 const claudeExecutable = resolveClaudeExecutable()
@@ -102,6 +115,12 @@ export class ClaudeSession {
    * query 루프가 result 없이 끝났을 때 'running' 에 갇히지 않도록 finally 에서 idle 로 푸는 데 쓴다.
    */
   private active = false
+  /**
+   * 진행 중인 동적 워크플로우 실행의 누적 상태(task_id 기준).
+   * task_progress·task_updated·task_notification 은 부분 정보만 실어 오므로, task_started 에서
+   * 워크플로우로 등록한 실행만 여기 모아 두고 갱신을 병합한다(서브에이전트 등 비워크플로우 task 는 무시).
+   */
+  private workflowTasks = new Map<string, WorkflowTaskState>()
 
   constructor(private deps: SessionDeps) {}
 
@@ -195,6 +214,13 @@ export class ClaudeSession {
           permissionMode: this.deps.permissionMode,
           // CLI 와 동일하게 파일시스템 설정(settings.json·CLAUDE.md·.mcp.json)을 로드.
           settingSources: MCP_SETTING_SOURCES,
+          // 동적 워크플로우(서브에이전트 대규모 조율)를 이 SDK 세션에서 사용 가능하게 한다.
+          // enableWorkflows 는 query Options 가 아니라 settings.json 스키마(Settings) 소속이라
+          // 인라인 settings 레이어로 주입한다 — settingSources 가 읽는 파일 설정 "위에" 합쳐지므로
+          // CLAUDE.md·MCP 로딩에는 영향이 없다. 켜두기만 하면 모델이 임의로 워크플로우를 돌리진 않고,
+          // 사용자가 'ultracode' 키워드나 "워크플로우로 해줘" 같은 요청을 했을 때만 Workflow 도구를 쓴다.
+          // (Pro 등에서는 기본 off 이고 Ditto 엔 /config UI 도 없어, 이 주입이 없으면 기능을 켤 방법이 없다.)
+          settings: { enableWorkflows: true },
           ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
           ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
           ...(this.deps.model ? { model: this.deps.model } : {}),
@@ -357,7 +383,98 @@ export class ClaudeSession {
         ts: Date.now()
       })
       this.deps.emit({ type: 'compacting', active: false, trigger: meta?.trigger })
+    } else if (msg.subtype === 'task_started') {
+      this.handleTaskStarted(msg)
+    } else if (msg.subtype === 'task_progress') {
+      this.handleTaskProgress(msg)
+    } else if (msg.subtype === 'task_updated') {
+      this.handleTaskUpdated(msg)
+    } else if (msg.subtype === 'task_notification') {
+      this.handleTaskNotification(msg)
     }
+  }
+
+  // ── 동적 워크플로우 진행 추적 ─────────────────────────────────────────────
+  // 백그라운드 워크플로우 실행을 SDK 의 task_* 시스템 메시지로 추적해, 하나의 진행 카드로
+  // 라이브 갱신한다. 워크플로우(task_type==='local_workflow' 또는 workflow_name 존재)만 다루고,
+  // 일반 서브에이전트 task 는 기존처럼 도구 카드로 충분하므로 건너뛴다.
+
+  private handleTaskStarted(msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_started' }>): void {
+    const isWorkflow = msg.task_type === 'local_workflow' || typeof msg.workflow_name === 'string'
+    // ambient/housekeeping task(skip_transcript)나 비워크플로우 task 는 트랜스크립트에 노출하지 않는다.
+    if (!isWorkflow || msg.skip_transcript) return
+
+    const state: WorkflowTaskState = {
+      taskId: msg.task_id,
+      name: msg.workflow_name || 'workflow',
+      description: msg.description || 'Starting workflow…',
+      status: 'running',
+      ts: Date.now()
+    }
+    this.workflowTasks.set(msg.task_id, state)
+    this.upsertTask(state, true)
+  }
+
+  private handleTaskProgress(msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_progress' }>): void {
+    const state = this.workflowTasks.get(msg.task_id)
+    if (!state) return // 우리가 추적 중인 워크플로우가 아니면 무시(서브에이전트 진행 등).
+    if (msg.description) state.description = msg.description
+    if (msg.summary) state.summary = msg.summary
+    state.totalTokens = msg.usage.total_tokens
+    state.toolUses = msg.usage.tool_uses
+    // 진행 갱신은 영속화하지 않고 화면만 갱신한다(JSONL 누적 방지). 시작/종료만 디스크에 남긴다.
+    this.upsertTask(state, false)
+  }
+
+  private handleTaskUpdated(msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_updated' }>): void {
+    const state = this.workflowTasks.get(msg.task_id)
+    if (!state) return
+    const p = msg.patch
+    if (p.description) state.description = p.description
+    if (p.error) state.summary = p.error
+    if (p.status) {
+      // SDK 의 'killed'(사용자 중지)는 'stopped', 'pending'(시작 전)은 'running' 으로 맞춘다.
+      state.status =
+        p.status === 'killed' ? 'stopped' : p.status === 'pending' ? 'running' : p.status
+    }
+    const terminal = state.status !== 'running' && state.status !== 'paused'
+    this.upsertTask(state, terminal)
+    if (terminal) this.workflowTasks.delete(msg.task_id)
+  }
+
+  private handleTaskNotification(
+    msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_notification' }>
+  ): void {
+    const state = this.workflowTasks.get(msg.task_id)
+    if (!state) return // task_notification 은 서브에이전트에도 오므로, 추적 중인 워크플로우만 종료 처리.
+    state.status = msg.status // 'completed' | 'failed' | 'stopped'
+    if (msg.summary) state.summary = msg.summary
+    if (msg.usage) {
+      state.totalTokens = msg.usage.total_tokens
+      state.toolUses = msg.usage.tool_uses
+      state.durationMs = msg.usage.duration_ms
+    }
+    this.upsertTask(state, true)
+    this.workflowTasks.delete(msg.task_id)
+  }
+
+  /** 워크플로우 진행 상태를 ChatItem 으로 만들어 (선택적으로) 영속화하고 renderer 로 보낸다. */
+  private upsertTask(state: WorkflowTaskState, persist: boolean): void {
+    const item: ChatItem = {
+      id: `task:${state.taskId}`,
+      type: 'task',
+      taskId: state.taskId,
+      name: state.name,
+      description: state.description,
+      status: state.status,
+      ...(state.summary ? { summary: state.summary } : {}),
+      ...(typeof state.totalTokens === 'number' ? { totalTokens: state.totalTokens } : {}),
+      ...(typeof state.toolUses === 'number' ? { toolUses: state.toolUses } : {}),
+      ...(typeof state.durationMs === 'number' ? { durationMs: state.durationMs } : {}),
+      ts: state.ts
+    }
+    if (persist) this.deps.persist(item)
+    this.deps.emit({ type: 'item', item })
   }
 
   /** stream_event 는 텍스트/사고 과정의 실시간 타이핑에만 사용한다. */

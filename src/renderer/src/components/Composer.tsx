@@ -136,6 +136,9 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     return m ? m[1] : null
   }, [text])
 
+  // "!" 로 시작하면 Claude Code CLI 의 bash 모드처럼 — 메시지가 아니라 터미널 명령으로 다룬다.
+  const bashMode = text.startsWith('!')
+
   // 슬래시 모드 진입 시 명령 목록을 lazy 하게 조회한다.
   useEffect(() => {
     if (slashQuery === null || commands !== null || loadingCommands) return
@@ -167,9 +170,27 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     setMenuIdx(0)
   }, [slashQuery])
 
+  /** "!명령" 을 터미널 PTY 에서 실행한다(Claude Code CLI bash 모드). 실행했으면 true. */
+  const runBash = (trimmed: string): boolean => {
+    if (images.length || !trimmed.startsWith('!')) return false
+    const command = trimmed.slice(1).trim()
+    if (!command) return true // "!" 만 입력 — 메시지로 새지 않도록 삼키되 아무것도 실행 안 함.
+    // 출력이 보이도록 우측 터미널 패널을 연다(닫혀 있었다면).
+    useStore.setState({ rightPanelOpen: true })
+    void window.api.terminal.runCommand(workspace.id, command)
+    return true
+  }
+
   const send = (): void => {
     const trimmed = text.trim()
     if (!trimmed && !images.length) return // 텍스트도 첨부도 없으면 무시.
+
+    // "!명령" 은 메시지로 보내지 않고 터미널에서 실행한다(Claude Code CLI 의 bash 모드).
+    if (runBash(trimmed)) {
+      setText('')
+      historyIdx.current = -1
+      return
+    }
 
     // /mcp·/context·/reload-plugins 등 인터랙티브(TUI 전용) 명령은 일반 프롬프트로 보내면 동작하지
     // 않으므로 인터셉트해 SDK 제어 메서드로 실행하고 결과를 카드로 보여 준다(첨부가 있으면 일반 전송).
@@ -337,7 +358,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               placeholder={
                 running
                   ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
-                  : 'Message Claude Code…  (Enter to send · / for commands · paste an image)'
+                  : 'Message Claude Code…  (Enter to send · / for commands · ! to run a terminal command)'
               }
               className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
             />
@@ -353,16 +374,24 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             <button
               onClick={send}
               disabled={!text.trim() && images.length === 0}
-              title={running ? 'Queue message' : 'Send'}
-              className="h-8 w-8 grid place-items-center rounded-lg bg-blue-600 text-white disabled:bg-[var(--border)] disabled:text-neutral-600 hover:bg-blue-500"
+              title={bashMode ? 'Run in terminal' : running ? 'Queue message' : 'Send'}
+              className={
+                'h-8 w-8 grid place-items-center rounded-lg text-white disabled:bg-[var(--border)] disabled:text-neutral-600 ' +
+                (bashMode ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500')
+              }
             >
-              <Send size={15} />
+              {bashMode ? <TerminalIcon size={15} /> : <Send size={15} />}
             </button>
           </div>
         </div>
       </div>
       <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px]">
-        {(() => {
+        {bashMode ? (
+          <span className="text-emerald-400 inline-flex items-center gap-1">
+            <TerminalIcon size={11} />
+            Run in terminal <span className="text-neutral-600">(Enter to run · runs in this workspace)</span>
+          </span>
+        ) : (() => {
           const footer = PERMISSION_FOOTER[workspace.permissionMode]
           const accent = workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-amber-400'
           return footer ? (

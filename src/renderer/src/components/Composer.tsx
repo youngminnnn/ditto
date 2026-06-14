@@ -1125,15 +1125,21 @@ function Empty({ children }: { children: React.ReactNode }): React.JSX.Element {
 function StatusLine({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const usage = useStore((s) => s.contextUsage[workspace.id])
   const compacting = useStore((s) => s.compacting[workspace.id] ?? false)
+  const liveBranch = useStore((s) => s.gitStatus[workspace.id]?.branch)
 
   // worktree 절대 경로의 마지막 구간(디렉토리명). 비정상 경로면 전체 경로로 폴백한다.
   const dirName = workspace.worktreePath.split('/').filter(Boolean).pop() ?? workspace.worktreePath
 
+  // 라이브 git 브랜치를 우선 표시한다. workspace.branch 는 생성 시점에 고정된 값이라
+  // 세션 도중 브랜치명을 바꾸면 반영되지 못하므로, git status 로 읽은 현재 브랜치를
+  // 사용한다. 아직 git 상태를 못 받았거나 불명('?')이면 저장된 branch 로 폴백한다.
+  const branch = liveBranch && liveBranch !== '?' ? liveBranch : workspace.branch
+
   return (
     <div className="flex items-center gap-3 mb-1.5 px-1 text-[11px] text-neutral-500">
-      <span className="flex items-center gap-1 min-w-0 shrink" title={`Branch: ${workspace.branch}`}>
+      <span className="flex items-center gap-1 min-w-0 shrink" title={`Branch: ${branch}`}>
         <GitBranch size={11} className="shrink-0 text-neutral-600" />
-        <span className="truncate">{workspace.branch}</span>
+        <span className="truncate">{branch}</span>
       </span>
       <span className="flex items-center gap-1 min-w-0 shrink" title={`Directory: ${workspace.worktreePath}`}>
         <Folder size={11} className="shrink-0 text-neutral-600" />

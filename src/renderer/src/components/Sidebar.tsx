@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   FolderGit2,
   Plus,
@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { useStore } from '../store'
 import { workspaceDisplayName } from '@shared/types'
+import { useNow } from '../lib/useNow'
+import { formatDuration } from '../lib/format'
 import type { Workspace } from '@shared/types'
 
 /** running 상태가 이 시간을 넘기면 사이드바에 "오래 실행 중" 힌트(멈춤일 수 있음)를 표시한다. */
@@ -29,15 +31,18 @@ export default function Sidebar({
   const pending = useStore((s) => s.pending)
   const pushToast = useStore((s) => s.pushToast)
 
-  // 오래 실행 중("멈춤일 수 있음")을 표시하려면 주기적으로 재렌더해야 한다(상태 변화가 없으면
-  // running 인 채로 lastActiveAt 이 갱신되지 않기 때문). running 세션이 하나라도 있을 때만 틱한다.
+  // 실행 중인 세션이 하나라도 있으면 1초마다 갱신해 경과 시간을 흐르게 하고("오래 실행 중" 힌트도
+  // 같은 틱으로 갱신), 없으면 틱을 멈춰 불필요한 재렌더를 막는다.
   const anyRunning = app.workspaces.some((w) => !w.archived && w.status === 'running')
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!anyRunning) return
-    const t = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(t)
-  }, [anyRunning])
+  const now = useNow(1000, anyRunning)
+
+  // ⌘1–9 단축키(App.tsx)는 archived 제외 전체 워크스페이스의 평탄한 순서에 매핑된다.
+  // 같은 순서로 앞 9개에 번호를 매겨 사이드바 행에 배지로 노출, 화면-키맵 불일치를 없앤다.
+  const shortcutById = new Map<string, number>()
+  app.workspaces
+    .filter((w) => !w.archived)
+    .slice(0, 9)
+    .forEach((w, i) => shortcutById.set(w.id, i + 1))
 
   const addRepo = async (): Promise<void> => {
     const res = await window.api.repo.add()
@@ -114,7 +119,12 @@ export default function Sidebar({
                   <p className="px-3 py-1 text-[11px] text-neutral-600">No workspaces</p>
                 )}
                 {active.map((ws) => (
-                  <WorkspaceRow key={ws.id} workspace={ws} now={now} />
+                  <WorkspaceRow
+                    key={ws.id}
+                    workspace={ws}
+                    shortcut={shortcutById.get(ws.id)}
+                    now={now}
+                  />
                 ))}
                 {repoPending.map((p) => (
                   <PendingRow key={p.id} name={p.name} />
@@ -132,9 +142,11 @@ export default function Sidebar({
 
 function WorkspaceRow({
   workspace,
+  shortcut,
   now
 }: {
   workspace: Workspace
+  shortcut?: number
   now: number
 }): React.JSX.Element {
   const selectedId = useStore((s) => s.selectedWorkspaceId)
@@ -143,15 +155,17 @@ function WorkspaceRow({
   const pr = useStore((s) => s.prStatus[workspace.id])
   const unread = useStore((s) => s.unread[workspace.id])
   const compacting = useStore((s) => s.compacting[workspace.id] ?? false)
+  const runningSince = useStore((s) => s.runningSince[workspace.id])
   const confirm = useStore((s) => s.confirm)
   const awaitingPermission = useStore((s) =>
     s.permissions.some((p) => p.workspaceId === workspace.id)
   )
 
   const active = workspace.id === selectedId
-  // running 인 채로 오래 머무르면(상태 변화 없이) "멈춤일 수 있음" 으로 본다. lastActiveAt 은
-  // 마지막 상태/세션 변화 시각이라, running 시작 후 경과 시간의 근사치로 쓸 수 있다.
-  const runningMs = workspace.status === 'running' ? Math.max(0, now - workspace.lastActiveAt) : 0
+  // running 인 채로 오래 머무르면(상태 변화 없이) "멈춤일 수 있음" 으로 본다. 정확한 진입 시각은
+  // runningSince(있으면)를, 없으면 lastActiveAt 을 근사치로 쓴다.
+  const runningStart = runningSince ?? workspace.lastActiveAt
+  const runningMs = workspace.status === 'running' ? Math.max(0, now - runningStart) : 0
   const stale = runningMs >= RUNNING_STALE_MS
   // 표시 이름: 사용자 override → PR 제목 → worktree 이름. override 가 없으면 PR 제목이 자동 반영된다.
   const displayName = workspaceDisplayName(workspace, pr?.title)
@@ -205,8 +219,24 @@ function WorkspaceRow({
           {git && git.changedFiles > 0 && (
             <span className="text-amber-500/80 shrink-0">·{git.changedFiles}</span>
           )}
+          {workspace.status === 'running' && runningSince && (
+            <span
+              className="text-blue-400/80 shrink-0 tabular-nums"
+              title="Running time of the current turn"
+            >
+              · {formatDuration(now - runningSince)}
+            </span>
+          )}
         </div>
       </div>
+      {shortcut !== undefined && (
+        <kbd
+          className="shrink-0 text-[9.5px] leading-none font-medium text-neutral-600 group-hover/ws:hidden tabular-nums"
+          title={`Switch with ⌘${shortcut}`}
+        >
+          ⌘{shortcut}
+        </kbd>
+      )}
       {/* 미확인 완료는 권한 대기·실행 중과 별개의 상태이므로, 좌측 상태 점과 함께 같이 보여 준다
           (좌측 StatusDot 이 권한 대기/실행/압축을 표시하고, 우측 파란 점이 미확인 응답을 표시). */}
       {unread && !active && (

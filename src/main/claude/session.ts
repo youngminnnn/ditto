@@ -33,6 +33,12 @@ export interface SessionDeps {
     req: Omit<PermissionRequest, 'requestId' | 'workspaceId'>
   ) => Promise<PermissionDecision>
   onSessionId: (id: string) => void
+  /**
+   * 진행 중이던 턴이 정상 result 없이 끝났을 때(예: CLI 프로세스가 턴 도중 죽어 result 가
+   * 영영 오지 않는 경우) workspace 상태를 idle 로 확정한다. emit('status', idle) 와 달리
+   * "Response complete" 알림을 띄우지 않도록 manager.forceIdle 로 연결한다.
+   */
+  settleIdle: () => void
 }
 
 type Block = { type: string; [k: string]: unknown }
@@ -90,6 +96,11 @@ export class ClaudeSession {
   private sawAnyMessage = false
   /** resume 실패로 새 세션 폴백을 이미 1회 시도했는지(무한 재시도 방지). */
   private resumeRetried = false
+  /**
+   * 턴이 진행 중인지(running 을 방출했고 아직 result/error 로 마무리되지 않았는지).
+   * query 루프가 result 없이 끝났을 때 'running' 에 갇히지 않도록 finally 에서 idle 로 푸는 데 쓴다.
+   */
+  private active = false
 
   constructor(private deps: SessionDeps) {}
 
@@ -129,6 +140,7 @@ export class ClaudeSession {
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
     this.deps.emit({ type: 'status', status: 'running' })
+    this.active = true
 
     // 이미지가 있으면 멀티모달 content 배열로(텍스트 블록 + base64 이미지 블록), 없으면 문자열.
     const content = imgs.length
@@ -216,9 +228,18 @@ export class ClaudeSession {
           ts: Date.now()
         })
         this.deps.emit({ type: 'status', status: 'error' })
+        this.active = false
       }
     } finally {
       this.q = null
+      // 루프가 (예외도, 정상 result 도 없이) 끝났는데 턴이 진행 중으로 남아 있으면 —
+      // 예: CLI 프로세스가 턴 도중 죽어 스트림이 result 없이 닫힌 경우 — 'running' 에
+      // 갇히므로 idle 로 확정한다. 앱은 살아 있어 부팅 시 store 정규화가 닿지 못하는 케이스다.
+      // 단, resume 폴백으로 재시도하는 경우는 턴이 새 세션에서 계속되므로 idle 로 풀지 않는다.
+      if (this.active && !retrying) {
+        this.active = false
+        this.deps.settleIdle()
+      }
     }
 
     // 폴백 재시도는 finally 가 this.q 를 비운 뒤에 시작해, 새 query 핸들이 덮어써지지 않게 한다.
@@ -443,6 +464,7 @@ export class ClaudeSession {
     }
 
     this.deps.emit({ type: 'status', status: 'idle' })
+    this.active = false
 
     // 컨텍스트 미터를 갱신한다. 압축 턴 직후가 아니면 임계치 초과 시 자동 압축도 트리거한다.
     // (성공 턴에만 사용량이 의미 있다.)
@@ -505,6 +527,7 @@ export class ClaudeSession {
     })
     this.deps.emit({ type: 'compacting', active: true, trigger: 'auto' })
     this.deps.emit({ type: 'status', status: 'running' })
+    this.active = true
 
     this.input.push({
       type: 'user',

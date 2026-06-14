@@ -10,14 +10,30 @@ import { hydrateEnvFromLoginShell } from './env'
 
 let mainWindow: BrowserWindow | null = null
 
+// logger 와 agent-host(유틸리티 프로세스)는 electron `app` 없이 userData 경로를 알아야 하므로
+// (ESM 에서 유틸리티 프로세스가 electron 을 import 하면 로드 시 throw) 가장 먼저 env 로 박아 둔다.
+// app.getPath 는 ready 이전에도 사용 가능하다. host fork 시 이 값을 그대로 물려준다.
+process.env.DITTO_USER_DATA ||= app.getPath('userData')
+
 // 배포 빌드는 콘솔이 보이지 않으므로, 처리되지 않은 오류를 파일 로그로 남겨 진단 가능하게 한다.
 process.on('uncaughtException', (err) => log.error('uncaughtException', err))
 process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason))
 
-/** 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용). */
+/**
+ * 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용).
+ *
+ * 각 send 를 개별 try/catch 로 감싼다: 파괴된 webContents 로의 송신이나 직렬화 실패(과도하게
+ * 큰/직렬화 불가 페이로드)가 던지는 예외가 호출 측 루프를 끊지 않게 한다. 페이로드 크기 자체는
+ * 소스(claude/clamp.ts)에서 이미 제한해 네이티브 직렬화 abort 를 막지만, 여기서도 한 번 더 막는다.
+ */
 function dispatch(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(channel, payload)
+    if (win.isDestroyed() || win.webContents.isDestroyed()) continue
+    try {
+      win.webContents.send(channel, payload)
+    } catch (err) {
+      log.error(`dispatch failed on ${channel}`, err)
+    }
   }
 }
 

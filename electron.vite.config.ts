@@ -15,7 +15,12 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: { index: resolve('src/main/index.ts') }
+        // index = 메인 프로세스, host = Agent SDK 쿼리를 실행하는 유틸리티 프로세스(out/main/host.js).
+        // 메인이 utilityProcess.fork 로 host.js 를 띄운다 — SDK/스트리밍 fatal 격리용.
+        input: {
+          index: resolve('src/main/index.ts'),
+          host: resolve('src/main/claude/host.ts')
+        }
       }
     }
   },

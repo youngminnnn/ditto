@@ -4,7 +4,6 @@ import { spawn } from 'node:child_process'
 import { getStore } from './store'
 import { getTranscripts } from './transcripts'
 import { listDir, readFileInRoot } from './fsbrowse'
-import { listSlashCommands } from './claude/commands'
 import { log } from './logger'
 import {
   addWorktree,
@@ -476,7 +475,7 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(IPC.commandsList, (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return []
-    return listSlashCommands(ws.worktreePath).catch(() => [])
+    return ctx.sessions.listCommands(ws.worktreePath).catch(() => [])
   })
 
   // 인터랙티브 명령(/mcp·/context·/reload-plugins 등) — 결과 카드용 데이터를 조회한다.

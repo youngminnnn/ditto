@@ -105,9 +105,21 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   const nextUnreadId = useStore((s) => s.nextUnreadId)
   const nextPendingPermissionId = useStore((s) => s.nextPendingPermissionId)
   const selectWorkspace = useStore((s) => s.selectWorkspace)
+  const approveAllPermissions = useStore((s) => s.approveAllPermissions)
   const unreadCount = Object.entries(unread).filter(([id, on]) => on && id !== workspace.id).length
   const pendingElsewhere = permissions.filter((p) => p.workspaceId !== workspace.id)
   const pendingElsewhereCount = new Set(pendingElsewhere.map((p) => p.workspaceId)).size
+  // 일괄 승인 가능한(=AskUserQuestion 이 아닌) 대기 권한 수(모든 workspace 합산).
+  const approvableCount = permissions.filter((p) => p.toolName !== 'AskUserQuestion').length
+
+  const approveAll = async (): Promise<void> => {
+    const ok = await confirm({
+      title: `Approve ${approvableCount} pending permission${approvableCount > 1 ? 's' : ''}?`,
+      body: 'Allows every waiting tool request across all workspaces at once. Questions that need an answer are left untouched.',
+      confirmLabel: 'Approve all'
+    })
+    if (ok) approveAllPermissions()
+  }
 
   const model = modelLabel(workspace.model ?? workspace.lastModel ?? settingsModel)
   const sessionCost = transcript.reduce(
@@ -318,10 +330,20 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           <PermissionPrompt request={pending} />
         ))}
 
-      {/* 입력창 바로 위: 다른 세션으로 점프(권한 대기 우선, 그다음 미확인 응답) */}
-      {(pendingElsewhereCount > 0 || unreadCount > 0) && (
+      {/* 입력창 바로 위: 일괄 승인 + 다른 세션으로 점프(권한 대기 우선, 그다음 미확인 응답) */}
+      {(pendingElsewhereCount > 0 || unreadCount > 0 || approvableCount >= 2) && (
         <div className="px-4">
           <div className="max-w-3xl mx-auto flex justify-end gap-2">
+            {approvableCount >= 2 && (
+              <button
+                onClick={approveAll}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-emerald-600/90 text-white text-[11.5px] font-medium hover:bg-emerald-500 shadow-lg"
+                title="Approve every pending permission across all workspaces (⇧⌘A)"
+              >
+                <CircleCheck size={13} />
+                Approve all ({approvableCount})
+              </button>
+            )}
             {pendingElsewhereCount > 0 && (
               <button
                 onClick={() => {

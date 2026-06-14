@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Play, Square, X } from 'lucide-react'
+import { Play, Square, X, ExternalLink, AlertTriangle } from 'lucide-react'
 import { useStore, scriptKey } from '../store'
 import type { ScriptKind } from '@shared/types'
 
@@ -22,6 +22,11 @@ export default function ScriptPanel({
   const status = statuses.find((s) => s.kind === tab)
   const running = status?.state === 'running'
   const out = output[scriptKey(workspaceId, tab)] ?? ''
+  // 이 workspace 에 배정된 dev 포트. 스크립트에는 $PORT/$DITTO_DEV_PORT 로 주입된다.
+  const port = ws.devPort
+  // 포트 충돌(다른 프로세스가 이미 점유)을 출력에서 감지해 사용자에게 알린다 — 병렬 dev 서버에서
+  // 흔하며, 그냥 두면 로그에 묻혀 "왜 안 뜨지" 로 이어진다.
+  const portInUse = /EADDRINUSE|address already in use|port .* is already in use/i.test(out)
 
   const run = (): void => {
     void window.api.script.run(workspaceId, tab).then(() => refreshStatus(workspaceId))
@@ -82,8 +87,36 @@ export default function ScriptPanel({
       </div>
 
       {command.trim() && (
-        <div className="px-3 pt-1.5 text-[11px] text-neutral-600 font-mono truncate">
-          $ {command}
+        <div className="px-3 pt-1.5 flex items-center gap-2 text-[11px] text-neutral-600 font-mono">
+          <span className="truncate">$ {command}</span>
+          {tab === 'dev' && port != null && (
+            <span className="ml-auto shrink-0 flex items-center gap-2 not-italic">
+              <span className="text-neutral-500" title="Unique port for this workspace, injected as $PORT / $DITTO_DEV_PORT">
+                PORT={port}
+              </span>
+              <button
+                onClick={() => void window.api.openExternal(`http://localhost:${port}`)}
+                className="flex items-center gap-1 text-neutral-400 hover:text-neutral-200"
+                title={`Open http://localhost:${port}`}
+              >
+                <ExternalLink size={11} />
+                open
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {tab === 'dev' && portInUse && (
+        <div className="mx-3 mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
+          <span>
+            Port already in use. Make your dev command bind to{' '}
+            <span className="font-mono">$PORT</span>
+            {port != null ? ` (${port})` : ''} so parallel dev servers don&rsquo;t collide — e.g.{' '}
+            <span className="font-mono">vite --port $PORT</span> or{' '}
+            <span className="font-mono">PORT=$PORT npm start</span>.
+          </span>
         </div>
       )}
       <pre className="flex-1 overflow-auto px-3 py-2 text-[11.5px] font-mono text-neutral-400 whitespace-pre-wrap">

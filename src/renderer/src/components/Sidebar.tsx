@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   FolderGit2,
   Plus,
@@ -15,6 +15,9 @@ import { useStore } from '../store'
 import { workspaceDisplayName } from '@shared/types'
 import type { Workspace } from '@shared/types'
 
+/** running 상태가 이 시간을 넘기면 사이드바에 "오래 실행 중" 힌트(멈춤일 수 있음)를 표시한다. */
+const RUNNING_STALE_MS = 5 * 60 * 1000
+
 export default function Sidebar({
   onNewWorkspace,
   onConfigRepo
@@ -25,6 +28,16 @@ export default function Sidebar({
   const app = useStore((s) => s.app)!
   const pending = useStore((s) => s.pending)
   const pushToast = useStore((s) => s.pushToast)
+
+  // 오래 실행 중("멈춤일 수 있음")을 표시하려면 주기적으로 재렌더해야 한다(상태 변화가 없으면
+  // running 인 채로 lastActiveAt 이 갱신되지 않기 때문). running 세션이 하나라도 있을 때만 틱한다.
+  const anyRunning = app.workspaces.some((w) => !w.archived && w.status === 'running')
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!anyRunning) return
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [anyRunning])
 
   const addRepo = async (): Promise<void> => {
     const res = await window.api.repo.add()
@@ -101,7 +114,7 @@ export default function Sidebar({
                   <p className="px-3 py-1 text-[11px] text-neutral-600">No workspaces</p>
                 )}
                 {active.map((ws) => (
-                  <WorkspaceRow key={ws.id} workspace={ws} />
+                  <WorkspaceRow key={ws.id} workspace={ws} now={now} />
                 ))}
                 {repoPending.map((p) => (
                   <PendingRow key={p.id} name={p.name} />
@@ -117,18 +130,29 @@ export default function Sidebar({
   )
 }
 
-function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Element {
+function WorkspaceRow({
+  workspace,
+  now
+}: {
+  workspace: Workspace
+  now: number
+}): React.JSX.Element {
   const selectedId = useStore((s) => s.selectedWorkspaceId)
   const select = useStore((s) => s.selectWorkspace)
   const git = useStore((s) => s.gitStatus[workspace.id])
   const pr = useStore((s) => s.prStatus[workspace.id])
   const unread = useStore((s) => s.unread[workspace.id])
+  const compacting = useStore((s) => s.compacting[workspace.id] ?? false)
   const confirm = useStore((s) => s.confirm)
   const awaitingPermission = useStore((s) =>
     s.permissions.some((p) => p.workspaceId === workspace.id)
   )
 
   const active = workspace.id === selectedId
+  // running 인 채로 오래 머무르면(상태 변화 없이) "멈춤일 수 있음" 으로 본다. lastActiveAt 은
+  // 마지막 상태/세션 변화 시각이라, running 시작 후 경과 시간의 근사치로 쓸 수 있다.
+  const runningMs = workspace.status === 'running' ? Math.max(0, now - workspace.lastActiveAt) : 0
+  const stale = runningMs >= RUNNING_STALE_MS
   // 표시 이름: 사용자 override → PR 제목 → worktree 이름. override 가 없으면 PR 제목이 자동 반영된다.
   const displayName = workspaceDisplayName(workspace, pr?.title)
 
@@ -161,7 +185,13 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
         (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
       }
     >
-      <StatusDot status={workspace.status} awaitingPermission={awaitingPermission} />
+      <StatusDot
+        status={workspace.status}
+        awaitingPermission={awaitingPermission}
+        compacting={compacting}
+        stale={stale}
+        runningMs={runningMs}
+      />
       <div className="flex-1 min-w-0">
         <div
           className={'truncate text-[12.5px] ' + (active ? 'text-neutral-100' : 'text-neutral-300')}
@@ -177,12 +207,9 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
           )}
         </div>
       </div>
-      {awaitingPermission && !active && (
-        <span className="text-amber-400 shrink-0 group-hover/ws:hidden" title="Waiting for your permission">
-          <ShieldQuestion size={13} />
-        </span>
-      )}
-      {unread && !active && !awaitingPermission && (
+      {/* 미확인 완료는 권한 대기·실행 중과 별개의 상태이므로, 좌측 상태 점과 함께 같이 보여 준다
+          (좌측 StatusDot 이 권한 대기/실행/압축을 표시하고, 우측 파란 점이 미확인 응답을 표시). */}
+      {unread && !active && (
         <span
           className="h-2 w-2 rounded-full bg-blue-500 shrink-0 group-hover/ws:hidden"
           title="Completed response — unread"
@@ -285,17 +312,40 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
 
 function StatusDot({
   status,
-  awaitingPermission
+  awaitingPermission,
+  compacting,
+  stale,
+  runningMs
 }: {
   status: Workspace['status']
   awaitingPermission: boolean
+  compacting: boolean
+  stale: boolean
+  runningMs: number
 }): React.JSX.Element {
+  // 권한 대기는 가장 행동 가능한 상태라 다른 표시보다 우선한다.
   if (awaitingPermission) {
-    return <ShieldQuestion size={13} className="text-amber-400 shrink-0" />
+    return (
+      <span title="Waiting for your permission" className="shrink-0 grid place-items-center">
+        <ShieldQuestion size={13} className="text-amber-400" />
+      </span>
+    )
   }
   if (status === 'running') {
-    return <Loader2 size={13} className="text-blue-400 animate-spin shrink-0" />
+    // 압축 중(보라) · 오래 실행(앰버, 멈춤일 수 있음) · 일반 실행(파랑) 을 색으로 구분한다.
+    const color = compacting ? 'text-purple-400' : stale ? 'text-amber-400' : 'text-blue-400'
+    const title = compacting
+      ? 'Compacting conversation…'
+      : stale
+        ? `Running for ${Math.round(runningMs / 60000)}m — may be stuck`
+        : 'Running'
+    return (
+      <span title={title} className="shrink-0 grid place-items-center">
+        <Loader2 size={13} className={`${color} animate-spin`} />
+      </span>
+    )
   }
   const color = status === 'error' ? 'bg-red-500' : 'bg-neutral-600'
-  return <span className={`h-2 w-2 rounded-full shrink-0 ${color}`} />
+  const title = status === 'error' ? 'Last turn ended with an error' : 'Idle — ready for input'
+  return <span title={title} className={`h-2 w-2 rounded-full shrink-0 ${color}`} />
 }

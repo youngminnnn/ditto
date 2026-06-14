@@ -59,13 +59,24 @@ export class ScriptRunner {
     return `${workspaceId}:${kind}`
   }
 
-  run(workspaceId: string, kind: ScriptKind, command: string, cwd: string): void {
+  run(
+    workspaceId: string,
+    kind: ScriptKind,
+    command: string,
+    cwd: string,
+    env?: Record<string, string>
+  ): void {
     if (!command.trim()) return
     this.stop(workspaceId, kind)
 
     const shell = process.env.SHELL || '/bin/zsh'
     // detached 로 새 프로세스 그룹을 만든다 — 중지 시 자식이 띄운 손자까지 그룹 단위로 정리한다.
-    const proc = spawn(shell, ['-lc', command], { cwd, detached: true })
+    // env 로 workspace 별 PORT 등을 주입해 병렬 dev 서버가 같은 포트를 다투지 않게 한다.
+    const proc = spawn(shell, ['-lc', command], {
+      cwd,
+      detached: true,
+      ...(env ? { env: { ...process.env, ...env } } : {})
+    })
     const key = this.key(workspaceId, kind)
     this.running.set(key, { proc, exitCode: null, pendingOut: '', pendingErr: '', flushTimer: null })
 

@@ -106,13 +106,20 @@ class Store {
         version++
       }
 
+      // 부팅 시점엔 살아 있는 Claude 세션이 하나도 없다(세션은 첫 메시지 때 lazy 생성).
+      // 따라서 직전 종료/크래시 때 'running' 으로 남은 상태는 실제로는 진행되지 않는 유령
+      // 상태이므로 idle 로 되돌려, 재시작 후 사이드바가 '진행 중'에 갇히지 않게 한다.
+      const workspaces = ((migrated.workspaces as Workspace[]) ?? []).map((w) =>
+        w.status === 'running' ? { ...w, status: 'idle' as const } : w
+      )
+
       // 미래 버전 파일(다운그레이드 상황)은 버전을 깎지 않고 보존해, 신버전으로 되돌렸을 때
       // 마이그레이션이 재실행되거나 데이터가 손상되지 않게 한다. 알려진 필드만 읽는다.
       // 마이그레이션 후에도 누락 필드가 없도록 settings 는 기본값과 최종 병합한다.
       return {
         schemaVersion: version,
         repos: (migrated.repos as Repo[]) ?? [],
-        workspaces: (migrated.workspaces as Workspace[]) ?? [],
+        workspaces,
         settings: { ...DEFAULT_SETTINGS, ...((migrated.settings as Partial<AppSettings>) ?? {}) }
       }
     } catch {

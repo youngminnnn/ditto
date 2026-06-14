@@ -109,8 +109,11 @@ export class SessionManager {
       )
   }
 
-  interrupt(workspaceId: string): Promise<void> {
-    return this.sessions.get(workspaceId)?.interrupt() ?? Promise.resolve()
+  async interrupt(workspaceId: string): Promise<void> {
+    await this.sessions.get(workspaceId)?.interrupt()
+    // 세션이 없거나(앱 재시작 후 상태만 잔존), 인증이 끊겨 interrupt 후에도 result 가
+    // 오지 않는 끊긴 세션에서도 사이드바가 '진행 중'에 갇히지 않도록 idle 로 확정한다.
+    this.forceIdle(workspaceId)
   }
 
   async setPermissionMode(workspaceId: string, mode: PermissionMode): Promise<void> {
@@ -158,6 +161,20 @@ export class SessionManager {
     this.pendingPermissions.clear()
   }
 
+  /**
+   * Claude 로그아웃 등으로 모든 세션의 인증이 한꺼번에 무효화됐을 때 호출한다.
+   * 인증이 끊긴 세션은 더 진행되지도 interrupt 로 멈춰지지도 않아 '진행 중'에 갇히므로,
+   * 세션을 전부 정리하고 진행 중이던 workspace 상태를 idle 로 되돌려(렌더러에도 방출) 풀어 준다.
+   */
+  abortAll(): void {
+    const running = getStore()
+      .getState()
+      .workspaces.filter((w) => w.status === 'running')
+      .map((w) => w.id)
+    this.disposeAll()
+    for (const id of running) this.forceIdle(id)
+  }
+
   respondPermission(requestId: string, decision: PermissionDecision): void {
     const entry = this.pendingPermissions.get(requestId)
     if (entry) {
@@ -167,6 +184,18 @@ export class SessionManager {
   }
 
   // ── 내부 ───────────────────────────────────────────────────────────────
+
+  /**
+   * workspace 를 idle 로 강제 확정한다(store + 렌더러). emit('status') 와 달리 완료 알림을
+   * 띄우지 않는다 — 중단/인증 무효화로 푸는 경우라 "Response complete" 알림은 부적절하다.
+   */
+  private forceIdle(workspaceId: string): void {
+    getStore().update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) w.status = 'idle'
+    })
+    this.dispatch(IPC.evtChat, { workspaceId, event: { type: 'status', status: 'idle' } })
+  }
 
   private emit(workspaceId: string, event: ChatEvent): void {
     // 상태·모델 변화는 store 에도 반영해 재시작/새 창에서도 사이드바가 일치하도록 한다.

@@ -133,6 +133,11 @@ export interface DittoApi {
      * 터미널이 아직 안 떠 있으면 기본 크기로 띄운 뒤 명령을 보낸다.
      */
     runCommand(workspaceId: string, command: string): Promise<void>
+    /**
+     * 입력창의 `!명령` 을 1회 실행하고 출력을 대화 흐름에 인라인으로 보여 준다
+     * (Claude Code CLI 의 bash 모드 — 우측 터미널 패널이 아니라 메시지 영역에 표시).
+     */
+    exec(workspaceId: string, command: string): Promise<void>
     resize(workspaceId: string, cols: number, rows: number): Promise<void>
     kill(workspaceId: string): Promise<void>
     onData(cb: (e: TerminalDataEvent) => void): () => void

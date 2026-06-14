@@ -183,6 +183,24 @@ export type ChatItem =
   | { id: string; type: 'error'; text: string; ts: number }
   | { id: string; type: 'system'; text: string; ts: number }
   /**
+   * 입력창의 `!명령` (Claude Code CLI bash 모드) 1회 실행.
+   * 우측 터미널 패널이 아니라 대화 흐름 안에 인라인으로 명령과 출력을 보여 준다 — id 기준
+   * upsert 로 실행 중에는 출력이 자라고, 끝나면 running:false + 종료 코드로 확정된다.
+   */
+  | {
+      id: string
+      type: 'bash'
+      /** 사용자가 입력한 명령(앞의 "!" 는 떼어 낸 본문). */
+      command: string
+      /** stdout+stderr 누적(앞에서 절사된 tail 일 수 있음). */
+      output: string
+      /** 프로세스 종료 코드. 실행 중이거나 spawn 실패면 null. */
+      exitCode: number | null
+      /** 아직 실행 중인지. true 면 스피너를 보여 준다. */
+      running: boolean
+      ts: number
+    }
+  /**
    * 동적 워크플로우(대규모 서브에이전트 조율) 1회 실행의 진행 카드.
    * 모델이 Workflow 도구로 시작한 백그라운드 실행을 SDK 의 task_* 시스템 메시지로 추적해
    * 하나의 항목(taskId 기준 upsert)으로 라이브 갱신한다 — 시작 → 진행(토큰·도구) → 종료(요약).
@@ -365,6 +383,8 @@ export const IPC = {
   terminalKill: 'terminal:kill',
   /** 입력창의 `!명령` (Claude Code CLI bash 모드)을 PTY 에서 실행한다. */
   terminalRunCommand: 'terminal:runCommand',
+  /** 입력창의 `!명령` 을 1회 실행하고 출력을 대화 흐름(트랜스크립트)에 인라인으로 흘려보낸다. */
+  terminalExec: 'terminal:exec',
   // Dock 미확인 배지
   appSetBadge: 'app:setBadge',
 

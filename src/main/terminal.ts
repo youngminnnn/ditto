@@ -1,5 +1,9 @@
 import * as pty from 'node-pty'
+import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/types'
+import type { ChatItem } from '@shared/types'
+import { getTranscripts } from './transcripts'
 
 type Dispatch = (channel: string, payload: unknown) => void
 
@@ -20,6 +24,12 @@ const FLUSH_INTERVAL_MS = 16
  * (replay 버퍼와 동일한 절사 정책). flush 사이에 폭주해도 단일 payload·메인 메모리를 묶어 둔다.
  */
 const PENDING_LIMIT = 512 * 1024
+
+/** 인라인 `!명령`(execInline)의 출력 갱신 묶음 주기(ms). 폭주 시 IPC 메시지 수를 억제한다. */
+const INLINE_FLUSH_MS = 80
+
+/** 인라인 `!명령` 출력 누적 상한(바이트 근사). 초과분은 앞에서 잘라 tail 만 남긴다. */
+const INLINE_OUTPUT_LIMIT = 256 * 1024
 
 interface Term {
   proc: pty.IPty
@@ -119,6 +129,78 @@ export class TerminalManager {
     const term = this.ensure(workspaceId, cwd, 80, 24)
     // 캐리지 리턴으로 셸에 한 줄을 제출한다. 줄 끝의 개행은 셸이 알아서 처리한다.
     term.proc.write(`${cmd}\r`)
+  }
+
+  /**
+   * 입력창의 `!명령` 을 1회 실행하고 출력을 대화 흐름(트랜스크립트)에 인라인으로 보여 준다.
+   * Claude Code CLI 처럼 — 우측 터미널 패널이 아니라 메시지 영역에 명령/출력이 함께 쌓인다.
+   *
+   * PTY(인터랙티브 셸)가 아니라 로그인 셸의 1회성 프로세스로 돌려, stdout/stderr 를 묶어
+   * 캡처한다. stdout 이 TTY 가 아니므로 대부분의 도구는 색 코드를 끄고 평문을 낸다.
+   * 실행 중에는 같은 id 로 출력을 갱신(throttle)하고, 종료 시에만 트랜스크립트에 영속화한다.
+   */
+  execInline(workspaceId: string, cwd: string, command: string): void {
+    const cmd = command.trim()
+    if (!cmd) return
+
+    const id = `bash:${randomUUID()}`
+    const ts = Date.now()
+    let output = ''
+    let settled = false
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+    const send = (running: boolean, exitCode: number | null): void => {
+      const item: ChatItem = { id, type: 'bash', command: cmd, output, exitCode, running, ts }
+      this.dispatch(IPC.evtChat, { workspaceId, event: { type: 'item', item } })
+    }
+
+    // 실행 시작을 즉시 알린다(스피너 + 명령 표시). 영속화는 종료 시 1회만 한다.
+    send(true, null)
+
+    // 출력 폭주 시 매 청크마다 IPC 를 보내지 않도록 갱신을 묶어 보낸다.
+    const scheduleSend = (): void => {
+      if (flushTimer) return
+      flushTimer = setTimeout(() => {
+        flushTimer = null
+        if (!settled) send(true, null)
+      }, INLINE_FLUSH_MS)
+    }
+
+    const onChunk = (d: Buffer | string): void => {
+      output += d.toString()
+      if (output.length > INLINE_OUTPUT_LIMIT) output = output.slice(-INLINE_OUTPUT_LIMIT)
+      scheduleSend()
+    }
+
+    const finish = (exitCode: number | null): void => {
+      if (settled) return
+      settled = true
+      if (flushTimer) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      const item: ChatItem = { id, type: 'bash', command: cmd, output, exitCode, running: false, ts }
+      getTranscripts().upsert(workspaceId, item)
+      this.dispatch(IPC.evtChat, { workspaceId, event: { type: 'item', item } })
+    }
+
+    const shell = process.env.SHELL || '/bin/zsh'
+    let proc: ReturnType<typeof spawn>
+    try {
+      proc = spawn(shell, ['-l', '-c', cmd], { cwd })
+    } catch (err) {
+      output += (err as Error).message
+      finish(null)
+      return
+    }
+
+    proc.stdout?.on('data', onChunk)
+    proc.stderr?.on('data', onChunk)
+    proc.on('error', (err) => {
+      output += `${output && !output.endsWith('\n') ? '\n' : ''}${err.message}\n`
+      finish(null)
+    })
+    proc.on('close', (code) => finish(code))
   }
 
   /** 다음 flush 가 예약돼 있지 않으면 하나 예약한다(청크당 하나만, 주기적으로 묶어 보냄). */

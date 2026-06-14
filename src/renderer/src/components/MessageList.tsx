@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon, Workflow, XCircle, MessageSquarePlus } from 'lucide-react'
+import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon, Workflow, XCircle, MessageSquarePlus, Terminal as TerminalIcon } from 'lucide-react'
 import { useStore } from '../store'
 import { formatTime } from '../lib/format'
 import type { ChatItem } from '@shared/types'
@@ -172,11 +172,67 @@ function Item({
       )
     case 'system':
       return <div className="text-xs text-neutral-500 text-center py-1">{item.text}</div>
+    case 'bash':
+      return (
+        <BashBlock
+          command={item.command}
+          output={item.output}
+          exitCode={item.exitCode}
+          running={item.running}
+        />
+      )
     case 'task':
       return <TaskCard item={item} />
     default:
       return null
   }
+}
+
+/**
+ * 입력창의 `!명령`(Claude Code CLI bash 모드) 1회 실행 결과를 대화 흐름 안에 인라인으로
+ * 보여 준다 — 우측 터미널 패널과 분리된, 명령 + 출력이 함께 쌓이는 모노스페이스 블록.
+ * 실행 중에는 스피너, 끝나면 성공(✓)/실패(✕, 종료 코드)를 표시한다.
+ */
+function BashBlock({
+  command,
+  output,
+  exitCode,
+  running
+}: {
+  command: string
+  output: string
+  exitCode: number | null
+  running: boolean
+}): React.JSX.Element {
+  const failed = !running && exitCode != null && exitCode !== 0
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-3)] overflow-hidden font-mono text-xs">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-[var(--border)] bg-[var(--surface)]">
+        <TerminalIcon size={12} className="text-neutral-500 shrink-0" />
+        <span className="text-[var(--success-400)] shrink-0">$</span>
+        <span className="text-neutral-200 truncate" title={command}>
+          {command}
+        </span>
+        <span className="ml-auto shrink-0">
+          {running ? (
+            <Loader2 size={12} className="text-neutral-500 animate-spin" />
+          ) : failed ? (
+            <span className="flex items-center gap-1 text-[var(--danger-400)]">
+              <XCircle size={12} />
+              {exitCode}
+            </span>
+          ) : (
+            <Check size={12} className="text-[var(--success-400)]" />
+          )}
+        </span>
+      </div>
+      {output && (
+        <pre className="px-2.5 py-2 overflow-x-auto whitespace-pre-wrap text-neutral-400 max-h-96 overflow-y-auto">
+          {output}
+        </pre>
+      )}
+    </div>
+  )
 }
 
 /**

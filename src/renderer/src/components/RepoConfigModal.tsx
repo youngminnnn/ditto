@@ -62,7 +62,7 @@ export default function RepoConfigModal({
       width={520}
       footer={
         <>
-          <button className={ghostBtn + ' mr-auto text-red-400 hover:bg-red-500/15'} onClick={removeRepo}>
+          <button className={ghostBtn + ' mr-auto text-[var(--danger-400)] hover:bg-[var(--danger-500)]/15'} onClick={removeRepo}>
             Remove repo
           </button>
           <button className={ghostBtn} onClick={onClose}>
@@ -78,7 +78,7 @@ export default function RepoConfigModal({
         <div>
           <label className={labelClass}>Display name</label>
           <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
-          <p className="mt-1.5 text-[11px] text-neutral-600 truncate" title={repo.path}>
+          <p className="mt-1.5 text-xs text-neutral-600 truncate" title={repo.path}>
             {repo.path}
           </p>
         </div>
@@ -91,7 +91,7 @@ export default function RepoConfigModal({
             onChange={(e) => setSetup(e.target.value)}
             placeholder="e.g. npm install"
           />
-          <p className="mt-1.5 text-[11px] text-neutral-600">
+          <p className="mt-1.5 text-xs text-neutral-600">
             Runs once right after a workspace is created (if set).
           </p>
         </div>
@@ -104,7 +104,7 @@ export default function RepoConfigModal({
             onChange={(e) => setDev(e.target.value)}
             placeholder="e.g. npm run dev"
           />
-          <p className="mt-1.5 text-[11px] text-neutral-600">
+          <p className="mt-1.5 text-xs text-neutral-600">
             Dev server command you start/stop from the scripts panel. Each workspace gets a unique{' '}
             <span className="font-mono">$PORT</span> (also <span className="font-mono">$DITTO_DEV_PORT</span>) —
             use it so parallel dev servers don&rsquo;t collide, e.g.{' '}
@@ -120,7 +120,7 @@ export default function RepoConfigModal({
             onChange={(e) => setArchive(e.target.value)}
             placeholder="e.g. docker compose down"
           />
-          <p className="mt-1.5 text-[11px] text-neutral-600">
+          <p className="mt-1.5 text-xs text-neutral-600">
             Runs in the worktree when a workspace is archived (before the worktree is removed).
           </p>
         </div>

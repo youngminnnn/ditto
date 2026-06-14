@@ -72,15 +72,15 @@ export default function Overview(): React.JSX.Element {
     <div className="h-full w-full overflow-y-auto">
       <div className="max-w-5xl mx-auto px-8 py-8">
         <div className="flex items-center gap-3 mb-5">
-          <h2 className="text-[15px] font-semibold text-neutral-100">Overview</h2>
-          <span className="text-[12px] text-neutral-500">
+          <h2 className="text-lg font-semibold text-neutral-100">Overview</h2>
+          <span className="text-sm text-neutral-500">
             {counts.all} workspace{counts.all === 1 ? '' : 's'}
-            {counts.running > 0 && <span className="text-blue-400"> · {counts.running} running</span>}
+            {counts.running > 0 && <span className="text-[var(--info-400)]"> · {counts.running} running</span>}
           </span>
           {counts.running > 0 && (
             <button
               onClick={onStopAll}
-              className="ml-auto flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+              className="ml-auto flex items-center gap-1 h-7 px-2.5 rounded-md text-xs text-[var(--danger-300)] bg-[var(--danger-500)]/10 border border-[var(--danger-500)]/20 hover:bg-[var(--danger-500)]/20"
               title="Stop the current turn in every running session"
             >
               <Square size={11} fill="currentColor" />
@@ -95,7 +95,7 @@ export default function Overview(): React.JSX.Element {
               key={f.key}
               onClick={() => setFilter(f.key)}
               className={
-                'flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px] border ' +
+                'flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs border ' +
                 (filter === f.key
                   ? 'bg-[var(--surface-3)] border-[var(--border-strong)] text-neutral-100'
                   : 'bg-transparent border-[var(--border)] text-neutral-400 hover:border-[var(--border-strong)]')
@@ -108,7 +108,7 @@ export default function Overview(): React.JSX.Element {
         </div>
 
         {shown.length === 0 ? (
-          <p className="text-[12.5px] text-neutral-500 py-12 text-center">
+          <p className="text-sm text-neutral-500 py-12 text-center">
             No workspaces match this filter.
           </p>
         ) : (
@@ -126,7 +126,7 @@ export default function Overview(): React.JSX.Element {
           </div>
         )}
 
-        <p className="mt-6 text-[11px] text-neutral-600 text-center">
+        <p className="mt-6 text-xs text-neutral-600 text-center">
           ⌘1–9 to switch · ⌘[ / ⌘] to cycle
         </p>
       </div>
@@ -157,36 +157,36 @@ function OverviewCard({
     <button
       onClick={onOpen}
       className={
-        'text-left rounded-xl border bg-[var(--bg-2)] p-3 hover:border-[var(--border-strong)] transition-colors ' +
+        'text-left rounded-xl border bg-[var(--bg-2)] p-3 transition-all duration-150 hover:border-[var(--border-strong)] hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ' +
         (flags.attention
-          ? 'border-amber-500/40'
+          ? 'border-[var(--warning-500)]/40'
           : flags.running
-            ? 'border-blue-500/30'
+            ? 'border-[var(--info-500)]/30'
             : workspace.status === 'error'
-              ? 'border-red-500/30'
+              ? 'border-[var(--danger-500)]/30'
               : 'border-[var(--surface-2)]')
       }
     >
       <div className="flex items-center gap-2">
         <StatusDot workspace={workspace} attention={flags.attention} />
-        <span className="flex-1 min-w-0 truncate text-[12.5px] text-neutral-100" title={displayName}>
+        <span className="flex-1 min-w-0 truncate text-sm text-neutral-100" title={displayName}>
           {displayName}
         </span>
-        {flags.attention && <ShieldQuestion size={13} className="text-amber-400 shrink-0" />}
+        {flags.attention && <ShieldQuestion size={13} className="text-[var(--warning-400)] shrink-0" />}
         {flags.unread && !flags.attention && (
-          <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" title="Unread response" />
+          <span className="h-2 w-2 rounded-full bg-[var(--info-500)] shrink-0" title="Unread response" />
         )}
       </div>
 
-      <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px] text-neutral-500 min-w-0">
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-neutral-500 min-w-0">
         <span className="truncate text-neutral-600">{repoName}</span>
         <GitBranch size={10} className="shrink-0" />
         <span className="truncate">{workspace.branch}</span>
       </div>
 
-      <div className="mt-1.5 flex items-center gap-2 text-[10.5px]">
+      <div className="mt-1.5 flex items-center gap-2 text-xs">
         {flags.running && runningSince ? (
-          <span className="flex items-center gap-1 text-blue-400 tabular-nums">
+          <span className="flex items-center gap-1 text-[var(--info-400)] tabular-nums">
             <Loader2 size={10} className="animate-spin" />
             {formatDuration(now - runningSince)}
           </span>
@@ -194,12 +194,12 @@ function OverviewCard({
           <span className="text-neutral-600">{workspace.status}</span>
         )}
         {git && git.changedFiles > 0 && (
-          <span className="text-amber-500/80" title="Changed files">
+          <span className="text-[var(--warning-500)]/80" title="Changed files">
             {git.changedFiles} changed
           </span>
         )}
         {pr && (
-          <span className="flex items-center gap-1 text-violet-300/80 ml-auto truncate" title={pr.label}>
+          <span className="flex items-center gap-1 text-[var(--accent-300)]/80 ml-auto truncate" title={pr.label}>
             <GitPullRequest size={10} className="shrink-0" />
             <span className="truncate">{pr.label}</span>
           </span>
@@ -216,9 +216,9 @@ function StatusDot({
   workspace: Workspace
   attention: boolean
 }): React.JSX.Element {
-  if (attention) return <ShieldQuestion size={13} className="text-amber-400 shrink-0" />
+  if (attention) return <ShieldQuestion size={13} className="text-[var(--warning-400)] shrink-0" />
   if (workspace.status === 'running')
-    return <Loader2 size={13} className="text-blue-400 animate-spin shrink-0" />
-  const color = workspace.status === 'error' ? 'bg-red-500' : 'bg-neutral-600'
+    return <Loader2 size={13} className="text-[var(--info-400)] animate-spin shrink-0" />
+  const color = workspace.status === 'error' ? 'bg-[var(--danger-500)]' : 'bg-neutral-600'
   return <span className={`h-2 w-2 rounded-full shrink-0 ${color}`} />
 }

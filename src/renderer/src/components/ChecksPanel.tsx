@@ -49,13 +49,13 @@ export default function ChecksPanel({ workspaceId }: { workspaceId: string }): R
             <Loader2 size={20} className="animate-spin" />
           </div>
         ) : !checks ? (
-          <p className="py-16 text-center text-[13px] text-neutral-500 leading-relaxed">
+          <p className="py-16 text-center text-base text-neutral-500 leading-relaxed">
             No pull request for this branch yet.
             <br />
             Checks appear once a PR exists.
           </p>
         ) : checks.checks.length === 0 ? (
-          <div className="py-10 text-center text-[13px] text-neutral-500">
+          <div className="py-10 text-center text-base text-neutral-500">
             <p>No checks reported on this PR.</p>
             <OpenPrLink url={checks.prUrl} />
           </div>
@@ -86,8 +86,8 @@ function CheckRow({ check }: { check: PrCheck }): React.JSX.Element {
       title={check.url ? 'Open check details' : undefined}
     >
       <CheckIcon state={check.state} />
-      <span className="flex-1 truncate text-[12.5px] text-neutral-200">{check.name}</span>
-      <span className={'text-[11px] ' + stateColor(check.state)}>{check.state}</span>
+      <span className="flex-1 truncate text-sm text-neutral-200">{check.name}</span>
+      <span className={'text-xs ' + stateColor(check.state)}>{check.state}</span>
       {check.url && (
         <ExternalLink size={11} className="text-neutral-600 opacity-0 group-hover:opacity-100 shrink-0" />
       )}
@@ -99,7 +99,7 @@ function OpenPrLink({ url }: { url: string }): React.JSX.Element {
   return (
     <button
       onClick={() => void window.api.openExternal(url)}
-      className="inline-flex items-center gap-1.5 text-[11.5px] text-neutral-400 hover:text-neutral-200"
+      className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-200"
     >
       Open PR on GitHub <ExternalLink size={11} />
     </button>
@@ -110,11 +110,11 @@ function CheckIcon({ state }: { state: PrCheckState }): React.JSX.Element {
   const cls = 'shrink-0'
   switch (state) {
     case 'success':
-      return <CheckCircle2 size={14} className={`${cls} text-emerald-400`} />
+      return <CheckCircle2 size={14} className={`${cls} text-[var(--success-400)]`} />
     case 'failure':
-      return <XCircle size={14} className={`${cls} text-red-400`} />
+      return <XCircle size={14} className={`${cls} text-[var(--danger-400)]`} />
     case 'pending':
-      return <Loader2 size={14} className={`${cls} text-amber-400 animate-spin`} />
+      return <Loader2 size={14} className={`${cls} text-[var(--warning-400)] animate-spin`} />
     case 'skipped':
       return <MinusCircle size={14} className={`${cls} text-neutral-500`} />
     default:
@@ -125,11 +125,11 @@ function CheckIcon({ state }: { state: PrCheckState }): React.JSX.Element {
 function stateColor(state: PrCheckState): string {
   switch (state) {
     case 'success':
-      return 'text-emerald-400'
+      return 'text-[var(--success-400)]'
     case 'failure':
-      return 'text-red-400'
+      return 'text-[var(--danger-400)]'
     case 'pending':
-      return 'text-amber-400'
+      return 'text-[var(--warning-400)]'
     default:
       return 'text-neutral-500'
   }

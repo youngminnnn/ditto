@@ -375,19 +375,19 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             {queue.map((m, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-2.5 pr-1.5 py-1.5"
+                className="flex items-center gap-2 bg-[var(--warning-500)]/5 border border-[var(--warning-500)]/20 rounded-lg pl-2.5 pr-1.5 py-1.5"
               >
-                <Clock size={12} className="text-amber-400/80 shrink-0" />
+                <Clock size={12} className="text-[var(--warning-400)]/80 shrink-0" />
                 <span
-                  className="flex-1 min-w-0 truncate text-[12px] text-neutral-300"
+                  className="flex-1 min-w-0 truncate text-sm text-neutral-300"
                   title={m.text}
                 >
                   {m.text || (m.images?.length ? `${m.images.length} image(s)` : '')}
                 </span>
                 {m.images && m.images.length > 0 && (
-                  <span className="text-[10px] text-neutral-600 shrink-0">📎{m.images.length}</span>
+                  <span className="text-xs text-neutral-600 shrink-0">📎{m.images.length}</span>
                 )}
-                <span className="text-[10px] text-neutral-600 shrink-0">queued</span>
+                <span className="text-xs text-neutral-600 shrink-0">queued</span>
                 <button
                   onClick={() => removeQueued(workspace.id, i)}
                   title="Cancel this queued message"
@@ -399,7 +399,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             ))}
           </div>
         )}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 transition-shadow focus-within:border-[var(--border-strong)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--focus-ring)_12%,transparent)]">
           {images.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {images.map((img) => (
@@ -423,13 +423,13 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
                   ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
                   : 'Message Claude Code…  (Enter to send · / for commands · ! to run a terminal command)'
               }
-              className="flex-1 bg-transparent resize-none outline-none text-[13px] leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
+              className="flex-1 bg-transparent resize-none outline-none text-base leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
             />
             {running && (
               <button
                 onClick={() => void window.api.chat.interrupt(workspace.id)}
                 title="Stop the current turn"
-                className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                className="h-8 w-8 grid place-items-center rounded-lg bg-[var(--danger-500)]/15 text-[var(--danger-400)] hover:bg-[var(--danger-500)]/25 active:scale-95"
               >
                 <Square size={15} fill="currentColor" />
               </button>
@@ -439,8 +439,8 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               disabled={!text.trim() && images.length === 0}
               title={bashMode ? 'Run in terminal' : running ? 'Queue message' : 'Send'}
               className={
-                'h-8 w-8 grid place-items-center rounded-lg text-white disabled:bg-[var(--border)] disabled:text-neutral-600 ' +
-                (bashMode ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500')
+                'h-8 w-8 grid place-items-center rounded-lg text-white shadow-sm active:scale-95 disabled:bg-[var(--border)] disabled:text-neutral-600 disabled:shadow-none disabled:cursor-not-allowed ' +
+                (bashMode ? 'bg-[var(--success-600)] hover:bg-[var(--success-500)]' : 'bg-[var(--info-600)] hover:bg-[var(--info-500)]')
               }
             >
               {bashMode ? <TerminalIcon size={15} /> : <Send size={15} />}
@@ -448,16 +448,16 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           </div>
         </div>
       </div>
-      <div className="max-w-3xl mx-auto mt-1.5 px-1 text-[11px] flex items-center gap-3">
+      <div className="max-w-3xl mx-auto mt-1.5 px-1 text-xs flex items-center gap-3">
         <div className="min-w-0 flex-1">
           {bashMode ? (
-            <span className="text-emerald-400 inline-flex items-center gap-1">
+            <span className="text-[var(--success-400)] inline-flex items-center gap-1">
               <TerminalIcon size={11} />
               Run in terminal <span className="text-neutral-600">(Enter to run · runs in this workspace)</span>
             </span>
           ) : (() => {
             const footer = PERMISSION_FOOTER[workspace.permissionMode]
-            const accent = workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-amber-400'
+            const accent = workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-[var(--warning-400)]'
             return footer ? (
               <span className={accent}>
                 {footer.symbol} {footer.text}{' '}
@@ -485,7 +485,7 @@ function ImageChip({
     <div className="group/chip relative flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-lg bg-[var(--surface-3)] border border-[var(--border)]">
       <img src={img.previewUrl} alt={img.name} className="h-7 w-7 rounded object-cover" />
       <ImageIcon size={11} className="text-neutral-500 shrink-0" />
-      <span className="text-[11px] text-neutral-300 max-w-[140px] truncate">{img.name}</span>
+      <span className="text-xs text-neutral-300 max-w-[140px] truncate">{img.name}</span>
       <button
         onClick={onRemove}
         title="Remove image"
@@ -518,7 +518,7 @@ function SlashMenu({
   return (
     <div className="absolute bottom-full mb-2 left-0 right-0 max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-3)] shadow-2xl py-1 z-20">
       {loading ? (
-        <div className="px-3 py-2 text-[12px] text-neutral-500">Loading commands…</div>
+        <div className="px-3 py-2 text-sm text-neutral-500">Loading commands…</div>
       ) : (
         matches.map((cmd, i) => {
           const active = i === selectedIdx
@@ -539,13 +539,13 @@ function SlashMenu({
                 (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
               }
             >
-              <TerminalIcon size={12} className="text-violet-400 shrink-0 translate-y-0.5" />
-              <span className="text-[12.5px] font-medium text-neutral-100 shrink-0">/{cmd.name}</span>
+              <TerminalIcon size={12} className="text-[var(--accent-400)] shrink-0 translate-y-0.5" />
+              <span className="text-sm font-medium text-neutral-100 shrink-0">/{cmd.name}</span>
               {cmd.argumentHint && (
-                <span className="text-[11px] text-neutral-500 shrink-0">{cmd.argumentHint}</span>
+                <span className="text-xs text-neutral-500 shrink-0">{cmd.argumentHint}</span>
               )}
               {cmd.description && (
-                <span className="text-[11px] text-neutral-500 truncate">{cmd.description}</span>
+                <span className="text-xs text-neutral-500 truncate">{cmd.description}</span>
               )}
             </button>
           )
@@ -576,12 +576,12 @@ function SideAnswerCard({
   onClose: () => void
 }): React.JSX.Element {
   return (
-    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-80 overflow-y-auto rounded-xl border border-violet-500/30 bg-[var(--bg-3)] shadow-2xl z-20">
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-80 overflow-y-auto rounded-xl border border-[var(--accent-500)]/30 bg-[var(--bg-3)] shadow-2xl z-20">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-3)]">
-        <MessageCircleQuestion size={13} className="text-violet-400 shrink-0" />
-        <span className="text-[11px] font-medium text-violet-300 shrink-0">Side question</span>
-        <span className="text-[11px] text-neutral-500 truncate">{answer.question}</span>
-        <span className="ml-auto shrink-0 text-[10px] text-neutral-600 select-none">
+        <MessageCircleQuestion size={13} className="text-[var(--accent-400)] shrink-0" />
+        <span className="text-xs font-medium text-[var(--accent-300)] shrink-0">Side question</span>
+        <span className="text-xs text-neutral-500 truncate">{answer.question}</span>
+        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">
           Esc to close
         </span>
         <button
@@ -592,9 +592,9 @@ function SideAnswerCard({
           <X size={13} />
         </button>
       </div>
-      <div className="px-3 py-2 text-[12.5px] leading-relaxed text-neutral-200 whitespace-pre-wrap">
+      <div className="px-3 py-2 text-sm leading-relaxed text-neutral-200 whitespace-pre-wrap">
         {answer.status === 'error' ? (
-          <span className="text-red-400">{answer.error || 'Side question failed.'}</span>
+          <span className="text-[var(--danger-400)]">{answer.error || 'Side question failed.'}</span>
         ) : (
           <>
             {answer.text}
@@ -625,12 +625,12 @@ type CommandCardState = {
 }
 
 const CARD_ICON: Record<CommandPanelKind, React.ReactNode> = {
-  mcp: <Plug size={13} className="text-violet-400 shrink-0" />,
-  context: <Gauge size={13} className="text-violet-400 shrink-0" />,
-  usage: <Receipt size={13} className="text-violet-400 shrink-0" />,
-  agents: <Bot size={13} className="text-violet-400 shrink-0" />,
-  reloadPlugins: <RefreshCw size={13} className="text-violet-400 shrink-0" />,
-  reloadSkills: <RefreshCw size={13} className="text-violet-400 shrink-0" />
+  mcp: <Plug size={13} className="text-[var(--accent-400)] shrink-0" />,
+  context: <Gauge size={13} className="text-[var(--accent-400)] shrink-0" />,
+  usage: <Receipt size={13} className="text-[var(--accent-400)] shrink-0" />,
+  agents: <Bot size={13} className="text-[var(--accent-400)] shrink-0" />,
+  reloadPlugins: <RefreshCw size={13} className="text-[var(--accent-400)] shrink-0" />,
+  reloadSkills: <RefreshCw size={13} className="text-[var(--accent-400)] shrink-0" />
 }
 
 /** 토큰 수를 1.2k 형태로 간결하게 표기. */
@@ -640,9 +640,9 @@ function fmtTokens(n: number): string {
 }
 
 const MCP_STATUS_COLOR: Record<string, string> = {
-  connected: 'bg-emerald-400',
-  failed: 'bg-red-400',
-  'needs-auth': 'bg-amber-400',
+  connected: 'bg-[var(--success-400)]',
+  failed: 'bg-[var(--danger-400)]',
+  'needs-auth': 'bg-[var(--warning-400)]',
   pending: 'bg-neutral-400',
   disabled: 'bg-neutral-600'
 }
@@ -813,14 +813,14 @@ function McpPanel({
                   title={MCP_STATUS_LABEL[s.status]}
                 />
                 <span className="font-medium text-neutral-100 truncate">{s.name}</span>
-                <span className="text-[11px] text-neutral-500 shrink-0">
+                <span className="text-xs text-neutral-500 shrink-0">
                   {MCP_STATUS_LABEL[s.status]}
                 </span>
                 {s.scope && (
-                  <span className="text-[11px] text-neutral-600 shrink-0">· {s.scope}</span>
+                  <span className="text-xs text-neutral-600 shrink-0">· {s.scope}</span>
                 )}
                 {typeof s.toolCount === 'number' && (
-                  <span className="text-[11px] text-neutral-500 ml-auto shrink-0">
+                  <span className="text-xs text-neutral-500 ml-auto shrink-0">
                     {s.toolCount} {s.toolCount === 1 ? 'tool' : 'tools'}
                   </span>
                 )}
@@ -868,14 +868,14 @@ function McpServerDetail({
             className={`h-2 w-2 rounded-full shrink-0 ${MCP_STATUS_COLOR[server.status] ?? 'bg-neutral-500'}`}
           />
           <span className="font-medium text-neutral-100 truncate">{server.name}</span>
-          <span className="text-[11px] text-neutral-500 shrink-0">
+          <span className="text-xs text-neutral-500 shrink-0">
             {MCP_STATUS_LABEL[server.status]}
           </span>
           {server.version && (
-            <span className="text-[11px] text-neutral-600 shrink-0">v{server.version}</span>
+            <span className="text-xs text-neutral-600 shrink-0">v{server.version}</span>
           )}
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-neutral-500">
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-neutral-500">
           {server.scope && <span>scope: {server.scope}</span>}
           {server.transport && <span>transport: {server.transport}</span>}
           {typeof server.toolCount === 'number' && (
@@ -885,20 +885,20 @@ function McpServerDetail({
           )}
         </div>
         {server.endpoint && (
-          <div className="text-[11px] text-neutral-600 break-all" title={server.endpoint}>
+          <div className="text-xs text-neutral-600 break-all" title={server.endpoint}>
             {server.endpoint}
           </div>
         )}
       </div>
 
       {server.error && (
-        <div className="text-[11px] text-red-400 break-words rounded-md bg-red-500/10 px-2 py-1.5">
+        <div className="text-xs text-[var(--danger-400)] break-words rounded-md bg-[var(--danger-500)]/10 px-2 py-1.5">
           {server.error}
         </div>
       )}
 
       {server.status === 'needs-auth' && (
-        <div className="text-[11px] text-amber-400">
+        <div className="text-xs text-[var(--warning-400)]">
           Authentication required — reconnect to start the auth flow.
         </div>
       )}
@@ -917,7 +917,7 @@ function McpServerDetail({
               onMouseEnter={() => onHover(i)}
               onClick={() => onActivate(i)}
               disabled={busy !== null}
-              className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-[11.5px] transition-colors disabled:opacity-50 disabled:cursor-default ${active ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-300 hover:bg-[var(--surface-3)]'}`}
+              className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-xs transition-colors disabled:opacity-50 disabled:cursor-default ${active ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-300 hover:bg-[var(--surface-3)]'}`}
             >
               {loading ? <Loader2 size={12} className="animate-spin" /> : MCP_ACTION_META[action].icon}
               {MCP_ACTION_META[action].label}
@@ -930,20 +930,20 @@ function McpServerDetail({
           }}
           onMouseEnter={() => onHover(items)}
           onClick={() => onActivate(items)}
-          className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-[11.5px] transition-colors ${cursor === items ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-400 hover:bg-[var(--surface-3)]'}`}
+          className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-xs transition-colors ${cursor === items ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-400 hover:bg-[var(--surface-3)]'}`}
         >
           <ArrowLeft size={12} /> Back to all servers
         </button>
       </div>
 
-      {error && <div className="text-[11px] text-red-400">{error}</div>}
+      {error && <div className="text-xs text-[var(--danger-400)]">{error}</div>}
 
       {server.tools && server.tools.length > 0 && (
         <div className="space-y-1 pt-1 border-t border-[var(--border)]">
-          <div className="text-[11px] text-neutral-500 pt-1.5">Tools</div>
+          <div className="text-xs text-neutral-500 pt-1.5">Tools</div>
           <ul className="space-y-0.5">
             {server.tools.map((t) => (
-              <li key={t.name} className="text-[11.5px]">
+              <li key={t.name} className="text-xs">
                 <span className="text-neutral-200">{t.name}</span>
                 {t.description && (
                   <span className="text-neutral-600 truncate"> — {t.description}</span>
@@ -961,7 +961,7 @@ function McpServerDetail({
 
 /** /mcp 패널 하단의 키보드 조작 힌트. */
 function McpHint({ text }: { text: string }): React.JSX.Element {
-  return <div className="text-[10.5px] text-neutral-600 pt-0.5">{text}</div>
+  return <div className="text-xs text-neutral-600 pt-0.5">{text}</div>
 }
 
 /**
@@ -981,14 +981,14 @@ function CommandCard({
   onClose: () => void
 }): React.JSX.Element {
   return (
-    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-96 overflow-y-auto rounded-xl border border-violet-500/30 bg-[var(--bg-3)] shadow-2xl z-20">
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-96 overflow-y-auto rounded-xl border border-[var(--accent-500)]/30 bg-[var(--bg-3)] shadow-2xl z-20">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-3)]">
         {CARD_ICON[card.kind]}
-        <span className="text-[12px] font-medium text-violet-300 shrink-0">{card.title}</span>
+        <span className="text-sm font-medium text-[var(--accent-300)] shrink-0">{card.title}</span>
         {card.status === 'loading' && (
           <Loader2 size={12} className="text-neutral-500 animate-spin" />
         )}
-        <span className="ml-auto shrink-0 text-[10px] text-neutral-600 select-none">
+        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">
           Esc to close
         </span>
         <button
@@ -999,11 +999,11 @@ function CommandCard({
           <X size={13} />
         </button>
       </div>
-      <div className="px-3 py-2.5 text-[12.5px] leading-relaxed text-neutral-200">
+      <div className="px-3 py-2.5 text-sm leading-relaxed text-neutral-200">
         {card.status === 'loading' ? (
           <span className="text-neutral-500">Loading…</span>
         ) : card.status === 'error' ? (
-          <span className="text-red-400">{card.error || 'Command failed.'}</span>
+          <span className="text-[var(--danger-400)]">{card.error || 'Command failed.'}</span>
         ) : (
           card.result && (
             <CommandResultView
@@ -1043,9 +1043,9 @@ function CommandResultView({
             <li key={a.name}>
               <div className="flex items-baseline gap-2">
                 <span className="font-medium text-neutral-100">{a.name}</span>
-                {a.model && <span className="text-[11px] text-neutral-500">{a.model}</span>}
+                {a.model && <span className="text-xs text-neutral-500">{a.model}</span>}
               </div>
-              <div className="text-[11.5px] text-neutral-500 leading-snug">{a.description}</div>
+              <div className="text-xs text-neutral-500 leading-snug">{a.description}</div>
             </li>
           ))}
         </ul>
@@ -1058,20 +1058,20 @@ function CommandResultView({
           <div className="flex items-center gap-2">
             <div className="flex-1 h-2 rounded-full bg-[var(--surface-3)] overflow-hidden">
               <div
-                className="h-full bg-violet-400"
+                className="h-full bg-[var(--accent-400)]"
                 style={{ width: `${Math.min(100, Math.round(c.percentage))}%` }}
               />
             </div>
-            <span className="text-[11px] text-neutral-400 shrink-0">
+            <span className="text-xs text-neutral-400 shrink-0">
               {fmtTokens(c.totalTokens)} / {fmtTokens(c.maxTokens)} ({Math.round(c.percentage)}%)
             </span>
           </div>
-          <div className="text-[11px] text-neutral-600">{c.model}</div>
+          <div className="text-xs text-neutral-600">{c.model}</div>
           <ul className="space-y-1">
             {c.categories.slice(0, 8).map((cat) => (
               <li key={cat.name} className="flex items-center justify-between gap-2">
                 <span className="text-neutral-300 truncate">{cat.name}</span>
-                <span className="text-[11px] text-neutral-500 shrink-0">{fmtTokens(cat.tokens)}</span>
+                <span className="text-xs text-neutral-500 shrink-0">{fmtTokens(cat.tokens)}</span>
               </li>
             ))}
           </ul>
@@ -1087,15 +1087,15 @@ function CommandResultView({
             <span className="text-neutral-400">Session cost</span>
             <span className="font-medium text-neutral-100">${u.totalCostUsd.toFixed(4)}</span>
           </div>
-          <div className="flex items-center justify-between text-[11.5px]">
+          <div className="flex items-center justify-between text-xs">
             <span className="text-neutral-500">Lines changed</span>
             <span className="text-neutral-400">
-              <span className="text-emerald-400">+{u.linesAdded}</span>{' '}
-              <span className="text-red-400">−{u.linesRemoved}</span>
+              <span className="text-[var(--success-400)]">+{u.linesAdded}</span>{' '}
+              <span className="text-[var(--danger-400)]">−{u.linesRemoved}</span>
             </span>
           </div>
           {u.subscriptionType && (
-            <div className="flex items-center justify-between text-[11.5px]">
+            <div className="flex items-center justify-between text-xs">
               <span className="text-neutral-500">Plan</span>
               <span className="text-neutral-400 capitalize">{u.subscriptionType}</span>
             </div>
@@ -1104,14 +1104,14 @@ function CommandResultView({
             <div className="space-y-1 pt-1 border-t border-[var(--border)]">
               {u.rateLimits.map((r) => (
                 <div key={r.label} className="flex items-center gap-2">
-                  <span className="text-[11px] text-neutral-500 w-24 shrink-0">{r.label}</span>
+                  <span className="text-xs text-neutral-500 w-24 shrink-0">{r.label}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
                     <div
-                      className="h-full bg-violet-400"
+                      className="h-full bg-[var(--accent-400)]"
                       style={{ width: `${Math.min(100, Math.round(r.utilization ?? 0))}%` }}
                     />
                   </div>
-                  <span className="text-[11px] text-neutral-500 shrink-0">
+                  <span className="text-xs text-neutral-500 shrink-0">
                     {r.utilization == null ? '—' : `${Math.round(r.utilization)}%`}
                   </span>
                 </div>
@@ -1119,7 +1119,7 @@ function CommandResultView({
             </div>
           )}
           {!u.rateLimitsAvailable && (
-            <div className="text-[11px] text-neutral-600 pt-1">
+            <div className="text-xs text-neutral-600 pt-1">
               Plan rate limits not available for this session.
             </div>
           )}
@@ -1137,14 +1137,14 @@ function CommandResultView({
       ]
       return (
         <div className="space-y-1">
-          <div className="text-emerald-400">Reloaded {parts.join(' · ')}.</div>
-          {!!r.errorCount && <div className="text-amber-500">{r.errorCount} error(s) during reload.</div>}
+          <div className="text-[var(--success-400)]">Reloaded {parts.join(' · ')}.</div>
+          {!!r.errorCount && <div className="text-[var(--warning-500)]">{r.errorCount} error(s) during reload.</div>}
         </div>
       )
     }
 
     case 'reloadSkills':
-      return <div className="text-emerald-400">Reloaded {result.reload.skillCount ?? 0} skills.</div>
+      return <div className="text-[var(--success-400)]">Reloaded {result.reload.skillCount ?? 0} skills.</div>
   }
 }
 
@@ -1172,7 +1172,7 @@ function StatusLine({ workspace }: { workspace: Workspace }): React.JSX.Element 
   const branch = liveBranch && liveBranch !== '?' ? liveBranch : workspace.branch
 
   return (
-    <div className="flex items-center gap-3 mb-1.5 px-1 text-[11px] text-neutral-500">
+    <div className="flex items-center gap-3 mb-1.5 px-1 text-xs text-neutral-500">
       <span className="flex items-center gap-1 min-w-0 shrink" title={`Branch: ${branch}`}>
         <GitBranch size={11} className="shrink-0 text-neutral-600" />
         <span className="truncate">{branch}</span>
@@ -1196,8 +1196,8 @@ function ContextStatus({
 }): React.JSX.Element {
   if (compacting) {
     return (
-      <span className="ml-auto shrink-0 flex items-center gap-1.5 text-violet-400">
-        <span className="h-2.5 w-2.5 rounded-full border-2 border-violet-400/40 border-t-violet-400 animate-spin" />
+      <span className="ml-auto shrink-0 flex items-center gap-1.5 text-[var(--accent-400)]">
+        <span className="h-2.5 w-2.5 rounded-full border-2 border-[var(--accent-400)]/40 border-t-violet-400 animate-spin" />
         Compacting…
       </span>
     )
@@ -1218,8 +1218,8 @@ function ContextStatus({
 
   const pct = Math.min(100, Math.round(usage.percentage * 100))
   // 70% 미만 중립, 70~89% 주의(amber), 90%+ 위험(red).
-  const tone = pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-neutral-500'
-  const barTone = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-neutral-500'
+  const tone = pct >= 90 ? 'text-[var(--danger-400)]' : pct >= 70 ? 'text-[var(--warning-400)]' : 'text-neutral-500'
+  const barTone = pct >= 90 ? 'bg-[var(--danger-400)]' : pct >= 70 ? 'bg-[var(--warning-400)]' : 'bg-neutral-500'
 
   return (
     <span

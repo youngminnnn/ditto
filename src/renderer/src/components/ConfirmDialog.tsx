@@ -30,16 +30,16 @@ export default function ConfirmDialog(): React.JSX.Element | null {
         className="no-drag w-[400px] max-w-[92vw] bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl p-5"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h3 className="text-[14px] font-semibold text-neutral-100">{state.title}</h3>
+        <h3 className="text-base font-semibold text-neutral-100">{state.title}</h3>
         {state.body && (
-          <p className="mt-2 text-[12.5px] text-neutral-400 leading-relaxed whitespace-pre-wrap">
+          <p className="mt-2 text-sm text-neutral-400 leading-relaxed whitespace-pre-wrap">
             {state.body}
           </p>
         )}
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={() => resolve(false)}
-            className="text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
+            className="text-sm px-3.5 py-1.5 rounded-lg text-neutral-300 border border-[var(--border-2)] hover:bg-[var(--surface-2)] hover:text-neutral-100"
           >
             Cancel
           </button>
@@ -47,10 +47,10 @@ export default function ConfirmDialog(): React.JSX.Element | null {
             autoFocus
             onClick={() => resolve(true)}
             className={
-              'text-[12.5px] px-3.5 py-1.5 rounded-lg font-medium ' +
+              'text-sm px-3.5 py-1.5 rounded-lg font-medium shadow-sm ' +
               (state.danger
-                ? 'bg-red-500/90 text-white hover:bg-red-500'
-                : 'bg-blue-600 text-white hover:bg-blue-500')
+                ? 'bg-[var(--danger-500)]/90 text-white hover:bg-[var(--danger-500)]'
+                : 'bg-[var(--info-600)] text-white hover:bg-[var(--info-500)]')
             }
           >
             {state.confirmLabel ?? 'Confirm'}

@@ -46,12 +46,12 @@ export default function ScriptPanel({
               key={kind}
               onClick={() => setTab(kind)}
               className={
-                'flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-md ' +
+                'flex items-center gap-1.5 text-sm px-2.5 py-1 rounded-md ' +
                 (active ? 'bg-[var(--surface-2)] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
               }
             >
               {kind === 'dev' ? 'Dev server' : 'Setup'}
-              {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />}
+              {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-[var(--info-400)]" />}
             </button>
           )
         })}
@@ -62,20 +62,20 @@ export default function ScriptPanel({
           running ? (
             <button
               onClick={stop}
-              className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md text-red-400 hover:bg-red-500/15"
+              className="flex items-center gap-1 text-sm px-2 py-1 rounded-md text-[var(--danger-400)] hover:bg-[var(--danger-500)]/15"
             >
               <Square size={12} fill="currentColor" /> Stop
             </button>
           ) : (
             <button
               onClick={run}
-              className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md text-emerald-400 hover:bg-emerald-500/15"
+              className="flex items-center gap-1 text-sm px-2 py-1 rounded-md text-[var(--success-400)] hover:bg-[var(--success-500)]/15"
             >
               <Play size={12} fill="currentColor" /> Run
             </button>
           )
         ) : (
-          <span className="text-[11px] text-neutral-600">Set a command in repo settings</span>
+          <span className="text-xs text-neutral-600">Set a command in repo settings</span>
         )}
 
         <button
@@ -87,7 +87,7 @@ export default function ScriptPanel({
       </div>
 
       {command.trim() && (
-        <div className="px-3 pt-1.5 flex items-center gap-2 text-[11px] text-neutral-600 font-mono">
+        <div className="px-3 pt-1.5 flex items-center gap-2 text-xs text-neutral-600 font-mono">
           <span className="truncate">$ {command}</span>
           {tab === 'dev' && port != null && (
             <span className="ml-auto shrink-0 flex items-center gap-2 not-italic">
@@ -108,8 +108,8 @@ export default function ScriptPanel({
       )}
 
       {tab === 'dev' && portInUse && (
-        <div className="mx-3 mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
+        <div className="mx-3 mt-1.5 flex items-start gap-1.5 rounded-md border border-[var(--warning-500)]/30 bg-[var(--warning-500)]/10 px-2.5 py-1.5 text-xs text-[var(--warning-200)]">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-[var(--warning-400)]" />
           <span>
             Port already in use. Make your dev command bind to{' '}
             <span className="font-mono">$PORT</span>
@@ -119,7 +119,7 @@ export default function ScriptPanel({
           </span>
         </div>
       )}
-      <pre className="flex-1 overflow-auto px-3 py-2 text-[11.5px] font-mono text-neutral-400 whitespace-pre-wrap">
+      <pre className="flex-1 overflow-auto px-3 py-2 text-xs font-mono text-neutral-400 whitespace-pre-wrap">
         {out || (command.trim() ? 'No output yet.' : '')}
       </pre>
     </div>

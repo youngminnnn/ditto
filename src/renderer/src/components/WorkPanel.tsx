@@ -27,7 +27,7 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
               key={id}
               onClick={() => setTab(id)}
               className={
-                'flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-md ' +
+                'flex items-center gap-1.5 text-sm px-2.5 py-1 rounded-md ' +
                 (active ? 'bg-[var(--surface-2)] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
               }
             >

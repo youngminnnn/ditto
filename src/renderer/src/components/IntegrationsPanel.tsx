@@ -89,12 +89,12 @@ export default function IntegrationsPanel(): React.JSX.Element {
       />
 
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[11px] text-neutral-500 leading-relaxed pr-3">
+        <p className="text-xs text-neutral-500 leading-relaxed pr-3">
           Sign-in opens your Terminal to finish the flow. Status refreshes automatically — or click Refresh.
         </p>
         <button
           onClick={() => void refreshAuth()}
-          className="shrink-0 flex items-center gap-1.5 text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
+          className="shrink-0 flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
         >
           <RefreshCw size={13} /> Refresh
         </button>
@@ -132,19 +132,19 @@ function IntegrationRow({
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-100">
+        <div className="flex items-center gap-1.5 text-base font-medium text-neutral-100">
           {name}
-          {connected && <Check size={13} className="text-emerald-400" />}
+          {connected && <Check size={13} className="text-[var(--success-400)]" />}
         </div>
-        <div className="text-[11.5px] text-neutral-500 truncate">{detail}</div>
-        {warning && <div className="text-[11px] text-amber-500/90 mt-0.5">{warning}</div>}
+        <div className="text-xs text-neutral-500 truncate">{detail}</div>
+        {warning && <div className="text-xs text-[var(--warning-500)]/90 mt-0.5">{warning}</div>}
       </div>
       {loading ? (
         <Loader2 size={15} className="text-neutral-500 animate-spin" />
       ) : !installed ? (
         <button
           onClick={() => void window.api.openExternal(installUrl)}
-          className="text-[12px] px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-neutral-200 font-medium hover:bg-[var(--border)]"
+          className="text-sm px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-neutral-200 font-medium hover:bg-[var(--border)]"
         >
           Install
         </button>
@@ -152,13 +152,13 @@ function IntegrationRow({
         <div className="flex gap-1.5">
           <button
             onClick={onConnect}
-            className="text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
+            className="text-sm px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
           >
             Reconnect
           </button>
           <button
             onClick={onDisconnect}
-            className="text-[12px] px-2.5 py-1.5 rounded-lg text-neutral-400 hover:bg-red-500/15 hover:text-red-400"
+            className="text-sm px-2.5 py-1.5 rounded-lg text-neutral-400 hover:bg-[var(--danger-500)]/15 hover:text-[var(--danger-400)]"
           >
             Sign out
           </button>
@@ -166,7 +166,7 @@ function IntegrationRow({
       ) : (
         <button
           onClick={onConnect}
-          className="text-[12px] px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-500"
+          className="text-sm px-3 py-1.5 rounded-lg bg-[var(--info-600)] text-white font-medium hover:bg-[var(--info-500)]"
         >
           Sign in
         </button>

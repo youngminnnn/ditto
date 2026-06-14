@@ -14,7 +14,7 @@ export default function Toaster(): React.JSX.Element {
           className="flex items-start gap-2.5 rounded-lg border bg-[var(--surface)] px-3.5 py-2.5 shadow-2xl border-[var(--border)]"
         >
           <Icon kind={t.kind} />
-          <span className="flex-1 text-[12.5px] text-neutral-200 whitespace-pre-wrap break-words">
+          <span className="flex-1 text-sm text-neutral-200 whitespace-pre-wrap break-words">
             {t.message}
           </span>
           <button
@@ -30,7 +30,7 @@ export default function Toaster(): React.JSX.Element {
 }
 
 function Icon({ kind }: { kind: ToastKind }): React.JSX.Element {
-  if (kind === 'success') return <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" />
-  if (kind === 'error') return <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" />
-  return <Info size={15} className="mt-0.5 shrink-0 text-blue-400" />
+  if (kind === 'success') return <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--success-400)]" />
+  if (kind === 'error') return <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[var(--danger-400)]" />
+  return <Info size={15} className="mt-0.5 shrink-0 text-[var(--info-400)]" />
 }

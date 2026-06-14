@@ -79,9 +79,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
                     type="button"
                     onClick={() => previewTheme(opt.value)}
                     className={
-                      'flex-1 text-[12.5px] px-3 py-1.5 rounded-lg border transition-colors ' +
+                      'flex-1 text-sm px-3 py-1.5 rounded-lg border transition-colors ' +
                       (active
-                        ? 'border-blue-500 bg-blue-600/15 text-neutral-100'
+                        ? 'border-[var(--info-500)] bg-[var(--info-600)]/15 text-neutral-100'
                         : 'border-[var(--border)] text-neutral-300 hover:bg-[var(--surface-2)]')
                     }
                   >
@@ -90,7 +90,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
                 )
               })}
             </div>
-            <p className="mt-1.5 text-[11px] text-neutral-600">
+            <p className="mt-1.5 text-xs text-neutral-600">
               System follows your OS light/dark setting.
             </p>
           </div>
@@ -102,9 +102,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               onChange={(e) => setDefaultRightPanelOpen(e.target.checked)}
               className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
             />
-            <span className="text-[12.5px] text-neutral-300">
+            <span className="text-sm text-neutral-300">
               Show the work panel by default
-              <span className="block text-[11px] text-neutral-600">
+              <span className="block text-xs text-neutral-600">
                 Starting state for the right-side work panel (files, changes, terminal). Toggling it
                 with ⌘J is remembered and takes over from here.
               </span>
@@ -120,9 +120,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               onChange={(e) => setManualWorkspaceSetup(e.target.checked)}
               className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
             />
-            <span className="text-[12.5px] text-neutral-300">
+            <span className="text-sm text-neutral-300">
               Choose name & base branch manually
-              <span className="block text-[11px] text-neutral-600">
+              <span className="block text-xs text-neutral-600">
                 Off: auto-generate a name and branch from the repo&rsquo;s default branch (main).
               </span>
             </span>
@@ -135,7 +135,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               onChange={(e) => setSoundOnComplete(e.target.checked)}
               className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
             />
-            <span className="text-[12.5px] text-neutral-300">
+            <span className="text-sm text-neutral-300">
               Play a sound when a session response completes
             </span>
           </label>
@@ -155,7 +155,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
                 </option>
               ))}
             </select>
-            <p className="mt-1.5 text-[11px] text-neutral-600">
+            <p className="mt-1.5 text-xs text-neutral-600">
               Press ⇧⇥ in a session to cycle the mode, just like Claude Code.
             </p>
           </div>
@@ -176,7 +176,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
                 <option value={model}>{model}</option>
               )}
             </select>
-            <p className="mt-1.5 text-[11px] text-neutral-600">
+            <p className="mt-1.5 text-xs text-neutral-600">
               Default for new workspaces. Each workspace can override this from its header dropdown.
             </p>
           </div>
@@ -188,9 +188,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               onChange={(e) => setAutoCompact(e.target.checked)}
               className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
             />
-            <span className="text-[12.5px] text-neutral-300">
+            <span className="text-sm text-neutral-300">
               Auto-compact conversation when context fills
-              <span className="block text-[11px] text-neutral-600">
+              <span className="block text-xs text-neutral-600">
                 Like Claude Code, summarizes the conversation as it approaches the context limit so
                 long sessions keep room to continue.
               </span>
@@ -211,7 +211,7 @@ function Section({
 }): React.JSX.Element {
   return (
     <div className="space-y-3">
-      <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+      <h4 className="text-xs uppercase tracking-wider text-neutral-500 font-semibold">
         {title}
       </h4>
       {children}

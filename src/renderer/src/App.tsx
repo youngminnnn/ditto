@@ -118,7 +118,7 @@ export default function App(): React.JSX.Element {
       <div className="h-full grid place-items-center bg-[var(--bg)]">
         <div className="flex flex-col items-center gap-3 text-neutral-500">
           <Logo size={40} />
-          <span className="text-[12px]">Loading…</span>
+          <span className="text-sm">Loading…</span>
         </div>
       </div>
     )
@@ -148,7 +148,7 @@ export default function App(): React.JSX.Element {
       {claudeMissing && (
         <button
           onClick={() => setShowSettings(true)}
-          className="no-drag shrink-0 flex items-center justify-center gap-2 h-8 bg-amber-500/10 border-b border-amber-500/25 text-[12px] text-amber-300 hover:bg-amber-500/15"
+          className="no-drag shrink-0 flex items-center justify-center gap-2 h-8 bg-[var(--warning-500)]/10 border-b border-[var(--warning-500)]/25 text-sm text-[var(--warning-300)] hover:bg-[var(--warning-500)]/15"
         >
           <AlertTriangle size={13} />
           You&rsquo;re not signed in to Claude Code. Agents won&rsquo;t run until you connect — click to open Settings.

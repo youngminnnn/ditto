@@ -42,7 +42,7 @@ export default function OnboardingModal({
             <Logo size={56} />
           </div>
           <h2 className="text-lg font-semibold text-neutral-100">Welcome to Ditto</h2>
-          <p className="mt-1.5 text-[12.5px] text-neutral-500 leading-relaxed">
+          <p className="mt-1.5 text-sm text-neutral-500 leading-relaxed">
             Run parallel AI coding agents, each in its own isolated git worktree.
           </p>
         </div>
@@ -67,7 +67,7 @@ function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Elem
 
   return (
     <>
-      <div className="px-6 py-4 text-[12.5px] text-neutral-400 leading-relaxed space-y-2">
+      <div className="px-6 py-4 text-sm text-neutral-400 leading-relaxed space-y-2">
         <p className="text-neutral-300">Before you start, here&rsquo;s how your data is handled:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li>
@@ -95,11 +95,11 @@ function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Elem
           />
           <span>
             I have read and agree to the{' '}
-            <a href={PRIVACY_URL} onClick={openDoc(PRIVACY_URL)} className="text-blue-400 hover:underline">
+            <a href={PRIVACY_URL} onClick={openDoc(PRIVACY_URL)} className="text-[var(--info-400)] hover:underline">
               Privacy Policy
             </a>{' '}
             and{' '}
-            <a href={TERMS_URL} onClick={openDoc(TERMS_URL)} className="text-blue-400 hover:underline">
+            <a href={TERMS_URL} onClick={openDoc(TERMS_URL)} className="text-[var(--info-400)] hover:underline">
               Terms of Use
             </a>
             .
@@ -124,7 +124,7 @@ function IntegrationsStep({ onDone }: { onDone: () => void }): React.JSX.Element
   return (
     <>
       <div className="px-6 py-4">
-        <p className="mb-3 text-[12.5px] text-neutral-500 text-center leading-relaxed">
+        <p className="mb-3 text-sm text-neutral-500 text-center leading-relaxed">
           Connect your accounts to get started — you can change these later in Settings.
         </p>
         <IntegrationsPanel />

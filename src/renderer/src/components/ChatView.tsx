@@ -23,7 +23,6 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { useStore } from '../store'
-import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
 import { MODEL_OPTIONS, modelLabel } from '../lib/models'
 import { formatCost } from '../lib/format'
 import MessageList from './MessageList'
@@ -33,7 +32,7 @@ import PermissionPrompt from './PermissionPrompt'
 import QuestionPrompt from './QuestionPrompt'
 import DiffModal from './DiffModal'
 import { workspaceDisplayName } from '@shared/types'
-import type { ChatItem, PermissionMode, PrState, Workspace } from '@shared/types'
+import type { ChatItem, PrState, Workspace } from '@shared/types'
 
 /**
  * PR 상태별 아이콘 + 색. Tailwind v4 는 동적으로 조합한 클래스명을 스캔하지 못하므로
@@ -47,8 +46,8 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   },
   review_required: {
     Icon: Clock,
-    iconClass: 'text-amber-400',
-    badgeClass: 'border-amber-500/30 bg-amber-500/10 text-amber-200 hover:border-amber-500/60'
+    iconClass: 'text-[var(--warning-400)]',
+    badgeClass: 'border-[var(--warning-500)]/30 bg-[var(--warning-500)]/10 text-[var(--warning-200)] hover:border-[var(--warning-500)]/60'
   },
   changes_requested: {
     Icon: MessageSquareWarning,
@@ -57,18 +56,18 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   },
   approved: {
     Icon: CircleCheck,
-    iconClass: 'text-emerald-400',
-    badgeClass: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/60'
+    iconClass: 'text-[var(--success-400)]',
+    badgeClass: 'border-[var(--success-500)]/30 bg-[var(--success-500)]/10 text-[var(--success-200)] hover:border-[var(--success-500)]/60'
   },
   conflict: {
     Icon: GitMergeConflict,
-    iconClass: 'text-red-400',
-    badgeClass: 'border-red-500/30 bg-red-500/10 text-red-200 hover:border-red-500/60'
+    iconClass: 'text-[var(--danger-400)]',
+    badgeClass: 'border-[var(--danger-500)]/30 bg-[var(--danger-500)]/10 text-[var(--danger-200)] hover:border-[var(--danger-500)]/60'
   },
   open: {
     Icon: GitPullRequest,
-    iconClass: 'text-violet-400',
-    badgeClass: 'border-violet-500/30 bg-violet-500/10 text-violet-200 hover:border-violet-500/60'
+    iconClass: 'text-[var(--accent-400)]',
+    badgeClass: 'border-[var(--accent-500)]/30 bg-[var(--accent-500)]/10 text-[var(--accent-200)] hover:border-[var(--accent-500)]/60'
   },
   merged: {
     Icon: GitMerge,
@@ -158,10 +157,6 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
     }
   }
 
-  const setMode = (mode: PermissionMode): void => {
-    void window.api.workspace.setPermissionMode(workspace.id, mode)
-  }
-
   const setModel = (value: string): void => {
     void window.api.workspace.setModel(workspace.id, value || null)
   }
@@ -188,18 +183,18 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                 if (e.key === 'Enter') commitName()
                 else if (e.key === 'Escape') setEditingName(null)
               }}
-              className="text-[13px] font-semibold text-neutral-100 bg-[var(--surface)] border border-[var(--border-strong)] rounded px-1.5 py-0.5 outline-none"
+              className="text-base font-semibold text-neutral-100 bg-[var(--surface)] border border-[var(--border-strong)] rounded px-1.5 py-0.5 outline-none"
             />
           ) : (
             <div
-              className="text-[13px] font-semibold text-neutral-100 truncate cursor-text"
+              className="text-base font-semibold text-neutral-100 truncate cursor-text"
               title={`${displayName}\n(double-click to rename · clear to reset)`}
               onDoubleClick={() => setEditingName(displayName)}
             >
               {displayName}
             </div>
           )}
-          <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+          <div className="flex items-center gap-1.5 text-xs text-neutral-500">
             <GitBranch size={11} />
             <span className="truncate">{workspace.branch}</span>
             {git && (
@@ -230,14 +225,14 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
         <div className="flex-1" />
 
-        <span className="flex items-center gap-1 text-[11px] text-neutral-500 pl-1" title="Model for new turns">
+        <span className="flex items-center gap-1 text-xs text-neutral-500 pl-1" title="Model for new turns">
           <Cpu size={12} />
         </span>
         <select
           value={workspace.model ?? ''}
           onChange={(e) => setModel(e.target.value)}
           disabled={running}
-          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 text-neutral-300 focus:outline-none focus:border-[var(--border-strong)] disabled:opacity-50"
+          className="no-drag text-xs bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 text-neutral-300 hover:border-[var(--border-2)] focus:outline-none focus:border-[var(--border-strong)] disabled:opacity-50 disabled:cursor-not-allowed"
           title={running ? 'Stop the current turn to change model' : 'Model for this workspace'}
         >
           <option value="">Default · {modelLabel(settingsModel)}</option>
@@ -249,19 +244,6 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           {workspace.model && !MODEL_OPTIONS.some((m) => m.id === workspace.model) && (
             <option value={workspace.model}>{model}</option>
           )}
-        </select>
-
-        <select
-          value={workspace.permissionMode}
-          onChange={(e) => setMode(e.target.value as PermissionMode)}
-          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1 text-neutral-300 focus:outline-none focus:border-[var(--border-strong)]"
-          title="Permission mode — ⇧⇥ to cycle"
-        >
-          {PERMISSION_ORDER.map((mode) => (
-            <option key={mode} value={mode}>
-              {PERMISSION_LABELS[mode]}
-            </option>
-          ))}
         </select>
 
         <HeaderButton title="Scripts" onClick={() => setShowScripts(workspace.id, !showScripts)} active={showScripts}>
@@ -294,7 +276,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                   <button
                     onClick={() => void window.api.openExternal(pr.url)}
                     className={
-                      'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border ' + badgeClass
+                      'flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ' + badgeClass
                     }
                     title={`${pr.label} — open pull request #${pr.number} in browser`}
                   >
@@ -308,10 +290,10 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
             ) : (
               <button
                 onClick={createPr}
-                className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-[var(--surface)] border border-[var(--border)] text-neutral-300 hover:border-[var(--border-strong)]"
+                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md bg-[var(--surface)] border border-[var(--border)] text-neutral-300 hover:border-[var(--border-strong)]"
                 title="Open a pull request for this branch"
               >
-                <GitPullRequestCreate size={12} className="text-violet-400" />
+                <GitPullRequestCreate size={12} className="text-[var(--accent-400)]" />
                 Create PR
               </button>
             )}
@@ -337,7 +319,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
             {approvableCount >= 2 && (
               <button
                 onClick={approveAll}
-                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-emerald-600/90 text-white text-[11.5px] font-medium hover:bg-emerald-500 shadow-lg"
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--success-600)]/90 text-white text-xs font-medium hover:bg-[var(--success-500)] shadow-lg"
                 title="Approve every pending permission across all workspaces (⇧⌘A)"
               >
                 <CircleCheck size={13} />
@@ -350,7 +332,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                   const id = nextPendingPermissionId()
                   if (id) void selectWorkspace(id)
                 }}
-                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-amber-500/90 text-black text-[11.5px] font-medium hover:bg-amber-400 shadow-lg"
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--warning-500)]/90 text-black text-xs font-medium hover:bg-[var(--warning-400)] shadow-lg"
                 title="Jump to a session waiting for permission"
               >
                 <ShieldQuestion size={13} />
@@ -363,7 +345,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                   const id = nextUnreadId()
                   if (id) void selectWorkspace(id)
                 }}
-                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-blue-600/90 text-white text-[11.5px] font-medium hover:bg-blue-500 shadow-lg"
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--info-600)]/90 text-white text-xs font-medium hover:bg-[var(--info-500)] shadow-lg"
                 title="Jump to the next session with a completed response"
               >
                 <BellDot size={13} />
@@ -405,9 +387,9 @@ function HeaderButton({
       onClick={onClick}
       title={title}
       className={
-        'no-drag h-7 w-7 grid place-items-center rounded-md ' +
+        'no-drag h-7 w-7 grid place-items-center rounded-md active:scale-90 ' +
         (danger
-          ? 'text-neutral-400 hover:bg-red-500/15 hover:text-red-400'
+          ? 'text-neutral-400 hover:bg-[var(--danger-500)]/15 hover:text-[var(--danger-400)]'
           : active
             ? 'bg-[var(--surface-2)] text-neutral-100'
             : 'text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-100')

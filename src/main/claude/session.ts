@@ -6,6 +6,7 @@ import type {
   PermissionResult
 } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
+import { clampText, clampInput } from './clamp'
 import { resolveClaudeExecutable } from './executable'
 import { MCP_SETTING_SOURCES, resolveUserMcpServers } from './mcp'
 import type {
@@ -224,7 +225,7 @@ export class ClaudeSession {
         this.emitItem({
           id: `error:${Date.now()}`,
           type: 'error',
-          text: err instanceof Error ? err.message : String(err),
+          text: clampText(err instanceof Error ? err.message : String(err)),
           ts: Date.now()
         })
         this.deps.emit({ type: 'status', status: 'error' })
@@ -371,9 +372,9 @@ export class ClaudeSession {
     if (event.type === 'content_block_delta' && event.delta) {
       const apiId = this.currentApiMsgId ?? `msg:${Date.now()}`
       if (event.delta.type === 'text_delta' && event.delta.text) {
-        this.deps.emit({ type: 'delta', id: `${apiId}:text`, itemType: 'assistant', text: event.delta.text })
+        this.deps.emit({ type: 'delta', id: `${apiId}:text`, itemType: 'assistant', text: clampText(event.delta.text) })
       } else if (event.delta.type === 'thinking_delta' && event.delta.thinking) {
-        this.deps.emit({ type: 'delta', id: `${apiId}:thinking`, itemType: 'thinking', text: event.delta.thinking })
+        this.deps.emit({ type: 'delta', id: `${apiId}:thinking`, itemType: 'thinking', text: clampText(event.delta.thinking) })
       }
     }
   }
@@ -389,7 +390,7 @@ export class ClaudeSession {
         this.emitItem({
           id: `${apiId}:text`,
           type: 'assistant',
-          text: String(block.text ?? ''),
+          text: clampText(String(block.text ?? '')),
           ts: Date.now(),
           streaming: false
         })
@@ -397,7 +398,7 @@ export class ClaudeSession {
         this.emitItem({
           id: `${apiId}:thinking`,
           type: 'thinking',
-          text: String(block.thinking ?? ''),
+          text: clampText(String(block.thinking ?? '')),
           ts: Date.now(),
           streaming: false
         })
@@ -407,7 +408,7 @@ export class ClaudeSession {
           type: 'tool_use',
           toolId: String(block.id),
           name: String(block.name),
-          input: block.input ?? {},
+          input: clampInput(block.input ?? {}),
           ts: Date.now()
         })
       }
@@ -417,7 +418,7 @@ export class ClaudeSession {
       this.emitItem({
         id: `error:${apiId}`,
         type: 'error',
-        text: `Assistant error: ${msg.error}`,
+        text: clampText(`Assistant error: ${msg.error}`),
         ts: Date.now()
       })
     }
@@ -434,7 +435,7 @@ export class ClaudeSession {
           id: `toolresult:${String(block.tool_use_id)}`,
           type: 'tool_result',
           toolId: String(block.tool_use_id),
-          text: normalizeToolResult(block.content),
+          text: clampText(normalizeToolResult(block.content)),
           isError: Boolean(block.is_error),
           ts: Date.now()
         })

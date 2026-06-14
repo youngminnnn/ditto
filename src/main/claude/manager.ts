@@ -3,6 +3,7 @@ import { Notification, type BrowserWindow } from 'electron'
 import { getStore } from '../store'
 import { getTranscripts } from '../transcripts'
 import { ClaudeSession } from './session'
+import { clampText } from './clamp'
 import { askSideQuestion } from './sideQuestion'
 import { runCommandOn, runCommandShortLived, runMcpAction, invalidateAfterReload } from './control'
 import { IPC, workspaceDisplayName } from '@shared/types'
@@ -104,7 +105,7 @@ export class SessionManager {
       model: ws.model ?? settings.model,
       question: trimmed,
       onDelta: (text) =>
-        this.dispatch(IPC.evtSideQuestion, { workspaceId, id, phase: 'delta', text })
+        this.dispatch(IPC.evtSideQuestion, { workspaceId, id, phase: 'delta', text: clampText(text) })
     })
       .then(() => this.dispatch(IPC.evtSideQuestion, { workspaceId, id, phase: 'done' }))
       .catch((err) =>

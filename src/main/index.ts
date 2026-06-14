@@ -14,10 +14,21 @@ let mainWindow: BrowserWindow | null = null
 process.on('uncaughtException', (err) => log.error('uncaughtException', err))
 process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason))
 
-/** 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용). */
+/**
+ * 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용).
+ *
+ * 각 send 를 개별 try/catch 로 감싼다: 파괴된 webContents 로의 송신이나 직렬화 실패(과도하게
+ * 큰/직렬화 불가 페이로드)가 던지는 예외가 호출 측 루프를 끊지 않게 한다. 페이로드 크기 자체는
+ * 소스(claude/clamp.ts)에서 이미 제한해 네이티브 직렬화 abort 를 막지만, 여기서도 한 번 더 막는다.
+ */
 function dispatch(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(channel, payload)
+    if (win.isDestroyed() || win.webContents.isDestroyed()) continue
+    try {
+      win.webContents.send(channel, payload)
+    } catch (err) {
+      log.error(`dispatch failed on ${channel}`, err)
+    }
   }
 }
 

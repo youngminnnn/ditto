@@ -4,13 +4,15 @@ import { getStore } from '../store'
 import { getTranscripts } from '../transcripts'
 import { ClaudeSession } from './session'
 import { askSideQuestion } from './sideQuestion'
-import { runCommandOn, runCommandShortLived, invalidateAfterReload } from './control'
+import { runCommandOn, runCommandShortLived, runMcpAction, invalidateAfterReload } from './control'
 import { IPC, workspaceDisplayName } from '@shared/types'
 import type {
   ChatEvent,
   CommandPanelKind,
   CommandResult,
   ImageAttachment,
+  McpAction,
+  McpServerInfo,
   PermissionDecision,
   PermissionMode,
   PermissionRequest,
@@ -127,6 +129,23 @@ export class SessionManager {
       : await runCommandShortLived(kind, ws.worktreePath, this.getRepoPath(ws.repoId))
     invalidateAfterReload(kind, ws.worktreePath)
     return result
+  }
+
+  /**
+   * /mcp 패널의 서버별 동작(재연결·활성/비활성)을 실행하고 갱신된 서버 목록을 돌려준다.
+   *
+   * 동작은 살아 있는 세션 제어 채널 위에서만 의미가 있으므로(연결은 세션별 CLI 프로세스에 묶임),
+   * 라이브 세션이 있으면 그 위에서, 없으면 세션을 만들고 메시지 없이 query 를 띄워(warm up) 적용한다.
+   * 이렇게 하면 Claude Code CLI 처럼 토글/재연결이 곧바로 반영되고, 이후 대화에서도 유지된다.
+   */
+  async mcpAction(
+    workspaceId: string,
+    serverName: string,
+    action: McpAction
+  ): Promise<McpServerInfo[]> {
+    const session = this.ensure(workspaceId)
+    if (!session) throw new Error('Workspace not found.')
+    return runMcpAction(action, serverName, session.ensureLiveQuery())
   }
 
   async interrupt(workspaceId: string): Promise<void> {

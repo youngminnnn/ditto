@@ -83,6 +83,20 @@ export class ClaudeSession {
     return this.q
   }
 
+  /**
+   * /mcp 서버 동작(재연결·활성/비활성)처럼 살아 있는 제어 채널이 필요한 명령을 위해,
+   * 아직 query 가 없으면 사용자 메시지 없이 query 를 시작(warm up)하고 그 핸들을 돌려준다.
+   *
+   * run() 은 첫 await 이전에 this.q 를 동기적으로 설정하므로, 호출 직후 항상 살아 있는 query 가 있다.
+   * 메시지를 보내지 않으므로 에이전트 턴은 돌지 않고(상태도 running 으로 바뀌지 않음) MCP 연결만
+   * 맺으며, 여기서 적용한 토글/재연결은 이후 사용자가 같은 세션에서 대화를 이어가도 유지된다.
+   */
+  ensureLiveQuery(): Query {
+    if (!this.q) this.run()
+    if (!this.q) throw new Error('Failed to start session query.')
+    return this.q
+  }
+
   /** 사용자 메시지를 보낸다. 첫 메시지면 query 를 시작한다. */
   send(text: string, images?: ImageAttachment[]): void {
     const imgs = images ?? []

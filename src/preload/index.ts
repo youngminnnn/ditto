@@ -69,7 +69,9 @@ const api: DittoApi = {
 
   commands: {
     list: (workspaceId) => ipcRenderer.invoke(IPC.commandsList, workspaceId),
-    run: (workspaceId, kind) => ipcRenderer.invoke(IPC.commandRun, workspaceId, kind)
+    run: (workspaceId, kind) => ipcRenderer.invoke(IPC.commandRun, workspaceId, kind),
+    mcpAction: (workspaceId, serverName, action) =>
+      ipcRenderer.invoke(IPC.mcpAction, workspaceId, serverName, action)
   },
 
   terminal: {

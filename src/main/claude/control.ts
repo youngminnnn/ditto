@@ -8,6 +8,7 @@ import type {
   CommandPanelKind,
   CommandResult,
   ContextUsageInfo,
+  McpAction,
   McpServerInfo,
   UsageInfo
 } from '@shared/types'
@@ -109,6 +110,29 @@ export async function runCommandShortLived(
   }
 }
 
+/**
+ * /mcp 패널의 서버별 동작(재연결·활성/비활성)을 살아 있는 query 위에서 실행하고,
+ * 갱신된 서버 목록을 돌려준다. 동작과 재조회를 같은 제어 채널에서 처리해, 패널이
+ * 항상 방금 적용된 상태를 그대로 비추게 한다.
+ *
+ * reconnect 는 SDK 의 reconnectMcpServer, enable/disable 는 toggleMcpServer 로 매핑된다.
+ * 둘 다 스트리밍 입력(살아 있는 세션) 위에서만 동작하는 제어 요청이라, 호출 측(manager)이
+ * 라이브 query 를 보장(필요 시 warm up)한 뒤 넘겨야 한다.
+ */
+export async function runMcpAction(
+  action: McpAction,
+  serverName: string,
+  q: Query
+): Promise<McpServerInfo[]> {
+  if (action === 'reconnect') {
+    await withTimeout(q.reconnectMcpServer(serverName), 'reconnectMcpServer')
+  } else {
+    await withTimeout(q.toggleMcpServer(serverName, action === 'enable'), 'toggleMcpServer')
+  }
+  const servers = await withTimeout(q.mcpServerStatus(), 'mcpServerStatus')
+  return servers.map(mapServer)
+}
+
 /** 리로드 결과 처리 후 자동완성 캐시를 무효화해 새 명령 목록이 반영되게 한다. */
 export function invalidateAfterReload(kind: CommandPanelKind, cwd: string): void {
   if (kind === 'reloadPlugins' || kind === 'reloadSkills') clearCommandsCache(cwd)
@@ -121,14 +145,34 @@ type SdkContext = Awaited<ReturnType<Query['getContextUsage']>>
 type SdkUsage = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>
 
 function mapServer(s: SdkServer): McpServerInfo {
+  const { transport, endpoint } = describeTransport(s.config)
   return {
     name: s.name,
     status: s.status,
     scope: s.scope,
     toolCount: s.tools?.length,
     error: s.error,
-    version: s.serverInfo?.version
+    version: s.serverInfo?.version,
+    transport,
+    endpoint,
+    tools: s.tools?.map((t) => ({ name: t.name, description: t.description }))
   }
+}
+
+/** 서버 config 에서 전송 방식과 사람이 읽을 엔드포인트(URL 또는 실행 명령)를 추린다. */
+function describeTransport(
+  config: SdkServer['config']
+): { transport?: string; endpoint?: string } {
+  if (!config) return {}
+  const c = config as { type?: string; url?: string; command?: string; args?: string[] }
+  if (typeof c.url === 'string') {
+    return { transport: c.type ?? 'http', endpoint: c.url }
+  }
+  if (typeof c.command === 'string') {
+    const args = Array.isArray(c.args) ? c.args : []
+    return { transport: c.type ?? 'stdio', endpoint: [c.command, ...args].join(' ') }
+  }
+  return { transport: c.type }
 }
 
 function mapContext(c: SdkContext): ContextUsageInfo {

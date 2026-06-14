@@ -11,6 +11,8 @@ import type {
   FileContent,
   GitStatus,
   ImageAttachment,
+  McpAction,
+  McpServerInfo,
   PermissionDecision,
   PermissionMode,
   PermissionRequest,
@@ -110,6 +112,16 @@ export interface DittoApi {
       workspaceId: string,
       kind: CommandPanelKind
     ): Promise<{ result?: CommandResult; error?: string }>
+    /**
+     * /mcp 패널에서 서버 1개에 대해 재연결·활성/비활성을 수행하고, 갱신된 서버 목록을 받는다.
+     * Claude Code CLI 의 /mcp 처럼 동작이 살아 있는 세션 제어 채널 위에서 일어나도록,
+     * 세션이 없으면 main 이 메시지 없이 query 를 띄워(warm up) 동작을 적용한다.
+     */
+    mcpAction(
+      workspaceId: string,
+      serverName: string,
+      action: McpAction
+    ): Promise<{ servers?: McpServerInfo[]; error?: string }>
   }
 
   terminal: {

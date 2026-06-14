@@ -12,6 +12,7 @@ import {
   ShieldQuestion
 } from 'lucide-react'
 import { useStore } from '../store'
+import { workspaceDisplayName } from '@shared/types'
 import type { Workspace } from '@shared/types'
 
 export default function Sidebar({
@@ -128,13 +129,13 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }): React.JSX.Elemen
   )
 
   const active = workspace.id === selectedId
-  // PR 이 있으면 표시 이름을 PR 제목으로(없으면 workspace 이름). PR 제목이 바뀌면 자동 반영된다.
-  const displayName = pr?.title || workspace.name
+  // 표시 이름: 사용자 override → PR 제목 → worktree 이름. override 가 없으면 PR 제목이 자동 반영된다.
+  const displayName = workspaceDisplayName(workspace, pr?.title)
 
   const archive = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
     const ok = await confirm({
-      title: `Archive "${workspace.name}"?`,
+      title: `Archive "${displayName}"?`,
       body: 'Its worktree directory will be removed (branch & history kept). You can unarchive it later.',
       confirmLabel: 'Archive',
       danger: true
@@ -245,9 +246,12 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
     else void select(workspace.id)
   }
 
+  // 아카이브 시 표시 이름(PR 제목 등)을 displayName 에 보존하므로, PR 정보 없이도 같은 이름을 보여 준다.
+  const displayName = workspaceDisplayName(workspace)
+
   const remove = async (): Promise<void> => {
     const ok = await confirm({
-      title: `Permanently delete "${workspace.name}"?`,
+      title: `Permanently delete "${displayName}"?`,
       body: 'This removes its history and branch, and cannot be undone.',
       confirmLabel: 'Delete',
       danger: true
@@ -259,7 +263,7 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
   return (
     <div className="group/arc flex items-center gap-2 pl-6 pr-1.5 py-1 rounded-md hover:bg-[var(--surface)]">
       <span className="flex-1 truncate text-[11.5px] text-neutral-500" title={workspace.branch}>
-        {workspace.name}
+        {displayName}
       </span>
       <button
         onClick={unarchive}

@@ -170,6 +170,7 @@ export function registerIpc(ctx: IpcContext): void {
           id,
           repoId: repo.id,
           name: rawName,
+          displayName: null,
           branch,
           baseBranch,
           worktreePath,
@@ -209,6 +210,13 @@ export function registerIpc(ctx: IpcContext): void {
     if (repo?.archiveScript.trim()) {
       await ctx.scripts.runOnce(repo.archiveScript, ws.worktreePath)
     }
+    // override 가 없으면 현재 표시 이름(PR 제목 등)을 worktree 제거 전에 보존한다.
+    // 아카이브 후에는 worktree·PR 조회가 불가능하므로, 같은 이름을 유지하려면 지금 스냅샷해야 한다.
+    let snapshotName: string | null = null
+    if (!ws.displayName?.trim()) {
+      const pr = await getPrStatus(ws.worktreePath).catch(() => null)
+      if (pr?.title?.trim()) snapshotName = pr.title.trim()
+    }
     if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, false)
 
     store.update((st) => {
@@ -216,6 +224,7 @@ export function registerIpc(ctx: IpcContext): void {
       if (w) {
         w.archived = true
         w.status = 'idle'
+        if (snapshotName && !w.displayName?.trim()) w.displayName = snapshotName
       }
     })
     broadcastState()
@@ -232,6 +241,18 @@ export function registerIpc(ctx: IpcContext): void {
       await addWorktree(repo.path, ws.branch, ws.baseBranch, ws.worktreePath)
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) }
+    }
+    // worktree 가 복원됐으니 PR 조회가 다시 가능하다. 보존했던 표시 이름이 현재 PR 제목과
+    // 같다면(= 아카이브 시 자동 스냅샷한 값) override 를 지워 기본 규칙을 되살린다.
+    // 사용자가 직접 지정한 이름은 PR 제목과 다르므로 그대로 유지된다.
+    if (ws.displayName?.trim()) {
+      const pr = await getPrStatus(ws.worktreePath).catch(() => null)
+      if (pr?.title?.trim() === ws.displayName.trim()) {
+        store.update((st) => {
+          const w = st.workspaces.find((x) => x.id === workspaceId)
+          if (w) w.displayName = null
+        })
+      }
     }
     store.update((st) => {
       const w = st.workspaces.find((x) => x.id === workspaceId)
@@ -274,12 +295,13 @@ export function registerIpc(ctx: IpcContext): void {
     broadcastState()
   })
 
+  // 표시 이름 수정: 사용자 override(displayName)만 바꾼다. worktree 이름(name)·브랜치는 그대로 둔다.
+  // 빈 문자열을 넘기면 override 를 지워 기본 규칙(worktree 이름 → PR 제목)으로 되돌린다.
   ipcMain.handle(IPC.workspaceRename, (_e, workspaceId: string, name: string) => {
     const trimmed = name.trim()
-    if (!trimmed) return
     store.update((st) => {
       const w = st.workspaces.find((x) => x.id === workspaceId)
-      if (w) w.name = trimmed
+      if (w) w.displayName = trimmed || null
     })
     broadcastState()
   })

@@ -32,6 +32,7 @@ import ScriptPanel from './ScriptPanel'
 import PermissionPrompt from './PermissionPrompt'
 import QuestionPrompt from './QuestionPrompt'
 import DiffModal from './DiffModal'
+import { workspaceDisplayName } from '@shared/types'
 import type { ChatItem, PermissionMode, PrState, Workspace } from '@shared/types'
 
 /**
@@ -115,9 +116,12 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   )
   const running = workspace.status === 'running'
 
+  // 표시 이름: 사용자 override → PR 제목 → worktree 이름 순으로 결정한다.
+  const displayName = workspaceDisplayName(workspace, pr?.title)
+
   const archiveWorkspace = async (): Promise<void> => {
     const ok = await confirm({
-      title: `Archive "${workspace.name}"?`,
+      title: `Archive "${displayName}"?`,
       body: 'Its worktree directory will be removed (branch & history kept). You can unarchive it later.',
       confirmLabel: 'Archive',
       danger: true
@@ -152,7 +156,8 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
   const commitName = (): void => {
     const name = (editingName ?? '').trim()
-    if (name && name !== workspace.name) void window.api.workspace.rename(workspace.id, name)
+    // 비우면 override 가 지워져 기본 규칙(worktree 이름 → PR 제목)으로 돌아간다.
+    if (name !== displayName) void window.api.workspace.rename(workspace.id, name)
     setEditingName(null)
   }
 
@@ -176,10 +181,10 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           ) : (
             <div
               className="text-[13px] font-semibold text-neutral-100 truncate cursor-text"
-              title={pr?.title ? `${pr.title}\n(double-click to rename “${workspace.name}”)` : 'Double-click to rename'}
-              onDoubleClick={() => setEditingName(workspace.name)}
+              title={`${displayName}\n(double-click to rename · clear to reset)`}
+              onDoubleClick={() => setEditingName(displayName)}
             >
-              {pr?.title || workspace.name}
+              {displayName}
             </div>
           )}
           <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">

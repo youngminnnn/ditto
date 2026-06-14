@@ -10,7 +10,7 @@ const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
  * 디스크 영속 형식의 현재 스키마 버전. 영속 데이터 모양이 바뀔 때마다 1 올리고,
  * MIGRATIONS 에 직전 버전 → 새 버전 변환 함수를 추가한다.
  */
-const CURRENT_SCHEMA_VERSION = 1
+const CURRENT_SCHEMA_VERSION = 2
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
@@ -67,6 +67,15 @@ const MIGRATIONS: Array<(raw: Record<string, unknown>) => Record<string, unknown
       archiveScript: r.archiveScript ?? ''
     }))
     return { repos, workspaces, settings }
+  },
+  // v1 → v2: 사용자 표시 이름 override(displayName) 도입. 기존 workspace 는 override 없음(null)으로,
+  // 기본 규칙(worktree 이름 → PR 제목)을 그대로 따른다.
+  (raw) => {
+    const workspaces = ((raw.workspaces as Partial<Workspace>[]) ?? []).map((w) => ({
+      ...w,
+      displayName: w.displayName ?? null
+    }))
+    return { ...raw, workspaces }
   }
 ]
 

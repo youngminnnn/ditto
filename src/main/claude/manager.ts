@@ -5,7 +5,7 @@ import { getTranscripts } from '../transcripts'
 import { ClaudeSession } from './session'
 import { askSideQuestion } from './sideQuestion'
 import { runCommandOn, runCommandShortLived, invalidateAfterReload } from './control'
-import { IPC } from '@shared/types'
+import { IPC, workspaceDisplayName } from '@shared/types'
 import type {
   ChatEvent,
   CommandPanelKind,
@@ -269,7 +269,7 @@ export class SessionManager {
     if (!Notification.isSupported()) return
 
     const ws = this.getWorkspace(workspaceId)
-    const title = ws ? `${urgent ? '⚠️ ' : ''}${ws.name}` : 'Ditto'
+    const title = ws ? `${urgent ? '⚠️ ' : ''}${workspaceDisplayName(ws)}` : 'Ditto'
     const notification = new Notification({ title, body, silent: false })
     notification.on('click', () => {
       const w = this.getWindow()

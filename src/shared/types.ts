@@ -29,12 +29,31 @@ export interface Repo {
 
 export type WorkspaceStatus = 'idle' | 'running' | 'error'
 
+/**
+ * workspace 의 표시 이름을 결정하는 단일 출처(SSOT).
+ * 우선순위: 사용자가 지정한 표시 이름(displayName) → PR 제목 → worktree 이름(name).
+ * 즉 기본 규칙(최초엔 worktree 이름, PR 생성 시 PR 제목)은 유지하되,
+ * 사용자가 직접 수정하면 그 값이 항상 우선한다.
+ */
+export function workspaceDisplayName(
+  workspace: { name: string; displayName: string | null },
+  prTitle?: string | null
+): string {
+  return workspace.displayName?.trim() || prTitle?.trim() || workspace.name
+}
+
 /** 하나의 작업 단위. git worktree + 전용 브랜치 + Claude 세션 1개. */
 export interface Workspace {
   id: string
   repoId: string
-  /** 표시 이름 */
+  /** worktree 이름. 생성 시 정해지는 기본 이름으로, 표시 이름의 최종 폴백이다. */
   name: string
+  /**
+   * 사용자가 직접 지정한 표시 이름(override). null 이면 기본 규칙을 따른다
+   * (최초엔 worktree 이름, PR 생성 시 PR 제목). 사용자가 수정하면 이 값이 항상 우선한다.
+   * 아카이브 시 현재 표시 이름을 여기에 보존해, worktree·PR 정보가 없어도 같은 이름을 보여 준다.
+   */
+  displayName: string | null
   /** 이 workspace 전용 git 브랜치 */
   branch: string
   /** 브랜치를 분기한 베이스 브랜치 */

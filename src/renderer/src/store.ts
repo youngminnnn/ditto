@@ -5,6 +5,7 @@ import type {
   ChatEnvelope,
   ChatItem,
   GitStatus,
+  ImageAttachment,
   PermissionRequest,
   PrStatus,
   ScriptKind,
@@ -14,6 +15,12 @@ import type {
 import { playNotification } from './lib/sound'
 
 export const scriptKey = (workspaceId: string, kind: ScriptKind): string => `${workspaceId}:${kind}`
+
+/** 실행 중 대기 큐에 보관되는 후속 메시지(텍스트 + 선택적 이미지 첨부). */
+export interface QueuedMessage {
+  text: string
+  images?: ImageAttachment[]
+}
 
 /** 컨텍스트 윈도 사용량 스냅샷(마지막 턴). percentage 는 0~1. */
 export interface ContextUsage {
@@ -68,8 +75,16 @@ interface UIState {
   compacting: Record<string, boolean>
   /** 응답이 완료됐지만 사용자가 아직 보지 않은 workspace. */
   unread: Record<string, boolean>
+  /** workspace 가 실행(running) 상태로 진입한 시각(epoch ms). 경과 시간 표시용. */
+  runningSince: Record<string, number>
   /** workspace 전환에도 살아남아야 하는 입력창 초안. */
   drafts: Record<string, string>
+  /**
+   * 현재 턴이 실행 중일 때 보낸 후속 메시지의 대기 큐(workspace 별, 순서 유지).
+   * 백엔드로 즉시 보내지 않고 여기 모았다가, 턴이 끝나면(idle) 순서대로 전송한다.
+   * 전송 전이므로 사용자가 취소/수정할 수 있다.
+   */
+  messageQueue: Record<string, QueuedMessage[]>
   /** workspace 별 대화 스크롤 위치(복원용). */
   scrollPositions: Record<string, number>
   /** workspace 별 스크립트 패널 열림 상태. */
@@ -108,6 +123,12 @@ interface UIState {
   nextUnreadId: () => string | null
   /** 다른 workspace 중 권한 대기 중인 첫 항목. */
   nextPendingPermissionId: () => string | null
+  /** 실행 중인 모든 workspace 의 현재 턴을 중단한다(폭주 시 일괄 정지). */
+  stopAll: () => Promise<void>
+  /** 실행 중일 때 후속 메시지를 대기 큐에 넣는다(턴 종료 시 자동 전송). */
+  enqueueMessage: (workspaceId: string, text: string, images?: ImageAttachment[]) => void
+  /** 대기 큐에서 index 번째 메시지를 취소(제거)한다. */
+  removeQueued: (workspaceId: string, index: number) => void
   setDraft: (workspaceId: string, text: string) => void
   setScrollPosition: (workspaceId: string, top: number) => void
   setScriptPanelOpen: (workspaceId: string, open: boolean) => void
@@ -149,7 +170,9 @@ export const useStore = create<UIState>((set, get) => ({
   contextUsage: {},
   compacting: {},
   unread: {},
+  runningSince: {},
   drafts: {},
+  messageQueue: {},
   scrollPositions: {},
   scriptPanelOpen: {},
   rightWidth: 460,
@@ -164,7 +187,13 @@ export const useStore = create<UIState>((set, get) => ({
     initialized = true
 
     const app = await window.api.getState()
-    set({ app, ready: true })
+    // 재시작 시점에 이미 running 인 워크스페이스는 진입 시각을 알 수 없으므로 현재 시각으로 근사한다.
+    const seededRunningSince: Record<string, number> = {}
+    const startedAt = Date.now()
+    for (const w of app.workspaces) {
+      if (!w.archived && w.status === 'running') seededRunningSince[w.id] = startedAt
+    }
+    set({ app, ready: true, runningSince: seededRunningSince })
     void get().refreshAuth()
 
     window.api.onState((next) => {
@@ -173,10 +202,16 @@ export const useStore = create<UIState>((set, get) => ({
       set((s) => {
         const live = new Set(next.workspaces.filter((w) => !w.archived).map((w) => w.id))
         const stale = Object.keys(s.unread).filter((id) => s.unread[id] && !live.has(id))
-        if (!stale.length) return { app: next }
+        const staleRunning = Object.keys(s.runningSince).filter((id) => !live.has(id))
+        const staleQueue = Object.keys(s.messageQueue).filter((id) => !live.has(id))
+        if (!stale.length && !staleRunning.length && !staleQueue.length) return { app: next }
         const unread = { ...s.unread }
         for (const id of stale) delete unread[id]
-        return { app: next, unread }
+        const runningSince = { ...s.runningSince }
+        for (const id of staleRunning) delete runningSince[id]
+        const messageQueue = { ...s.messageQueue }
+        for (const id of staleQueue) delete messageQueue[id]
+        return { app: next, unread, runningSince, messageQueue }
       })
     })
 
@@ -275,6 +310,33 @@ export const useStore = create<UIState>((set, get) => ({
             if (event.model) w.lastModel = event.model
           }
         })
+        // 실행 진입/종료에 맞춰 경과 시간 기준 시각을 갱신한다(running 진입 시 1회 기록).
+        if (event.type === 'status') {
+          set((s) => {
+            const cur = s.runningSince[workspaceId]
+            if (event.status === 'running') {
+              if (cur) return {}
+              return { runningSince: { ...s.runningSince, [workspaceId]: Date.now() } }
+            }
+            if (!cur) return {}
+            const runningSince = { ...s.runningSince }
+            delete runningSince[workspaceId]
+            return { runningSince }
+          })
+        }
+        // 턴이 정상 종료되면 대기 큐에 쌓인 후속 메시지를 순서대로 전송한다(취소 기회는 여기서 끝).
+        // 에러 종료 시에는 자동 전송하지 않고 큐를 남겨, 사용자가 검토/취소하도록 둔다.
+        if (event.type === 'status' && event.status === 'idle') {
+          const queued = get().messageQueue[workspaceId]
+          if (queued && queued.length) {
+            set((s) => {
+              const messageQueue = { ...s.messageQueue }
+              delete messageQueue[workspaceId]
+              return { messageQueue }
+            })
+            for (const m of queued) void window.api.chat.send(workspaceId, m.text, m.images)
+          }
+        }
         // 백그라운드 세션이 에러로 끝나면 미확인으로 표시(빨간 점 + 점프 대상).
         if (event.type === 'status' && event.status === 'error') {
           const s = get()
@@ -437,6 +499,32 @@ export const useStore = create<UIState>((set, get) => ({
     const found = order.find((w) => waiting.has(w.id) && w.id !== s.selectedWorkspaceId)
     return found?.id ?? null
   },
+
+  stopAll: async () => {
+    const running = (get().app?.workspaces ?? []).filter(
+      (w) => !w.archived && w.status === 'running'
+    )
+    await Promise.all(running.map((w) => window.api.chat.interrupt(w.id).catch(() => {})))
+  },
+
+  enqueueMessage: (workspaceId, text, images) =>
+    set((s) => ({
+      messageQueue: {
+        ...s.messageQueue,
+        [workspaceId]: [...(s.messageQueue[workspaceId] ?? []), { text, images }]
+      }
+    })),
+
+  removeQueued: (workspaceId, index) =>
+    set((s) => {
+      const cur = s.messageQueue[workspaceId]
+      if (!cur) return {}
+      const next = cur.filter((_, i) => i !== index)
+      const messageQueue = { ...s.messageQueue }
+      if (next.length) messageQueue[workspaceId] = next
+      else delete messageQueue[workspaceId]
+      return { messageQueue }
+    }),
 
   setDraft: (workspaceId, text) => set((s) => ({ drafts: { ...s.drafts, [workspaceId]: text } })),
 

@@ -1,4 +1,4 @@
-import type { PermissionMode } from '@shared/types'
+import type { PermissionMode, PermissionRequest } from '@shared/types'
 
 /**
  * Claude Code 와 동일한 권한 모드 명칭·순환·푸터 문구.
@@ -35,4 +35,18 @@ export const PERMISSION_FOOTER: Record<PermissionMode, { symbol: string; text: s
 export function nextPermissionMode(mode: PermissionMode): PermissionMode {
   const i = PERMISSION_ORDER.indexOf(mode)
   return PERMISSION_ORDER[(i + 1) % PERMISSION_ORDER.length]
+}
+
+/** 권한 요청 입력을 한 줄 요약으로(명령/경로/URL 등 알려진 키 우선). 프롬프트·큐 패널 공용. */
+export function summarizePermission(request: PermissionRequest): string {
+  const input = request.input
+  if (input && typeof input === 'object') {
+    const obj = input as Record<string, unknown>
+    for (const key of ['command', 'file_path', 'path', 'url', 'pattern', 'query', 'description']) {
+      if (typeof obj[key] === 'string' && obj[key]) return obj[key] as string
+    }
+    const keys = Object.keys(obj)
+    if (keys.length) return JSON.stringify(obj, null, 2)
+  }
+  return request.decisionReason ?? ''
 }

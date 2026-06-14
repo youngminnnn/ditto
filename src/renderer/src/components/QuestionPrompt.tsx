@@ -115,18 +115,18 @@ export default function QuestionPrompt({
   }
 
   return (
-    <div className="shrink-0 mx-4 mb-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3.5 py-3">
+    <div className="shrink-0 mx-4 mb-2 rounded-lg border border-[var(--brand-500)]/30 bg-[var(--brand-500)]/10 px-3.5 py-3">
       <div className="flex items-start gap-2.5">
-        <MessagesSquare size={16} className="text-sky-400 mt-0.5 shrink-0" />
+        <MessagesSquare size={16} className="text-[var(--brand-400)] mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
           {questions.map((q, qi) => {
             const multi = Boolean(q.multiSelect)
             const cur = selected[qi] ?? []
             return (
               <div key={qi} className={qi > 0 ? 'mt-3.5' : ''}>
-                <div className="text-[12.5px] text-neutral-100 font-medium">{q.question}</div>
+                <div className="text-sm text-neutral-100 font-medium">{q.question}</div>
                 {multi && (
-                  <div className="text-[11px] text-sky-300/70 mt-0.5">Select all that apply</div>
+                  <div className="text-xs text-[var(--brand-300)]/70 mt-0.5">Select all that apply</div>
                 )}
                 <div className="mt-1.5 flex flex-col gap-1">
                   {q.options.map((opt, oi) => {
@@ -136,9 +136,9 @@ export default function QuestionPrompt({
                         key={oi}
                         ref={qi === 0 && oi === 0 ? firstRef : undefined}
                         onClick={() => toggle(qi, opt.label, multi)}
-                        className={`text-left rounded-md border px-2.5 py-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-300/50 ${
+                        className={`text-left rounded-md border px-2.5 py-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-300)]/50 ${
                           on
-                            ? 'border-sky-400/60 bg-sky-500/15'
+                            ? 'border-[var(--brand-400)]/60 bg-[var(--brand-500)]/15'
                             : 'border-neutral-700/60 hover:bg-[var(--surface-2)]'
                         }`}
                       >
@@ -146,12 +146,12 @@ export default function QuestionPrompt({
                           <span
                             className={`inline-block h-3 w-3 shrink-0 border ${
                               multi ? 'rounded-[3px]' : 'rounded-full'
-                            } ${on ? 'bg-sky-400 border-sky-400' : 'border-neutral-500'}`}
+                            } ${on ? 'bg-[var(--brand-400)] border-[var(--brand-400)]' : 'border-neutral-500'}`}
                           />
-                          <span className="text-[12px] text-neutral-100">{opt.label}</span>
+                          <span className="text-sm text-neutral-100">{opt.label}</span>
                         </div>
                         {opt.description && (
-                          <div className="text-[11px] text-neutral-400 mt-0.5 ml-5">
+                          <div className="text-xs text-neutral-400 mt-0.5 ml-5">
                             {opt.description}
                           </div>
                         )}
@@ -165,9 +165,9 @@ export default function QuestionPrompt({
                     value={otherText[qi] ?? ''}
                     onChange={(e) => setOther(qi, e.target.value, multi)}
                     placeholder="Other…"
-                    className={`text-[12px] rounded-md border bg-transparent px-2.5 py-1.5 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-sky-300/50 ${
+                    className={`text-sm rounded-md border bg-transparent px-2.5 py-1.5 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-300)]/50 ${
                       cur.includes(OTHER)
-                        ? 'border-sky-400/60 bg-sky-500/10'
+                        ? 'border-[var(--brand-400)]/60 bg-[var(--brand-500)]/10'
                         : 'border-neutral-700/60'
                     }`}
                   />
@@ -181,14 +181,14 @@ export default function QuestionPrompt({
       <div className="mt-3 flex items-center justify-end gap-1.5">
         <button
           onClick={cancel}
-          className="text-[12px] px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[var(--surface-2)]"
+          className="text-sm px-2.5 py-1 rounded-md text-neutral-300 hover:bg-[var(--surface-2)]"
         >
           Cancel
         </button>
         <button
           onClick={submit}
           disabled={!allAnswered}
-          className="text-[12px] px-2.5 py-1 rounded-md bg-sky-500/90 text-black font-medium hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+          className="text-sm px-2.5 py-1 rounded-md bg-[var(--brand-500)]/90 text-black font-medium hover:bg-[var(--brand-400)] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[var(--brand-300)]/60"
         >
           Submit
         </button>

@@ -70,12 +70,12 @@ export default function MessageList({
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-[var(--surface)] border border-[var(--border-2)]">
             <MessageSquarePlus size={20} className="text-neutral-400" />
           </div>
-          <p className="text-[13px] text-neutral-300">Start a Claude Code session</p>
-          <p className="mt-1 text-[12px] text-neutral-500 leading-relaxed">
+          <p className="text-base text-neutral-300">Start a Claude Code session</p>
+          <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
             Send your first message — nothing runs until you do. Type{' '}
-            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-[11px] text-neutral-300">/</kbd>{' '}
+            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">/</kbd>{' '}
             for commands or{' '}
-            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-[11px] text-neutral-300">!</kbd>{' '}
+            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">!</kbd>{' '}
             to run a terminal command.
           </p>
         </div>
@@ -120,13 +120,13 @@ function Item({
     case 'user':
       return (
         <div className="flex justify-end" title={time}>
-          <div className="max-w-[85%] bg-[var(--surface-4)] text-neutral-100 rounded-2xl rounded-br-md px-3.5 py-2 text-[13px]">
+          <div className="max-w-[85%] bg-[var(--surface-4)] text-neutral-100 rounded-2xl rounded-br-md px-3.5 py-2 text-base">
             {item.attachments && item.attachments.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-1.5">
                 {item.attachments.map((a, i) => (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/20 text-[11px] text-neutral-300"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/20 text-xs text-neutral-300"
                   >
                     <ImageIcon size={11} className="text-neutral-400" />
                     {a.name}
@@ -140,7 +140,7 @@ function Item({
       )
     case 'assistant':
       return (
-        <div className="group/msg relative md text-[13px] text-neutral-200" title={time}>
+        <div className="group/msg relative md text-base text-neutral-200" title={time}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
@@ -165,13 +165,13 @@ function Item({
       return <ResultFooter item={item} />
     case 'error':
       return (
-        <div className="flex items-center gap-2 text-[12px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-sm text-[var(--danger-400)] bg-[var(--danger-500)]/10 border border-[var(--danger-500)]/20 rounded-lg px-3 py-2">
           <AlertTriangle size={14} className="shrink-0" />
           <span className="whitespace-pre-wrap">{item.text}</span>
         </div>
       )
     case 'system':
-      return <div className="text-[11.5px] text-neutral-500 text-center py-1">{item.text}</div>
+      return <div className="text-xs text-neutral-500 text-center py-1">{item.text}</div>
     case 'task':
       return <TaskCard item={item} />
     default:
@@ -195,22 +195,22 @@ function TaskCard({ item }: { item: Extract<ChatItem, { type: 'task' }> }): Reac
   if (typeof item.durationMs === 'number') stats.push(`${(item.durationMs / 1000).toFixed(1)}s`)
 
   return (
-    <div className="rounded-lg border border-[var(--border-3)] bg-[var(--surface-2)] px-3 py-2 text-[12px]">
+    <div className="rounded-lg border border-[var(--border-3)] bg-[var(--surface-2)] px-3 py-2 text-sm">
       <div className="flex items-center gap-2">
         {running ? (
-          <Loader2 size={13} className="text-violet-400 shrink-0 animate-spin" />
+          <Loader2 size={13} className="text-[var(--accent-400)] shrink-0 animate-spin" />
         ) : failed ? (
-          <XCircle size={13} className="text-red-400 shrink-0" />
+          <XCircle size={13} className="text-[var(--danger-400)] shrink-0" />
         ) : (
-          <Check size={13} className="text-emerald-400 shrink-0" />
+          <Check size={13} className="text-[var(--success-400)] shrink-0" />
         )}
-        <Workflow size={13} className="text-violet-400/80 shrink-0" />
+        <Workflow size={13} className="text-[var(--accent-400)]/80 shrink-0" />
         <span className="font-medium text-neutral-200">Workflow</span>
         <span className="text-neutral-400 truncate">{item.name}</span>
         <span
           className={
-            'ml-auto shrink-0 text-[10.5px] uppercase tracking-wide ' +
-            (running ? 'text-violet-400' : failed ? 'text-red-400' : 'text-emerald-400')
+            'ml-auto shrink-0 text-xs uppercase tracking-wide ' +
+            (running ? 'text-[var(--accent-400)]' : failed ? 'text-[var(--danger-400)]' : 'text-[var(--success-400)]')
           }
         >
           {item.status}
@@ -220,20 +220,20 @@ function TaskCard({ item }: { item: Extract<ChatItem, { type: 'task' }> }): Reac
       <div className="mt-1 pl-[21px] text-neutral-400 truncate">{item.description}</div>
 
       {stats.length > 0 && (
-        <div className="mt-1 pl-[21px] text-[11px] text-neutral-500">{stats.join(' · ')}</div>
+        <div className="mt-1 pl-[21px] text-xs text-neutral-500">{stats.join(' · ')}</div>
       )}
 
       {item.summary && (
         <div className="mt-1.5 pl-[21px]">
           <button
             onClick={() => setOpen((v) => !v)}
-            className="flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-300"
+            className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300"
           >
             <ChevronRight size={11} className={open ? 'rotate-90 transition' : 'transition'} />
             {open ? 'Hide summary' : 'Show summary'}
           </button>
           {open && (
-            <div className="mt-1 text-[11.5px] text-neutral-400 whitespace-pre-wrap border-l border-[var(--border)] pl-2">
+            <div className="mt-1 text-xs text-neutral-400 whitespace-pre-wrap border-l border-[var(--border)] pl-2">
               {item.summary}
             </div>
           )}
@@ -253,7 +253,7 @@ function formatTokenCount(n: number): string {
 function Thinking({ text }: { text: string }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   return (
-    <div className="text-[12px]">
+    <div className="text-sm">
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 text-neutral-500 hover:text-neutral-300"
@@ -283,22 +283,22 @@ function ToolUse({
   const [open, setOpen] = useState(false)
   const summary = summarizeToolInput(name, input)
   return (
-    <div className="text-[12px]">
+    <div className="text-sm">
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 text-neutral-400 hover:text-neutral-200 w-full text-left"
       >
         {pending ? (
-          <Loader2 size={12} className="text-amber-500/80 shrink-0 animate-spin" />
+          <Loader2 size={12} className="text-[var(--warning-500)]/80 shrink-0 animate-spin" />
         ) : (
-          <Wrench size={12} className="text-amber-500/80 shrink-0" />
+          <Wrench size={12} className="text-[var(--warning-500)]/80 shrink-0" />
         )}
         <span className="font-medium text-neutral-300">{name}</span>
         {summary && <span className="text-neutral-500 truncate">{summary}</span>}
         <ChevronRight size={12} className={(open ? 'rotate-90 ' : '') + 'ml-auto shrink-0 transition'} />
       </button>
       {open && (
-        <pre className="mt-1 ml-4 text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md p-2 overflow-x-auto text-neutral-400">
+        <pre className="mt-1 ml-4 text-xs bg-[var(--surface)] border border-[var(--border)] rounded-md p-2 overflow-x-auto text-neutral-400">
           {JSON.stringify(input, null, 2)}
         </pre>
       )}
@@ -313,12 +313,12 @@ function ToolResult({ text, isError }: { text: string; isError: boolean }): Reac
   const truncated = lines.length > 3 || text.length > 240
 
   return (
-    <div className="ml-4 text-[11.5px]">
+    <div className="ml-4 text-xs">
       <pre
         className={
           'whitespace-pre-wrap rounded-md p-2 overflow-x-auto border ' +
           (isError
-            ? 'bg-red-500/5 border-red-500/20 text-red-300/90'
+            ? 'bg-[var(--danger-500)]/5 border-[var(--danger-500)]/20 text-[var(--danger-300)]/90'
             : 'bg-[var(--bg-3)] border-[var(--border)] text-neutral-500')
         }
       >
@@ -327,7 +327,7 @@ function ToolResult({ text, isError }: { text: string; isError: boolean }): Reac
       {truncated && (
         <button
           onClick={() => setOpen((v) => !v)}
-          className="mt-0.5 text-[11px] text-neutral-600 hover:text-neutral-400"
+          className="mt-0.5 text-xs text-neutral-600 hover:text-neutral-400"
         >
           {open ? 'Collapse' : `Show more (${lines.length} lines)`}
         </button>
@@ -343,7 +343,7 @@ function ResultFooter({ item }: { item: Extract<ChatItem, { type: 'result' }> })
       : `${item.subtype} · ${item.numTurns} turns`
   return (
     <div
-      className={'text-[11px] text-center py-1 ' + (item.isError ? 'text-red-400/80' : 'text-neutral-600')}
+      className={'text-xs text-center py-1 ' + (item.isError ? 'text-[var(--danger-400)]/80' : 'text-neutral-600')}
     >
       {text}
     </div>
@@ -368,7 +368,7 @@ function CopyButton({ text, className }: { text: string; className?: string }): 
         (className ?? '')
       }
     >
-      {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+      {copied ? <Check size={12} className="text-[var(--success-400)]" /> : <Copy size={12} />}
     </button>
   )
 }

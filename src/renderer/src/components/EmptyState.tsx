@@ -23,14 +23,14 @@ export default function EmptyState(): React.JSX.Element {
         <div className="mb-5 grid h-20 w-20 place-items-center rounded-2xl bg-[var(--surface)] border border-[var(--border-2)] shadow-xl">
           <Logo size={44} />
         </div>
-        <h2 className="text-[20px] font-semibold tracking-tight text-neutral-100 mb-2">Ditto</h2>
-        <p className="text-[13px] text-neutral-400 leading-relaxed">
+        <h2 className="text-lg font-semibold tracking-tight text-neutral-100 mb-2">Ditto</h2>
+        <p className="text-base text-neutral-400 leading-relaxed">
           {hasRepo
             ? 'Create a workspace to spin up an AI coding agent in its own isolated git worktree. Each workspace runs independently and in parallel.'
             : 'Connect a git repository to get started. Each task becomes its own worktree, branch, and agent session.'}
         </p>
 
-        <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-[var(--border-2)] bg-[var(--surface-2)] px-3 py-1.5 text-[12px] text-neutral-300">
+        <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-[var(--border-2)] bg-[var(--surface-2)] px-3 py-1.5 text-sm text-neutral-300">
           {hasRepo ? (
             <>
               <Plus size={13} className="text-neutral-400" />
@@ -45,9 +45,9 @@ export default function EmptyState(): React.JSX.Element {
         </div>
 
         {hasRepo && active.length > 0 && (
-          <p className="mt-5 text-[12px] text-neutral-500">
+          <p className="mt-5 text-sm text-neutral-500">
             {active.length} workspace{active.length > 1 ? 's' : ''}
-            {running > 0 && <span className="text-blue-400"> · {running} running</span>}
+            {running > 0 && <span className="text-[var(--info-400)]"> · {running} running</span>}
             <br />
             <span className="text-neutral-600">⌘1–9 to switch · ⌘[ / ⌘] to cycle</span>
           </p>

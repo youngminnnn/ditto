@@ -41,11 +41,11 @@ export default function FileBrowser({ workspaceId }: { workspaceId: string }): R
         <div className="h-8 shrink-0 flex items-center gap-2 px-2 border-b border-[var(--border)]">
           <button
             onClick={() => setOpenFile(null)}
-            className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-100 px-1.5 py-0.5 rounded hover:bg-[var(--surface-2)]"
+            className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-100 px-1.5 py-0.5 rounded hover:bg-[var(--surface-2)]"
           >
             <ArrowLeft size={12} /> Files
           </button>
-          <span className="flex-1 truncate text-[11.5px] font-mono text-neutral-300" title={openFile}>
+          <span className="flex-1 truncate text-xs font-mono text-neutral-300" title={openFile}>
             {openFile}
           </span>
         </div>
@@ -113,13 +113,13 @@ function DirNode({
         <button
           onClick={() => setOpen((v) => !v)}
           style={pad}
-          className="w-full flex items-center gap-1.5 pr-2 py-1 text-left text-[12px] text-neutral-300 hover:bg-[var(--surface)]"
+          className="w-full flex items-center gap-1.5 pr-2 py-1 text-left text-sm text-neutral-300 hover:bg-[var(--surface)]"
         >
           <ChevronRight size={11} className={(open ? 'rotate-90 ' : '') + 'shrink-0 transition text-neutral-500'} />
           {open ? (
-            <FolderOpen size={13} className="shrink-0 text-sky-400/80" />
+            <FolderOpen size={13} className="shrink-0 text-[var(--brand-400)]/80" />
           ) : (
-            <Folder size={13} className="shrink-0 text-sky-400/80" />
+            <Folder size={13} className="shrink-0 text-[var(--brand-400)]/80" />
           )}
           <span className="truncate">{name}</span>
         </button>
@@ -156,7 +156,7 @@ function DirNode({
           {children && children.length === 0 && (
             <div
               style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
-              className="py-1 text-[11px] text-neutral-600"
+              className="py-1 text-xs text-neutral-600"
             >
               empty
             </div>
@@ -183,7 +183,7 @@ function FileLeaf({
       onClick={() => onSelect(entry.path)}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       className={
-        'w-full flex items-center gap-1.5 pr-2 py-1 text-left text-[12px] hover:bg-[var(--surface)] ' +
+        'w-full flex items-center gap-1.5 pr-2 py-1 text-left text-sm hover:bg-[var(--surface)] ' +
         (active ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-400')
       }
     >
@@ -218,19 +218,19 @@ function FileViewer({
     )
   }
   if (!content) {
-    return <div className="flex-1 grid place-items-center text-[12px] text-neutral-600">Couldn’t read file.</div>
+    return <div className="flex-1 grid place-items-center text-sm text-neutral-600">Couldn’t read file.</div>
   }
   if (content.binary) {
-    return <div className="flex-1 grid place-items-center text-[12px] text-neutral-600">Binary file — not shown.</div>
+    return <div className="flex-1 grid place-items-center text-sm text-neutral-600">Binary file — not shown.</div>
   }
 
   return (
     <div className="flex-1 overflow-auto">
-      <pre className="hljs text-[11.5px] font-mono leading-[1.5] p-3 m-0 bg-[var(--code-bg)] whitespace-pre">
+      <pre className="hljs text-xs font-mono leading-[1.5] p-3 m-0 bg-[var(--code-bg)] whitespace-pre">
         {html ? <code dangerouslySetInnerHTML={{ __html: html }} /> : <code>{content.text}</code>}
       </pre>
       {content.truncated && (
-        <div className="px-3 py-1 text-[11px] text-amber-500/80">File truncated (too large to show fully).</div>
+        <div className="px-3 py-1 text-xs text-[var(--warning-500)]/80">File truncated (too large to show fully).</div>
       )}
     </div>
   )

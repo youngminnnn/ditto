@@ -12,7 +12,7 @@ export default function TitleBar({
 }): React.JSX.Element {
   return (
     <div className="drag h-11 shrink-0 flex items-center justify-between bg-[var(--bg)] border-b border-[var(--border)] pl-20 pr-3">
-      <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight text-neutral-200">
+      <div className="flex items-center gap-2 text-base font-semibold tracking-tight text-neutral-200">
         <Logo size={18} />
         Ditto
         <span className="text-neutral-600 font-normal">· AI coding agent orchestrator</span>
@@ -74,7 +74,7 @@ function AttentionCluster(): React.JSX.Element | null {
       {runningCount > 0 && (
         <>
           <span
-            className="flex items-center gap-1 h-7 px-2 rounded-md text-[11.5px] text-blue-300/90 bg-blue-500/10 border border-blue-500/20"
+            className="flex items-center gap-1 h-7 px-2 rounded-md text-xs text-[var(--info-300)]/90 bg-[var(--info-500)]/10 border border-[var(--info-500)]/20"
             title={`${runningCount} session${runningCount > 1 ? 's' : ''} running`}
           >
             <Loader2 size={12} className="animate-spin" />
@@ -82,7 +82,7 @@ function AttentionCluster(): React.JSX.Element | null {
           </span>
           <button
             onClick={onStopAll}
-            className="flex items-center gap-1 h-7 px-2 rounded-md text-[11.5px] text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
+            className="flex items-center gap-1 h-7 px-2 rounded-md text-xs text-[var(--danger-300)] bg-[var(--danger-500)]/10 border border-[var(--danger-500)]/20 hover:bg-[var(--danger-500)]/20"
             title="Stop the current turn in every running session"
           >
             <Square size={11} fill="currentColor" />
@@ -95,7 +95,7 @@ function AttentionCluster(): React.JSX.Element | null {
         <div className="relative">
           <button
             onClick={() => setQueueOpen((v) => !v)}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-amber-500/90 text-black text-[11.5px] font-medium hover:bg-amber-400"
+            className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[var(--warning-500)]/90 text-black text-xs font-medium hover:bg-[var(--warning-400)]"
             title="Sessions waiting for your permission"
           >
             <ShieldQuestion size={13} />
@@ -113,7 +113,7 @@ function AttentionCluster(): React.JSX.Element | null {
             const id = nextUnreadId()
             if (id) void selectWorkspace(id)
           }}
-          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-blue-600/90 text-white text-[11.5px] font-medium hover:bg-blue-500"
+          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[var(--info-600)]/90 text-white text-xs font-medium hover:bg-[var(--info-500)]"
           title="Jump to the next session with a completed response"
         >
           <BellDot size={13} />
@@ -192,14 +192,14 @@ function PermissionQueue({
       className="absolute top-full right-0 mt-1.5 w-[22rem] max-h-[70vh] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-3)] shadow-2xl z-30"
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--surface-2)] sticky top-0 bg-[var(--bg-3)]">
-        <ShieldQuestion size={13} className="text-amber-400 shrink-0" />
-        <span className="text-[11.5px] font-medium text-amber-200">
+        <ShieldQuestion size={13} className="text-[var(--warning-400)] shrink-0" />
+        <span className="text-xs font-medium text-[var(--warning-200)]">
           Permission queue ({requests.length})
         </span>
         {requests.length > 1 && (
           <button
             onClick={denyAll}
-            className="ml-auto text-[11px] px-2 py-0.5 rounded text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-200"
+            className="ml-auto text-xs px-2 py-0.5 rounded text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-200"
             title="Deny every request in the queue"
           >
             Deny all
@@ -220,7 +220,7 @@ function PermissionQueue({
                 className="block w-full text-left"
                 title="Open this session"
               >
-                <div className="flex items-center gap-1.5 text-[12px] text-neutral-200 truncate">
+                <div className="flex items-center gap-1.5 text-sm text-neutral-200 truncate">
                   <span className="truncate font-medium">{wsName(req.workspaceId)}</span>
                   <span className="text-neutral-600 shrink-0">·</span>
                   <span className="text-neutral-400 shrink-0">
@@ -228,7 +228,7 @@ function PermissionQueue({
                   </span>
                 </div>
                 {summary && (
-                  <div className="mt-0.5 text-[11px] text-neutral-500 truncate">{summary}</div>
+                  <div className="mt-0.5 text-xs text-neutral-500 truncate">{summary}</div>
                 )}
               </button>
               <div className="mt-1.5 flex items-center gap-1.5">
@@ -238,7 +238,7 @@ function PermissionQueue({
                       void selectWorkspace(req.workspaceId)
                       onClose()
                     }}
-                    className="text-[11.5px] px-2 py-1 rounded-md bg-amber-500/90 text-black font-medium hover:bg-amber-400"
+                    className="text-xs px-2 py-1 rounded-md bg-[var(--warning-500)]/90 text-black font-medium hover:bg-[var(--warning-400)]"
                   >
                     Answer in session
                   </button>
@@ -246,13 +246,13 @@ function PermissionQueue({
                   <>
                     <button
                       onClick={() => respond(req, 'deny')}
-                      className="text-[11.5px] px-2 py-1 rounded-md text-neutral-300 hover:bg-[var(--surface-2)]"
+                      className="text-xs px-2 py-1 rounded-md text-neutral-300 hover:bg-[var(--surface-2)]"
                     >
                       Deny
                     </button>
                     <button
                       onClick={() => respond(req, 'allow')}
-                      className="text-[11.5px] px-2.5 py-1 rounded-md bg-amber-500/90 text-black font-medium hover:bg-amber-400"
+                      className="text-xs px-2.5 py-1 rounded-md bg-[var(--warning-500)]/90 text-black font-medium hover:bg-[var(--warning-400)]"
                     >
                       Allow
                     </button>

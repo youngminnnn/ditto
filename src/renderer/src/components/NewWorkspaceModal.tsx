@@ -49,7 +49,7 @@ export default function NewWorkspaceModal({
             placeholder="e.g. fix login bug"
           />
           {name.trim() && (
-            <p className="mt-1.5 text-[11px] text-neutral-600">
+            <p className="mt-1.5 text-xs text-neutral-600">
               Creates branch <span className="text-neutral-400">{sanitizePreview(name)}</span>.
             </p>
           )}
@@ -57,7 +57,7 @@ export default function NewWorkspaceModal({
 
         <div>
           <label className={labelClass}>Base branch</label>
-          <p className="text-[11px] text-neutral-600">
+          <p className="text-xs text-neutral-600">
             Always branches from the latest{' '}
             <span className="text-neutral-400">origin/{repo.defaultBranch}</span> (fetched first).
           </p>

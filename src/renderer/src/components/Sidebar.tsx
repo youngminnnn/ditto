@@ -52,7 +52,7 @@ export default function Sidebar({
   return (
     <aside className="w-72 shrink-0 flex flex-col bg-[var(--bg-2)]">
       <div className="flex items-center justify-between px-3 h-10 shrink-0">
-        <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+        <span className="text-xs uppercase tracking-wider text-neutral-500 font-semibold">
           Repositories
         </span>
         <button
@@ -84,14 +84,14 @@ export default function Sidebar({
               <div className="group flex items-center gap-1.5 px-2 py-1.5 rounded-md">
                 <FolderGit2 size={14} className="text-neutral-500 shrink-0" />
                 <span
-                  className="flex-1 truncate text-[12.5px] font-medium text-neutral-300"
+                  className="flex-1 truncate text-sm font-medium text-neutral-300"
                   title={repo.path}
                 >
                   {repo.name}
                 </span>
                 {runningCount > 0 && (
                   <span
-                    className="flex items-center gap-1 text-[10px] text-blue-400/80 shrink-0"
+                    className="flex items-center gap-1 text-xs text-[var(--info-400)]/80 shrink-0"
                     title={`${runningCount} running`}
                   >
                     <Loader2 size={10} className="animate-spin" />
@@ -116,7 +116,7 @@ export default function Sidebar({
 
               <div className="mt-0.5 space-y-0.5">
                 {active.length === 0 && repoPending.length === 0 && (
-                  <p className="px-3 py-1 text-[11px] text-neutral-600">No workspaces</p>
+                  <p className="px-3 py-1 text-xs text-neutral-600">No workspaces</p>
                 )}
                 {active.map((ws) => (
                   <WorkspaceRow
@@ -198,7 +198,7 @@ function WorkspaceRow({
         'group/ws relative w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-strong)] ' +
         // 선택 행은 좌측에 파란 액센트 바를 띄워 현재 위치를 또렷하게 표시한다.
         (active
-          ? 'bg-[var(--surface-3)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-blue-500'
+          ? 'bg-[var(--surface-3)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-[var(--info-500)]'
           : 'hover:bg-[var(--surface)]')
       }
     >
@@ -211,20 +211,20 @@ function WorkspaceRow({
       />
       <div className="flex-1 min-w-0">
         <div
-          className={'truncate text-[12.5px] ' + (active ? 'text-neutral-100' : 'text-neutral-300')}
+          className={'truncate text-sm ' + (active ? 'text-neutral-100' : 'text-neutral-300')}
           title={displayName}
         >
           {displayName}
         </div>
-        <div className="flex items-center gap-1 text-[10.5px] text-neutral-500 truncate">
+        <div className="flex items-center gap-1 text-xs text-neutral-500 truncate">
           <GitBranch size={10} className="shrink-0" />
           <span className="truncate">{workspace.branch}</span>
           {git && git.changedFiles > 0 && (
-            <span className="text-amber-500/80 shrink-0">·{git.changedFiles}</span>
+            <span className="text-[var(--warning-500)]/80 shrink-0">·{git.changedFiles}</span>
           )}
           {workspace.status === 'running' && runningSince && (
             <span
-              className="text-blue-400/80 shrink-0 tabular-nums"
+              className="text-[var(--info-400)]/80 shrink-0 tabular-nums"
               title="Running time of the current turn"
             >
               · {formatDuration(now - runningSince)}
@@ -234,7 +234,7 @@ function WorkspaceRow({
       </div>
       {shortcut !== undefined && (
         <kbd
-          className="shrink-0 text-[9.5px] leading-none font-medium text-neutral-600 group-hover/ws:hidden tabular-nums"
+          className="shrink-0 text-xs leading-none font-medium text-neutral-600 group-hover/ws:hidden tabular-nums"
           title={`Switch with ⌘${shortcut}`}
         >
           ⌘{shortcut}
@@ -244,7 +244,7 @@ function WorkspaceRow({
           (좌측 StatusDot 이 권한 대기/실행/압축을 표시하고, 우측 파란 점이 미확인 응답을 표시). */}
       {unread && !active && (
         <span
-          className="h-2 w-2 rounded-full bg-blue-500 shrink-0 group-hover/ws:hidden"
+          className="h-2 w-2 rounded-full bg-[var(--info-500)] shrink-0 group-hover/ws:hidden"
           title="Completed response — unread"
         />
       )}
@@ -263,10 +263,10 @@ function WorkspaceRow({
 function PendingRow({ name }: { name: string }): React.JSX.Element {
   return (
     <div className="w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left opacity-70 select-none">
-      <Loader2 size={13} className="text-blue-400 animate-spin shrink-0" />
+      <Loader2 size={13} className="text-[var(--info-400)] animate-spin shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="truncate text-[12.5px] text-neutral-300">{name || 'Creating…'}</div>
-        <div className="text-[10.5px] text-neutral-500 truncate">Setting up worktree…</div>
+        <div className="truncate text-sm text-neutral-300">{name || 'Creating…'}</div>
+        <div className="text-xs text-neutral-500 truncate">Setting up worktree…</div>
       </div>
     </div>
   )
@@ -279,7 +279,7 @@ function ArchivedSection({ workspaces }: { workspaces: Workspace[] }): React.JSX
     <div className="mt-1">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2 py-1 text-[10.5px] text-neutral-600 hover:text-neutral-400"
+        className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-600 hover:text-neutral-400"
       >
         <ChevronRight size={11} className={open ? 'rotate-90 transition' : 'transition'} />
         Archived ({workspaces.length})
@@ -322,7 +322,7 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
 
   return (
     <div className="group/arc flex items-center gap-2 pl-6 pr-1.5 py-1 rounded-md hover:bg-[var(--surface)]">
-      <span className="flex-1 truncate text-[11.5px] text-neutral-500" title={workspace.branch}>
+      <span className="flex-1 truncate text-xs text-neutral-500" title={workspace.branch}>
         {displayName}
       </span>
       <button
@@ -334,7 +334,7 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
       </button>
       <button
         onClick={remove}
-        className="opacity-0 group-hover/arc:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-red-500/15 hover:text-red-400"
+        className="opacity-0 group-hover/arc:opacity-100 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[var(--danger-500)]/15 hover:text-[var(--danger-400)]"
         title="Delete permanently"
       >
         <Trash2 size={12} />
@@ -360,13 +360,13 @@ function StatusDot({
   if (awaitingPermission) {
     return (
       <span title="Waiting for your permission" className="shrink-0 grid place-items-center">
-        <ShieldQuestion size={13} className="text-amber-400" />
+        <ShieldQuestion size={13} className="text-[var(--warning-400)]" />
       </span>
     )
   }
   if (status === 'running') {
     // 압축 중(보라) · 오래 실행(앰버, 멈춤일 수 있음) · 일반 실행(파랑) 을 색으로 구분한다.
-    const color = compacting ? 'text-purple-400' : stale ? 'text-amber-400' : 'text-blue-400'
+    const color = compacting ? 'text-purple-400' : stale ? 'text-[var(--warning-400)]' : 'text-[var(--info-400)]'
     const title = compacting
       ? 'Compacting conversation…'
       : stale
@@ -378,7 +378,7 @@ function StatusDot({
       </span>
     )
   }
-  const color = status === 'error' ? 'bg-red-500' : 'bg-neutral-600'
+  const color = status === 'error' ? 'bg-[var(--danger-500)]' : 'bg-neutral-600'
   const title = status === 'error' ? 'Last turn ended with an error' : 'Idle — ready for input'
   return <span title={title} className={`h-2 w-2 rounded-full shrink-0 ${color}`} />
 }

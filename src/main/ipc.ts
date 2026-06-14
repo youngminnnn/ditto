@@ -183,7 +183,8 @@ export function registerIpc(ctx: IpcContext): void {
         )
         rawName = generateWorkspaceName(existing)
       }
-      const baseBranch = (args.baseBranch ?? '').trim() || repo.defaultBranch
+      // 항상 origin 기본 브랜치(origin/<defaultBranch>)에서 분기한다 — args.baseBranch 는 무시.
+      const baseBranch = repo.defaultBranch
       const branch = sanitizeBranch(rawName)
       const worktreePath = worktreePathFor(repo.path, branch)
 

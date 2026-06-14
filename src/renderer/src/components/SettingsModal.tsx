@@ -4,8 +4,9 @@ import Modal, { inputClass, labelClass, primaryBtn, ghostBtn } from './Modal'
 import IntegrationsPanel from './IntegrationsPanel'
 import { PERMISSION_ORDER, PERMISSION_LABELS, PERMISSION_DESCRIPTIONS } from '../lib/permission'
 import { MODEL_OPTIONS } from '../lib/models'
+import { EFFORT_OPTIONS } from '../lib/effort'
 import { applyTheme } from '../lib/theme'
-import type { PermissionMode, ThemePreference } from '@shared/types'
+import type { EffortSetting, PermissionMode, ThemePreference } from '@shared/types'
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -21,6 +22,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   const [autoCompact, setAutoCompact] = useState(settings.autoCompact)
   const [defaultRightPanelOpen, setDefaultRightPanelOpen] = useState(settings.defaultRightPanelOpen)
   const [model, setModel] = useState(settings.model ?? MODEL_OPTIONS[0].id)
+  const [effort, setEffort] = useState<EffortSetting | null>(settings.effort)
   const [theme, setTheme] = useState<ThemePreference>(settings.theme)
 
   // 테마는 즉시 미리보기로 적용한다. 저장 없이 닫으면 저장된 테마로 되돌린다.
@@ -41,6 +43,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
       autoCompact,
       defaultRightPanelOpen,
       model,
+      effort,
       theme
     })
     onClose()
@@ -178,6 +181,26 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
             </select>
             <p className="mt-1.5 text-xs text-neutral-600">
               Default for new workspaces. Each workspace can override this from its header dropdown.
+            </p>
+          </div>
+
+          <div>
+            <label className={labelClass}>Reasoning effort</label>
+            <select
+              className={inputClass}
+              value={effort ?? ''}
+              onChange={(e) => setEffort((e.target.value || null) as EffortSetting | null)}
+            >
+              <option value="">Default — let the model decide</option>
+              {EFFORT_OPTIONS.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.label} — {e.hint}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-neutral-600">
+              How hard Claude thinks before responding, like Claude Code&rsquo;s effort setting. Higher
+              is slower but more thorough. Each workspace can override this from its header dropdown.
             </p>
           </div>
 

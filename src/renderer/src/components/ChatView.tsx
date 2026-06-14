@@ -7,6 +7,7 @@ import {
   Archive,
   RefreshCw,
   Cpu,
+  Gauge,
   GitPullRequest,
   GitPullRequestCreate,
   GitPullRequestDraft,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '../store'
 import { MODEL_OPTIONS, modelLabel } from '../lib/models'
+import { EFFORT_OPTIONS, effortLabel } from '../lib/effort'
 import { formatCost } from '../lib/format'
 import MessageList from './MessageList'
 import Composer from './Composer'
@@ -32,7 +34,7 @@ import PermissionPrompt from './PermissionPrompt'
 import QuestionPrompt from './QuestionPrompt'
 import DiffModal from './DiffModal'
 import { workspaceDisplayName } from '@shared/types'
-import type { ChatItem, PrState, Workspace } from '@shared/types'
+import type { ChatItem, EffortSetting, PrState, Workspace } from '@shared/types'
 
 /**
  * PR 상태별 아이콘 + 색. Tailwind v4 는 동적으로 조합한 클래스명을 스캔하지 못하므로
@@ -94,6 +96,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   const refreshGit = useStore((s) => s.refreshGit)
   const refreshPr = useStore((s) => s.refreshPr)
   const settingsModel = useStore((s) => s.app!.settings.model)
+  const settingsEffort = useStore((s) => s.app!.settings.effort)
   const permissions = useStore((s) => s.permissions)
   const pending = permissions.find((p) => p.workspaceId === workspace.id) ?? null
   const transcript = useStore((s) => s.transcripts[workspace.id]) ?? EMPTY
@@ -159,6 +162,13 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
   const setModel = (value: string): void => {
     void window.api.workspace.setModel(workspace.id, value || null)
+  }
+
+  const setEffort = (value: string): void => {
+    void window.api.workspace.setEffort(
+      workspace.id,
+      (value || null) as EffortSetting | null
+    )
   }
 
   const commitName = (): void => {
@@ -244,6 +254,27 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           {workspace.model && !MODEL_OPTIONS.some((m) => m.id === workspace.model) && (
             <option value={workspace.model}>{model}</option>
           )}
+        </select>
+
+        <span
+          className="flex items-center gap-1 text-xs text-neutral-500 pl-1"
+          title="Reasoning effort for new turns"
+        >
+          <Gauge size={12} />
+        </span>
+        <select
+          value={workspace.effort ?? ''}
+          onChange={(e) => setEffort(e.target.value)}
+          disabled={running}
+          className="no-drag text-xs bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 text-neutral-300 hover:border-[var(--border-2)] focus:outline-none focus:border-[var(--border-strong)] disabled:opacity-50 disabled:cursor-not-allowed"
+          title={running ? 'Stop the current turn to change effort' : 'Reasoning effort for this workspace'}
+        >
+          <option value="">Default · {effortLabel(settingsEffort)}</option>
+          {EFFORT_OPTIONS.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.label}
+            </option>
+          ))}
         </select>
 
         <HeaderButton title="Scripts" onClick={() => setShowScripts(workspace.id, !showScripts)} active={showScripts}>

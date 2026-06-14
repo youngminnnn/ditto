@@ -27,6 +27,8 @@ const api: DittoApi = {
     setPermissionMode: (workspaceId, mode) =>
       ipcRenderer.invoke(IPC.workspaceSetPermissionMode, workspaceId, mode),
     setModel: (workspaceId, model) => ipcRenderer.invoke(IPC.workspaceSetModel, workspaceId, model),
+    setEffort: (workspaceId, effort) =>
+      ipcRenderer.invoke(IPC.workspaceSetEffort, workspaceId, effort),
     rename: (workspaceId, name) => ipcRenderer.invoke(IPC.workspaceRename, workspaceId, name),
     revealInFinder: (workspaceId) => ipcRenderer.invoke(IPC.workspaceRevealInFinder, workspaceId),
     openInEditor: (workspaceId) => ipcRenderer.invoke(IPC.workspaceOpenInEditor, workspaceId)

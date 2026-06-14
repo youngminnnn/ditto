@@ -32,6 +32,7 @@ import type {
   CommandPanelKind,
   CommandResult,
   CreateWorkspaceArgs,
+  EffortSetting,
   ImageAttachment,
   McpAction,
   McpServerInfo,
@@ -217,6 +218,7 @@ export function registerIpc(ctx: IpcContext): void {
           sessionId: null,
           permissionMode: settings.defaultPermissionMode,
           model: null,
+          effort: null,
           status: 'idle',
           lastModel: null,
           archived: false,
@@ -334,6 +336,14 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.sessions.setModel(workspaceId, model)
     broadcastState()
   })
+
+  ipcMain.handle(
+    IPC.workspaceSetEffort,
+    (_e, workspaceId: string, effort: EffortSetting | null) => {
+      ctx.sessions.setEffort(workspaceId, effort)
+      broadcastState()
+    }
+  )
 
   // 표시 이름 수정: 사용자 override(displayName)만 바꾼다. worktree 이름(name)·브랜치는 그대로 둔다.
   // 빈 문자열을 넘기면 override 를 지워 기본 규칙(worktree 이름 → PR 제목)으로 되돌린다.

@@ -2,6 +2,7 @@ import type {
   ChatEvent,
   ChatItem,
   CommandPanelKind,
+  EffortSetting,
   ImageAttachment,
   McpAction,
   PermissionDecision,
@@ -26,6 +27,8 @@ export interface SessionConfig {
   cwd: string
   repoPath: string | null
   model: string | null
+  /** reasoning effort 선택값(ultracode 포함). null 이면 지정하지 않는다(모델 기본 동작). */
+  effort: EffortSetting | null
   permissionMode: PermissionMode
   autoCompact: boolean
   resumeSessionId: string | null
@@ -61,6 +64,7 @@ export type HostCommand =
       cwd: string
       resumeSessionId: string | null
       model: string | null
+      effort: EffortSetting | null
       question: string
     }
   | { type: 'permissionResponse'; requestId: string; decision: PermissionDecision }

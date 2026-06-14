@@ -11,6 +11,7 @@ import type {
   ChatItem,
   CommandPanelKind,
   CommandResult,
+  EffortSetting,
   ImageAttachment,
   McpAction,
   McpServerInfo,
@@ -179,6 +180,7 @@ export class SessionManager {
       cwd: ws.worktreePath,
       repoPath: this.getRepoPath(ws.repoId),
       model: ws.model ?? settings.model,
+      effort: ws.effort ?? settings.effort,
       permissionMode: ws.permissionMode,
       autoCompact: settings.autoCompact,
       resumeSessionId: ws.sessionId
@@ -219,6 +221,7 @@ export class SessionManager {
       cwd: ws.worktreePath,
       resumeSessionId: ws.sessionId,
       model: ws.model ?? settings.model,
+      effort: ws.effort ?? settings.effort,
       question: trimmed
     })
   }
@@ -281,6 +284,19 @@ export class SessionManager {
     getStore().update((st) => {
       const w = st.workspaces.find((x) => x.id === workspaceId)
       if (w) w.model = model
+    })
+    this.dispose(workspaceId)
+  }
+
+  /**
+   * reasoning effort 오버라이드를 바꾼다. effort 는 모델과 마찬가지로 query 시작 시점에 고정되므로
+   * 기존 세션을 dispose 한다 — 다음 메시지에서 새 effort 로 query 를 다시 열되 resume(세션 ID)로
+   * 대화 맥락을 이어받는다.
+   */
+  setEffort(workspaceId: string, effort: EffortSetting | null): void {
+    getStore().update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) w.effort = effort
     })
     this.dispose(workspaceId)
   }

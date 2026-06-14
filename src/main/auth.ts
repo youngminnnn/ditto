@@ -105,8 +105,11 @@ export function claudeLogin(): void {
   openInTerminal('claude auth login')
 }
 
-export function claudeLogout(): void {
-  spawn(process.env.SHELL || '/bin/zsh', ['-lc', 'claude auth logout'])
+export async function claudeLogout(): Promise<void> {
+  // 로그아웃 완료를 기다린 뒤 resolve 해야, 렌더러가 이어서 호출하는 refreshAuth()가
+  // 갱신된 상태를 읽어 UI 가 즉시 반영된다(spawn 후 바로 반환하면 폴링 전까지 미반영).
+  const { code, stderr } = await runLoginShell('claude auth logout')
+  if (code !== 0) log.error(`auth: claude logout exited with code ${code}`, stderr.trim())
 }
 
 export function githubLogin(): void {

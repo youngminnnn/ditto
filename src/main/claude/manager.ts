@@ -70,7 +70,9 @@ export class SessionManager {
       emit: (event) => this.emit(workspaceId, event),
       persist: (item) => getTranscripts().upsert(workspaceId, item),
       requestPermission: (req) => this.requestPermission(workspaceId, req),
-      onSessionId: (sid) => this.onSessionId(workspaceId, sid)
+      onSessionId: (sid) => this.onSessionId(workspaceId, sid),
+      // query 루프가 result 없이 끝나 'running' 에 갇히면(세션이 죽음) 알림 없이 idle 로 푼다.
+      settleIdle: () => this.forceIdle(workspaceId)
     })
     this.sessions.set(workspaceId, session)
     return session

@@ -19,6 +19,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
   const [manualWorkspaceSetup, setManualWorkspaceSetup] = useState(settings.manualWorkspaceSetup)
   const [soundOnComplete, setSoundOnComplete] = useState(settings.soundOnComplete)
   const [autoCompact, setAutoCompact] = useState(settings.autoCompact)
+  const [defaultRightPanelOpen, setDefaultRightPanelOpen] = useState(settings.defaultRightPanelOpen)
   const [model, setModel] = useState(settings.model ?? MODEL_OPTIONS[0].id)
   const [theme, setTheme] = useState<ThemePreference>(settings.theme)
 
@@ -38,6 +39,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
       manualWorkspaceSetup,
       soundOnComplete,
       autoCompact,
+      defaultRightPanelOpen,
       model,
       theme
     })
@@ -92,6 +94,22 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               System follows your OS light/dark setting.
             </p>
           </div>
+
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={defaultRightPanelOpen}
+              onChange={(e) => setDefaultRightPanelOpen(e.target.checked)}
+              className="accent-blue-600 h-3.5 w-3.5 mt-0.5"
+            />
+            <span className="text-[12.5px] text-neutral-300">
+              Show the work panel by default
+              <span className="block text-[11px] text-neutral-600">
+                Starting state for the right-side work panel (files, changes, terminal). Toggling it
+                with ⌘J is remembered and takes over from here.
+              </span>
+            </span>
+          </label>
         </Section>
 
         <Section title="Workspaces">

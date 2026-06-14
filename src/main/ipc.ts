@@ -5,6 +5,7 @@ import { getStore } from './store'
 import { getTranscripts } from './transcripts'
 import { listDir, readFileInRoot } from './fsbrowse'
 import { listSlashCommands } from './claude/commands'
+import { log } from './logger'
 import {
   addWorktree,
   detectDefaultBranch,
@@ -449,6 +450,8 @@ export function registerIpc(ctx: IpcContext): void {
         const result = await ctx.sessions.runCommand(workspaceId, kind)
         return { result }
       } catch (err) {
+        // 명령 실행 실패는 렌더러 카드로만 전달돼 진단이 어렵다. 영속 로그에도 남긴다.
+        log.error(`command '${kind}' failed:`, err)
         return { error: err instanceof Error ? err.message : String(err) }
       }
     }

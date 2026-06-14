@@ -179,6 +179,21 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     setMenuIdx(0)
   }, [slashQuery])
 
+  // 명령 결과/사이드 답변 카드는 입력창 포커스가 빠져도(카드 스크롤·클릭 등) Esc 로 닫히도록
+  // window 레벨에서 키를 받는다. 메뉴가 열려 있을 땐 Esc 가 메뉴 닫기에 쓰이므로 양보한다.
+  useEffect(() => {
+    if (menuOpen || (!commandCard && !sideAnswer)) return
+    const onEsc = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      if (commandCard) setCommandCard(null)
+      else setSideAnswer(null)
+      taRef.current?.focus()
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [menuOpen, commandCard, sideAnswer])
+
   /** "!명령" 을 터미널 PTY 에서 실행한다(Claude Code CLI bash 모드). 실행했으면 true. */
   const runBash = (trimmed: string): boolean => {
     if (images.length || !trimmed.startsWith('!')) return false
@@ -292,13 +307,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       }
     }
 
-    // 명령 결과/사이드 답변 카드가 떠 있으면 Esc 로 닫는다(메뉴가 우선).
-    if (e.key === 'Escape' && !menuOpen && (commandCard || sideAnswer)) {
-      e.preventDefault()
-      if (commandCard) setCommandCard(null)
-      else setSideAnswer(null)
-      return
-    }
+    // 카드 Esc 닫기는 window 리스너(위 useEffect)가 포커스와 무관하게 처리한다.
 
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
@@ -529,10 +538,13 @@ function SideAnswerCard({
         <MessageCircleQuestion size={13} className="text-violet-400 shrink-0" />
         <span className="text-[11px] font-medium text-violet-300 shrink-0">Side question</span>
         <span className="text-[11px] text-neutral-500 truncate">{answer.question}</span>
+        <span className="ml-auto shrink-0 text-[10px] text-neutral-600 select-none">
+          Esc to close
+        </span>
         <button
           onClick={onClose}
           title="Dismiss (Esc)"
-          className="ml-auto shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
+          className="shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
         >
           <X size={13} />
         </button>
@@ -933,10 +945,13 @@ function CommandCard({
         {card.status === 'loading' && (
           <Loader2 size={12} className="text-neutral-500 animate-spin" />
         )}
+        <span className="ml-auto shrink-0 text-[10px] text-neutral-600 select-none">
+          Esc to close
+        </span>
         <button
           onClick={onClose}
           title="Dismiss (Esc)"
-          className="ml-auto shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
+          className="shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
         >
           <X size={13} />
         </button>

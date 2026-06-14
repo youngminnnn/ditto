@@ -4,9 +4,12 @@ import { getStore } from '../store'
 import { getTranscripts } from '../transcripts'
 import { ClaudeSession } from './session'
 import { askSideQuestion } from './sideQuestion'
+import { runCommandOn, runCommandShortLived, invalidateAfterReload } from './control'
 import { IPC } from '@shared/types'
 import type {
   ChatEvent,
+  CommandPanelKind,
+  CommandResult,
   ImageAttachment,
   PermissionDecision,
   PermissionMode,
@@ -107,6 +110,22 @@ export class SessionManager {
           message: err instanceof Error ? err.message : String(err)
         })
       )
+  }
+
+  /**
+   * 인터랙티브 명령(/mcp·/context·/reload-plugins 등)을 실행해 카드용 데이터를 돌려준다.
+   * 라이브 세션 쿼리가 있으면 그 위에서(=지금 돌고 있는 에이전트 기준), 없으면 단명 쿼리로 폴백한다.
+   */
+  async runCommand(workspaceId: string, kind: CommandPanelKind): Promise<CommandResult> {
+    const ws = this.getWorkspace(workspaceId)
+    if (!ws) throw new Error('Workspace not found.')
+
+    const live = this.sessions.get(workspaceId)?.liveQuery
+    const result = live
+      ? await runCommandOn(kind, live)
+      : await runCommandShortLived(kind, ws.worktreePath, this.getRepoPath(ws.repoId))
+    invalidateAfterReload(kind, ws.worktreePath)
+    return result
   }
 
   async interrupt(workspaceId: string): Promise<void> {

@@ -3,6 +3,7 @@ import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AsyncQueue } from './asyncQueue'
 import { resolveClaudeExecutable } from './executable'
 import { MCP_SETTING_SOURCES } from './mcp'
+import { INTERACTIVE_COMMANDS } from '@shared/types'
 import type { SlashCommandInfo } from '@shared/types'
 
 /**
@@ -17,16 +18,24 @@ const cache = new Map<string, Promise<SlashCommandInfo[]>>()
 
 /**
  * SDK supportedCommands() 가 돌려주지 않는 내장 명령을 자동완성에 보강한다.
- * /btw 는 Claude Code TUI 전용(local-jsx · control-request)이라 SDK 목록에서 빠지지만,
- * Ditto 는 이를 사이드 질문으로 직접 처리하므로(sideQuestion.ts) 입력창에서 고를 수 있어야 한다.
+ * /btw 와 /mcp·/context·/reload-plugins 등은 Claude Code TUI 전용(local-jsx · control-request)이라
+ * SDK 목록에서 빠지지만, Ditto 는 이를 직접 처리하므로(sideQuestion.ts · control.ts) 입력창에서
+ * 고를 수 있어야 한다.
  */
 const BUILTIN_COMMANDS: SlashCommandInfo[] = [
   {
     name: 'btw',
     description: 'Ask a quick side question without interrupting the current task',
     argumentHint: '<question>'
-  }
+  },
+  ...INTERACTIVE_COMMANDS.map((c) => ({ name: c.name, description: c.description }))
 ]
+
+/** 플러그인/스킬 리로드 후 자동완성 명령 목록을 다시 받도록 캐시를 비운다. */
+export function clearCommandsCache(cwd?: string): void {
+  if (cwd) cache.delete(cwd)
+  else cache.clear()
+}
 
 export function listSlashCommands(cwd: string): Promise<SlashCommandInfo[]> {
   const cached = cache.get(cwd)

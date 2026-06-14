@@ -4,6 +4,8 @@ import type {
   AuthStatus,
   ChatItem,
   ChatEnvelope,
+  CommandPanelKind,
+  CommandResult,
   CreateWorkspaceArgs,
   DirEntry,
   FileContent,
@@ -99,6 +101,14 @@ export interface DittoApi {
   commands: {
     /** 입력창 자동완성용 슬래시 명령/스킬 목록(/btw, /insights, 사용자 스킬 등). */
     list(workspaceId: string): Promise<SlashCommandInfo[]>
+    /**
+     * 인터랙티브 명령(/mcp·/context·/reload-plugins 등)을 실행해 카드용 데이터를 받는다.
+     * 일반 프롬프트로 보내면 동작하지 않는 TUI 전용 명령을 SDK 제어 메서드로 재현한다.
+     */
+    run(
+      workspaceId: string,
+      kind: CommandPanelKind
+    ): Promise<{ result?: CommandResult; error?: string }>
   }
 
   terminal: {

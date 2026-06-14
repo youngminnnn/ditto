@@ -112,6 +112,12 @@ export interface AppSettings {
   /** 세션 응답이 완료되면 소리로 알림. */
   soundOnComplete: boolean
   /**
+   * 우측 작업 패널(파일/변경/체크 + 터미널)의 펼침 기본값.
+   * true(기본)면 펼침, false 면 접힘. 사용자가 아직 패널을 토글한 적이 없을 때의 시작값으로 쓰인다
+   * (한 번 토글하면 그 상태가 localStorage 에 기억되어 다음 실행에서 이 기본값보다 우선한다).
+   */
+  defaultRightPanelOpen: boolean
+  /**
    * Claude Code CLI 처럼, 한 턴이 끝났을 때 컨텍스트 사용량이 임계치를 넘으면 대화를
    * 자동으로 압축(/compact)한다. 끄면 사용량만 표시하고 압축은 수동(/compact)으로만.
    * 임계치 자체는 사용자에게 노출하지 않는 내부 상수다(session.ts 의 AUTO_COMPACT_THRESHOLD).

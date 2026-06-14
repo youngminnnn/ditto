@@ -25,6 +25,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   // 기본 다크 — 기존 사용자도 load 의 기본값 병합으로 다크를 유지한다.
   theme: 'dark',
   soundOnComplete: true,
+  // 우측 작업 패널은 기본 펼침. 기존 사용자도 load 의 기본값 병합으로 펼침을 유지한다.
+  defaultRightPanelOpen: true,
   // CLI 와 동일하게 자동 압축을 기본 켜둔다(autoCompactEnabled). 압축을 트리거하는 임계치는
   // 사용자에게 노출하지 않는 내부 상수다(session.ts 의 AUTO_COMPACT_THRESHOLD).
   autoCompact: true,

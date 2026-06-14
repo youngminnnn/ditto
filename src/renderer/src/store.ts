@@ -57,6 +57,34 @@ interface ConfirmState extends ConfirmOptions {
 let toastSeq = 0
 let pendingSeq = 0
 
+/**
+ * 우측 작업 패널의 펼침/접힘 상태를 실행 간에 기억하기 위한 localStorage 키.
+ * 권위 있는 기본값은 settings.defaultRightPanelOpen 이지만, 사용자가 한 번이라도 토글하면
+ * 그 마지막 상태를 여기 캐시해 다음 실행에서 복원한다(테마 캐시와 같은 방식).
+ */
+const RIGHT_PANEL_KEY = 'ditto.rightPanelOpen'
+
+/** 기억된 패널 상태를 읽는다. 토글한 적이 없으면(키 없음) null 을 돌려 기본값으로 폴백하게 한다. */
+function readRememberedRightPanel(): boolean | null {
+  try {
+    const v = localStorage.getItem(RIGHT_PANEL_KEY)
+    if (v === 'true') return true
+    if (v === 'false') return false
+  } catch {
+    /* private 모드 등에서 실패해도 무시 — 기본값으로 폴백한다. */
+  }
+  return null
+}
+
+/** 현재 패널 상태를 기억해 둔다(다음 실행 복원용). */
+function rememberRightPanel(open: boolean): void {
+  try {
+    localStorage.setItem(RIGHT_PANEL_KEY, String(open))
+  } catch {
+    /* 무시 — 기억은 편의 기능일 뿐이다. */
+  }
+}
+
 interface UIState {
   ready: boolean
   app: AppState | null
@@ -193,8 +221,16 @@ export const useStore = create<UIState>((set, get) => ({
     for (const w of app.workspaces) {
       if (!w.archived && w.status === 'running') seededRunningSince[w.id] = startedAt
     }
-    set({ app, ready: true, runningSince: seededRunningSince })
+    // 우측 패널: 기억된 상태가 있으면 복원하고, 없으면(처음 실행) 설정의 기본값을 따른다.
+    const remembered = readRememberedRightPanel()
+    const rightPanelOpen = remembered ?? app.settings.defaultRightPanelOpen
+    set({ app, ready: true, runningSince: seededRunningSince, rightPanelOpen })
     void get().refreshAuth()
+
+    // 패널을 토글할 때마다(키보드 ⌘J·버튼·Composer 등 경로 무관) 마지막 상태를 기억해 둔다.
+    useStore.subscribe((state, prev) => {
+      if (state.rightPanelOpen !== prev.rightPanelOpen) rememberRightPanel(state.rightPanelOpen)
+    })
 
     window.api.onState((next) => {
       // 삭제·아카이브된 workspace 의 미확인 표시가 Dock 배지에 남지 않도록 정리한다

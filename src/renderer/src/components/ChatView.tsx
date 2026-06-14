@@ -23,7 +23,6 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { useStore } from '../store'
-import { PERMISSION_LABELS, PERMISSION_ORDER } from '../lib/permission'
 import { MODEL_OPTIONS, modelLabel } from '../lib/models'
 import { formatCost } from '../lib/format'
 import MessageList from './MessageList'
@@ -33,7 +32,7 @@ import PermissionPrompt from './PermissionPrompt'
 import QuestionPrompt from './QuestionPrompt'
 import DiffModal from './DiffModal'
 import { workspaceDisplayName } from '@shared/types'
-import type { ChatItem, PermissionMode, PrState, Workspace } from '@shared/types'
+import type { ChatItem, PrState, Workspace } from '@shared/types'
 
 /**
  * PR 상태별 아이콘 + 색. Tailwind v4 는 동적으로 조합한 클래스명을 스캔하지 못하므로
@@ -158,10 +157,6 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
     }
   }
 
-  const setMode = (mode: PermissionMode): void => {
-    void window.api.workspace.setPermissionMode(workspace.id, mode)
-  }
-
   const setModel = (value: string): void => {
     void window.api.workspace.setModel(workspace.id, value || null)
   }
@@ -249,19 +244,6 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           {workspace.model && !MODEL_OPTIONS.some((m) => m.id === workspace.model) && (
             <option value={workspace.model}>{model}</option>
           )}
-        </select>
-
-        <select
-          value={workspace.permissionMode}
-          onChange={(e) => setMode(e.target.value as PermissionMode)}
-          className="no-drag text-xs bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1 text-neutral-300 hover:border-[var(--border-2)] focus:outline-none focus:border-[var(--border-strong)]"
-          title="Permission mode — ⇧⇥ to cycle"
-        >
-          {PERMISSION_ORDER.map((mode) => (
-            <option key={mode} value={mode}>
-              {PERMISSION_LABELS[mode]}
-            </option>
-          ))}
         </select>
 
         <HeaderButton title="Scripts" onClick={() => setShowScripts(workspace.id, !showScripts)} active={showScripts}>

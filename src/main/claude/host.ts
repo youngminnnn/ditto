@@ -36,6 +36,7 @@ function ensure(workspaceId: string, config: SessionConfig): ClaudeSession {
     cwd: config.cwd,
     repoPath: config.repoPath,
     model: config.model,
+    effort: config.effort,
     permissionMode: config.permissionMode,
     autoCompact: config.autoCompact,
     resumeSessionId: config.resumeSessionId,
@@ -135,6 +136,7 @@ async function handle(msg: HostCommand): Promise<void> {
           cwd: msg.cwd,
           resumeSessionId: msg.resumeSessionId,
           model: msg.model,
+          effort: msg.effort,
           question: msg.question,
           onDelta: (text) =>
             post({

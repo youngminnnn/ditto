@@ -11,7 +11,7 @@ const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
  * 디스크 영속 형식의 현재 스키마 버전. 영속 데이터 모양이 바뀔 때마다 1 올리고,
  * MIGRATIONS 에 직전 버전 → 새 버전 변환 함수를 추가한다.
  */
-const CURRENT_SCHEMA_VERSION = 3
+const CURRENT_SCHEMA_VERSION = 4
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
@@ -22,6 +22,8 @@ function normalizeMode(mode: unknown): PermissionMode {
 const DEFAULT_SETTINGS: AppSettings = {
   defaultPermissionMode: 'default',
   model: DEFAULT_MODEL,
+  // null = effort 를 지정하지 않음(모델 기본 동작). 사용자가 Settings 에서 단계를 고르면 그 값으로.
+  effort: null,
   // 기본 다크 — 기존 사용자도 load 의 기본값 병합으로 다크를 유지한다.
   theme: 'dark',
   soundOnComplete: true,
@@ -98,6 +100,15 @@ const MIGRATIONS: Array<(raw: Record<string, unknown>) => Record<string, unknown
     const workspaces = list.map((w) => ({
       ...w,
       devPort: typeof w.devPort === 'number' ? w.devPort : alloc()
+    }))
+    return { ...raw, workspaces }
+  },
+  // v3 → v4: reasoning effort(추론 노력) 도입. 기존 workspace 는 오버라이드 없음(null)으로 두어
+  // 전역 설정(settings.effort)을 따른다. settings.effort 자체는 load 의 기본값 병합으로 null 이 된다.
+  (raw) => {
+    const workspaces = ((raw.workspaces as Partial<Workspace>[]) ?? []).map((w) => ({
+      ...w,
+      effort: w.effort ?? null
     }))
     return { ...raw, workspaces }
   }

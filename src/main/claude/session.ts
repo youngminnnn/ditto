@@ -12,6 +12,8 @@ import { MCP_SETTING_SOURCES, resolveUserMcpServers } from './mcp'
 import type {
   ChatItem,
   ChatEvent,
+  EffortLevel,
+  EffortSetting,
   ImageAttachment,
   PermissionMode,
   PermissionRequest,
@@ -23,6 +25,8 @@ export interface SessionDeps {
   /** worktree 의 원본 repo 절대 경로. ~/.claude.json 의 project 스코프 MCP 조회에 쓴다(없으면 user 스코프만). */
   repoPath: string | null
   model: string | null
+  /** reasoning effort 선택값(ultracode 포함). null 이면 effort 를 지정하지 않아 모델 기본 동작을 따른다. */
+  effort: EffortSetting | null
   permissionMode: PermissionMode
   /** true 면 컨텍스트 사용률이 임계치를 넘었을 때 턴 종료 후 /compact 를 자동 주입한다. */
   autoCompact: boolean
@@ -206,6 +210,12 @@ export class ClaudeSession {
       // 사용자가 claude CLI 용으로 등록한 MCP 서버(user/project/local 스코프)를 명시 주입한다.
       // cwd 가 worktree 라 SDK 자동 탐색만으로는 원본 repo 의 project 스코프 서버가 누락되기 때문.
       const mcpServers = resolveUserMcpServers(this.deps.repoPath)
+      // 'ultracode' 는 effort 레벨이 아니라 별도 모드(xhigh + 상시 워크플로우 조율)다 — SDK 로는
+      // effort 옵션이 아니라 settings 레이어의 ultracode: true 로 전달한다. 그 외 effort 레벨은
+      // effort 옵션으로 그대로 넘기고, null 이면 아무것도 넘기지 않아 모델 기본 동작을 따른다.
+      const ultracode = this.deps.effort === 'ultracode'
+      const sdkEffort: EffortLevel | null =
+        this.deps.effort && this.deps.effort !== 'ultracode' ? this.deps.effort : null
       this.q = query({
         prompt: this.input,
         options: {
@@ -220,10 +230,13 @@ export class ClaudeSession {
           // CLAUDE.md·MCP 로딩에는 영향이 없다. 켜두기만 하면 모델이 임의로 워크플로우를 돌리진 않고,
           // 사용자가 'ultracode' 키워드나 "워크플로우로 해줘" 같은 요청을 했을 때만 Workflow 도구를 쓴다.
           // (Pro 등에서는 기본 off 이고 Ditto 엔 /config UI 도 없어, 이 주입이 없으면 기능을 켤 방법이 없다.)
-          settings: { enableWorkflows: true },
+          // ultracode 면 같은 settings 레이어에 ultracode: true 를 합친다(워크플로우는 이미 on).
+          settings: { enableWorkflows: true, ...(ultracode ? { ultracode: true } : {}) },
           ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
           ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
           ...(this.deps.model ? { model: this.deps.model } : {}),
+          // reasoning effort 가 지정돼 있으면 그대로 전달한다(ultracode 는 settings 로 처리하므로 제외).
+          ...(sdkEffort ? { effort: sdkEffort } : {}),
           // 이전 세션 ID 가 있으면 디스크에서 대화 맥락을 복원한다(과거 메시지는 재방출되지 않음).
           ...(this.deps.resumeSessionId ? { resume: this.deps.resumeSessionId } : {}),
           canUseTool: this.canUseTool

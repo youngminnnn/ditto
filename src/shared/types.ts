@@ -8,6 +8,25 @@
 // (default → accept edits → plan → auto).
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto'
 
+/**
+ * Claude Code CLI 의 reasoning effort(추론 노력) 단계. 모델이 응답에 들이는 사고 깊이를 조절한다.
+ * SDK query() 의 effort 옵션으로 그대로 전달된다(낮을수록 빠르고, 높을수록 깊게 추론).
+ * - low: 최소 사고, 가장 빠름 / medium: 보통 / high: 깊은 추론(모델 기본값)
+ * - xhigh: high 보다 더 깊게(Fable 5·Opus 4.7+) / max: 최대(Fable 5·Opus 4.6+·Sonnet 4.6)
+ * 모델마다 지원 단계가 다르며, 지원하지 않으면 CLI 가 조용히 낮춘다.
+ */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/**
+ * ditto 가 저장·표시하는 effort 선택값. SDK 의 effort 레벨에 더해, Claude Code CLI 의 effort
+ * 선택기에서 'max' 다음에 나오는 'ultracode' 를 포함한다.
+ *
+ * ultracode 는 effort 레벨이 아니라 별도 모드다 — "xhigh effort + 상시 동적 워크플로우 조율".
+ * 그래서 SDK 로는 effort 옵션이 아니라 settings 레이어의 ultracode: true 로 전달하며,
+ * 워크플로우 활성화(ditto 는 기본 on)와 xhigh 지원 모델이 필요하다(미지원 시 CLI 가 알아서 처리).
+ */
+export type EffortSetting = EffortLevel | 'ultracode'
+
 // ── 도메인 엔티티 ────────────────────────────────────────────────────────
 
 /** 연결된 git 리포지토리(메인 체크아웃). 모든 workspace 의 부모. */
@@ -86,6 +105,8 @@ export interface Workspace {
   status: WorkspaceStatus
   /** 이 workspace 전용 모델 오버라이드. null 이면 전역 설정(AppSettings.model) 을 따른다. */
   model: string | null
+  /** 이 workspace 전용 reasoning effort 오버라이드. null 이면 전역 설정(AppSettings.effort) 을 따른다. */
+  effort: EffortSetting | null
   /** init 메시지에서 확인된 실제 모델명(예: "claude-opus-4-8[1m]"). 표시용. */
   lastModel: string | null
   /** 아카이브되면 사이드바 기본 목록에서 숨기고 worktree 를 제거한다(브랜치·기록은 유지). */
@@ -107,6 +128,11 @@ export interface AppSettings {
   defaultPermissionMode: PermissionMode
   /** 사용할 모델 ID (예: "claude-opus-4-8[1m]"). */
   model: string | null
+  /**
+   * 새 turn 에 적용할 기본 reasoning effort. null 이면 effort 를 지정하지 않아 모델의 기본 동작
+   * (대략 'high' + adaptive thinking)을 따른다. workspace 가 자체 effort 를 지정하면 그 값이 우선한다.
+   */
+  effort: EffortSetting | null
   /** UI 색상 테마(다크 기본). */
   theme: ThemePreference
   /** 세션 응답이 완료되면 소리로 알림. */
@@ -343,6 +369,7 @@ export const IPC = {
   workspaceRemove: 'workspace:remove',
   workspaceSetPermissionMode: 'workspace:setPermissionMode',
   workspaceSetModel: 'workspace:setModel',
+  workspaceSetEffort: 'workspace:setEffort',
   workspaceRename: 'workspace:rename',
   workspaceOpenInEditor: 'workspace:openInEditor',
   workspaceRevealInFinder: 'workspace:revealInFinder',

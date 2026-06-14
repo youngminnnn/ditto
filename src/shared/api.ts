@@ -8,6 +8,7 @@ import type {
   CommandResult,
   CreateWorkspaceArgs,
   DirEntry,
+  EffortSetting,
   FileContent,
   GitStatus,
   ImageAttachment,
@@ -56,6 +57,7 @@ export interface DittoApi {
     remove(workspaceId: string, deleteBranch: boolean): Promise<void>
     setPermissionMode(workspaceId: string, mode: PermissionMode): Promise<void>
     setModel(workspaceId: string, model: string | null): Promise<void>
+    setEffort(workspaceId: string, effort: EffortSetting | null): Promise<void>
     /** 표시 이름 override 를 지정한다. 빈 문자열이면 override 를 지워 기본 규칙으로 되돌린다. */
     rename(workspaceId: string, name: string): Promise<void>
     revealInFinder(workspaceId: string): Promise<void>

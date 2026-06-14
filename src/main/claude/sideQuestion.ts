@@ -2,6 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { SDKMessage, SDKUserMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk'
 import { resolveClaudeExecutable } from './executable'
 import { MCP_SETTING_SOURCES } from './mcp'
+import type { EffortSetting } from '@shared/types'
 
 // session.ts 와 동일 — 패키징 빌드에서 app.asar 내부 경로로 CLI 를 spawn 해 ENOTDIR 로
 // 실패하지 않도록 unpacked 바이너리 경로를 1회 계산해 둔다(dev 에서는 null → SDK 기본값).
@@ -18,6 +19,8 @@ export interface SideQuestionOptions {
   /** 맥락을 이어받을 현재 세션 ID. 없으면(대화 시작 전) 맥락 없이 답한다. */
   resumeSessionId: string | null
   model: string | null
+  /** reasoning effort 선택값. null 이면 effort 옵션을 넘기지 않는다. */
+  effort: EffortSetting | null
   question: string
   /** 답변 텍스트 조각을 받을 때마다 호출(스트리밍). */
   onDelta: (text: string) => void
@@ -45,6 +48,8 @@ export async function askSideQuestion(opts: SideQuestionOptions): Promise<void> 
       settingSources: MCP_SETTING_SOURCES,
       ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(opts.model ? { model: opts.model } : {}),
+      // 사이드 질문은 도구·워크플로우를 쓰지 않으므로 ultracode 는 그 effort 성분(xhigh)으로만 환산한다.
+      ...(opts.effort ? { effort: opts.effort === 'ultracode' ? 'xhigh' : opts.effort } : {}),
       // resume 한 세션에 답을 덧쓰면 메인 대화가 오염되므로, forkSession 으로 새 임시 세션에 분기한다.
       ...(opts.resumeSessionId ? { resume: opts.resumeSessionId, forkSession: true } : {})
     }

@@ -237,7 +237,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
           value={workspace.model ?? ''}
           onChange={(e) => setModel(e.target.value)}
           disabled={running}
-          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 text-neutral-300 focus:outline-none focus:border-[var(--border-strong)] disabled:opacity-50"
+          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-1.5 py-1 text-neutral-300 hover:border-[var(--border-2)] focus:outline-none focus:border-[var(--border-strong)] disabled:opacity-50 disabled:cursor-not-allowed"
           title={running ? 'Stop the current turn to change model' : 'Model for this workspace'}
         >
           <option value="">Default · {modelLabel(settingsModel)}</option>
@@ -254,7 +254,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
         <select
           value={workspace.permissionMode}
           onChange={(e) => setMode(e.target.value as PermissionMode)}
-          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1 text-neutral-300 focus:outline-none focus:border-[var(--border-strong)]"
+          className="no-drag text-[11.5px] bg-[var(--surface)] border border-[var(--border)] rounded-md px-2 py-1 text-neutral-300 hover:border-[var(--border-2)] focus:outline-none focus:border-[var(--border-strong)]"
           title="Permission mode — ⇧⇥ to cycle"
         >
           {PERMISSION_ORDER.map((mode) => (
@@ -405,7 +405,7 @@ function HeaderButton({
       onClick={onClick}
       title={title}
       className={
-        'no-drag h-7 w-7 grid place-items-center rounded-md ' +
+        'no-drag h-7 w-7 grid place-items-center rounded-md active:scale-90 ' +
         (danger
           ? 'text-neutral-400 hover:bg-red-500/15 hover:text-red-400'
           : active

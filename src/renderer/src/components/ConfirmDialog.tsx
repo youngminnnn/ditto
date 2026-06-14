@@ -39,7 +39,7 @@ export default function ConfirmDialog(): React.JSX.Element | null {
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={() => resolve(false)}
-            className="text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
+            className="text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 border border-[var(--border-2)] hover:bg-[var(--surface-2)] hover:text-neutral-100"
           >
             Cancel
           </button>
@@ -47,7 +47,7 @@ export default function ConfirmDialog(): React.JSX.Element | null {
             autoFocus
             onClick={() => resolve(true)}
             className={
-              'text-[12.5px] px-3.5 py-1.5 rounded-lg font-medium ' +
+              'text-[12.5px] px-3.5 py-1.5 rounded-lg font-medium shadow-sm ' +
               (state.danger
                 ? 'bg-red-500/90 text-white hover:bg-red-500'
                 : 'bg-blue-600 text-white hover:bg-blue-500')

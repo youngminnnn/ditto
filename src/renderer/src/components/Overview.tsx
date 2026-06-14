@@ -157,7 +157,7 @@ function OverviewCard({
     <button
       onClick={onOpen}
       className={
-        'text-left rounded-xl border bg-[var(--bg-2)] p-3 hover:border-[var(--border-strong)] transition-colors ' +
+        'text-left rounded-xl border bg-[var(--bg-2)] p-3 transition-all duration-150 hover:border-[var(--border-strong)] hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ' +
         (flags.attention
           ? 'border-amber-500/40'
           : flags.running

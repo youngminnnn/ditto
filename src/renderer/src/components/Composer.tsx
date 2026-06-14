@@ -375,7 +375,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             {queue.map((m, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-2.5 pr-1.5 py-1.5"
+                className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg pl-2.5 pr-1.5 py-1.5"
               >
                 <Clock size={12} className="text-amber-400/80 shrink-0" />
                 <span
@@ -399,7 +399,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             ))}
           </div>
         )}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 transition-shadow focus-within:border-[var(--border-strong)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--focus-ring)_12%,transparent)]">
           {images.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {images.map((img) => (
@@ -429,7 +429,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               <button
                 onClick={() => void window.api.chat.interrupt(workspace.id)}
                 title="Stop the current turn"
-                className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                className="h-8 w-8 grid place-items-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95"
               >
                 <Square size={15} fill="currentColor" />
               </button>
@@ -439,7 +439,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               disabled={!text.trim() && images.length === 0}
               title={bashMode ? 'Run in terminal' : running ? 'Queue message' : 'Send'}
               className={
-                'h-8 w-8 grid place-items-center rounded-lg text-white disabled:bg-[var(--border)] disabled:text-neutral-600 ' +
+                'h-8 w-8 grid place-items-center rounded-lg text-white shadow-sm active:scale-95 disabled:bg-[var(--border)] disabled:text-neutral-600 disabled:shadow-none disabled:cursor-not-allowed ' +
                 (bashMode ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500')
               }
             >

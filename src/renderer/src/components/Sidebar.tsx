@@ -195,8 +195,11 @@ function WorkspaceRow({
         }
       }}
       className={
-        'group/ws w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-strong)] ' +
-        (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
+        'group/ws relative w-full flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-md text-left cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-strong)] ' +
+        // 선택 행은 좌측에 파란 액센트 바를 띄워 현재 위치를 또렷하게 표시한다.
+        (active
+          ? 'bg-[var(--surface-3)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-blue-500'
+          : 'hover:bg-[var(--surface)]')
       }
     >
       <StatusDot

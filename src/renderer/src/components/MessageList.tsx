@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon, Workflow, XCircle } from 'lucide-react'
+import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon, Workflow, XCircle, MessageSquarePlus } from 'lucide-react'
 import { useStore } from '../store'
 import { formatTime } from '../lib/format'
 import type { ChatItem } from '@shared/types'
@@ -65,8 +65,20 @@ export default function MessageList({
 
   if (items.length === 0) {
     return (
-      <div ref={containerRef} className="flex-1 overflow-y-auto grid place-items-center">
-        <p className="text-sm text-neutral-600">Send a message to start a Claude Code session.</p>
+      <div ref={containerRef} className="flex-1 overflow-y-auto grid place-items-center px-8">
+        <div className="flex flex-col items-center text-center max-w-sm">
+          <div className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-[var(--surface)] border border-[var(--border-2)]">
+            <MessageSquarePlus size={20} className="text-neutral-400" />
+          </div>
+          <p className="text-[13px] text-neutral-300">Start a Claude Code session</p>
+          <p className="mt-1 text-[12px] text-neutral-500 leading-relaxed">
+            Send your first message — nothing runs until you do. Type{' '}
+            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-[11px] text-neutral-300">/</kbd>{' '}
+            for commands or{' '}
+            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-[11px] text-neutral-300">!</kbd>{' '}
+            to run a terminal command.
+          </p>
+        </div>
       </div>
     )
   }

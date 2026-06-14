@@ -55,12 +55,12 @@ export default function Modal({
 }
 
 export const inputClass =
-  'w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-[var(--border-strong)]'
+  'w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-[var(--border-strong)] transition-colors'
 
 export const labelClass = 'block text-[11.5px] font-medium text-neutral-400 mb-1.5'
 
 export const primaryBtn =
-  'text-[12.5px] px-3.5 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:bg-[var(--border)] disabled:text-neutral-600'
+  'text-[12.5px] px-3.5 py-1.5 rounded-lg bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-500 disabled:bg-[var(--border)] disabled:text-neutral-600 disabled:shadow-none disabled:cursor-not-allowed'
 
 export const ghostBtn =
-  'text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]'
+  'text-[12.5px] px-3.5 py-1.5 rounded-lg text-neutral-300 border border-[var(--border-2)] hover:bg-[var(--surface-2)] hover:text-neutral-100'

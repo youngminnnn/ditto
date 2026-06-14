@@ -119,6 +119,26 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/*
+  인터랙티브 요소 전반에 부드러운 색/배경/투명도 전환을 기본 적용한다.
+  개별 컴포넌트가 transition 클래스를 빠뜨려 생기던 hover 의 즉각적인 "점프"를
+  한곳에서 없앤다. Tailwind 의 .transition 유틸(클래스 선택자)이 있는 곳은 그쪽이
+  우선하므로(요소 선택자보다 specificity 가 높음) 충돌 없이 빈틈만 메운다.
+*/
+button,
+[role='button'],
+select,
+summary,
+a {
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
 /* 키보드 포커스 가시성 (마우스 클릭에는 적용되지 않음) */
 button:focus-visible,
 [role='button']:focus-visible,

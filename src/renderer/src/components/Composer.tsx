@@ -19,15 +19,21 @@ import {
   ArrowLeft,
   RotateCw,
   Power,
-  PowerOff
+  PowerOff,
+  Cpu,
+  Zap,
+  Check
 } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
+import { MODEL_OPTIONS, modelLabel } from '../lib/models'
+import { EFFORT_OPTIONS, effortLabel } from '../lib/effort'
 import { INTERACTIVE_COMMANDS } from '@shared/types'
 import type {
   ChatItem,
   CommandPanelKind,
   CommandResult,
+  EffortSetting,
   ImageAttachment,
   ImageMediaType,
   McpAction,
@@ -84,6 +90,8 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
 
   // /mcp·/context 등 인터랙티브 명령 결과 카드(임시 표시, 닫으면 사라짐).
   const [commandCard, setCommandCard] = useState<CommandCardState | null>(null)
+  // /model·/effort 선택 카드(로컬 처리, 닫으면 사라짐).
+  const [pickerCard, setPickerCard] = useState<'model' | 'effort' | null>(null)
   // 카드 응답을 현재 요청과만 맞추기 위한 단조 토큰(워크스페이스/명령 전환 시 stale 응답 무시).
   const cmdSeq = useRef(0)
 
@@ -96,8 +104,16 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   useEffect(() => {
     setSideAnswer(null)
     setCommandCard(null)
+    setPickerCard(null)
     setImages([])
   }, [workspace.id])
+
+  /** /model·/effort 선택 카드를 연다(다른 카드는 비켜 준다). 상태줄 클릭·슬래시 명령 공용. */
+  const openPicker = (kind: 'model' | 'effort'): void => {
+    setSideAnswer(null)
+    setCommandCard(null)
+    setPickerCard(kind)
+  }
 
   const removeImage = (id: string): void => setImages((prev) => prev.filter((i) => i.id !== id))
 
@@ -221,6 +237,15 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       return
     }
 
+    // /model·/effort 는 백엔드 왕복 없이 로컬 선택 카드로 처리한다(첨부가 있으면 일반 전송).
+    const picker = images.length ? null : matchPicker(trimmed)
+    if (picker) {
+      openPicker(picker)
+      setText('')
+      historyIdx.current = -1
+      return
+    }
+
     // /mcp·/context·/reload-plugins 등 인터랙티브(TUI 전용) 명령은 일반 프롬프트로 보내면 동작하지
     // 않으므로 인터셉트해 SDK 제어 메서드로 실행하고 결과를 카드로 보여 준다(첨부가 있으면 일반 전송).
     const interactive = images.length ? null : matchInteractive(trimmed)
@@ -238,6 +263,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     if (sideQ) {
       const question = (sideQ[1] ?? '').trim()
       if (!question) return // 질문 없이 "/btw" 만 보낸 경우는 무시.
+      setPickerCard(null)
       void window.api.chat.sideQuestion(workspace.id, question)
       setText('')
       historyIdx.current = -1
@@ -252,6 +278,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     }))
     // 실행 중이면 백엔드로 바로 보내지 않고 대기 큐에 넣는다 — 칩으로 표시되고 취소할 수 있으며,
     // 현재 턴이 끝나면(idle) 순서대로 자동 전송된다. 실행 중이 아니면 즉시 전송.
+    setPickerCard(null)
     if (running) enqueueMessage(workspace.id, trimmed, payload.length ? payload : undefined)
     else void window.api.chat.send(workspace.id, trimmed, payload.length ? payload : undefined)
     setText('')
@@ -262,6 +289,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   /** 인터랙티브 명령을 실행하고 결과를 카드로 띄운다(사이드 답변 카드는 비켜 준다). */
   const runInteractive = (cmd: (typeof INTERACTIVE_COMMANDS)[number]): void => {
     setSideAnswer(null)
+    setPickerCard(null)
     const seq = ++cmdSeq.current
     setCommandCard({ kind: cmd.kind, title: `/${cmd.name}`, status: 'loading' })
     void window.api.commands.run(workspace.id, cmd.kind).then(({ result, error }) => {
@@ -355,7 +383,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             onPick={acceptCommand}
           />
         )}
-        {commandCard && !menuOpen && (
+        {commandCard && !menuOpen && !pickerCard && (
           <CommandCard
             card={commandCard}
             workspaceId={workspace.id}
@@ -365,11 +393,22 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             onClose={() => setCommandCard(null)}
           />
         )}
-        {sideAnswer && !menuOpen && !commandCard && (
+        {sideAnswer && !menuOpen && !commandCard && !pickerCard && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
         )}
-        {/* 입력창 위 상태줄: 브랜치 · 디렉토리 · 컨텍스트 사용량(항상 노출). */}
-        <StatusLine workspace={workspace} />
+        {pickerCard && !menuOpen && (
+          <PickerCard
+            kind={pickerCard}
+            workspace={workspace}
+            running={running}
+            onClose={() => {
+              setPickerCard(null)
+              taRef.current?.focus()
+            }}
+          />
+        )}
+        {/* 입력창 위 상태줄: 브랜치 · 디렉토리 · 모델 · effort · 컨텍스트 사용량(항상 노출). */}
+        <StatusLine workspace={workspace} onPick={openPicker} />
         {queue.length > 0 && (
           <div className="mb-2 space-y-1">
             {queue.map((m, i) => (
@@ -606,6 +645,12 @@ function SideAnswerCard({
       </div>
     </div>
   )
+}
+
+/** "/model"·"/effort" 면 그 종류를 돌려준다(뒤따르는 인자는 무시하고 선택 카드를 연다). */
+function matchPicker(text: string): 'model' | 'effort' | null {
+  const m = /^\/(model|effort)(?:\s.*)?$/.exec(text)
+  return m ? (m[1] as 'model' | 'effort') : null
 }
 
 /** "/mcp" 처럼 인자 없는 인터랙티브 명령이면 해당 정의를 돌려준다(아니면 null). */
@@ -1158,10 +1203,19 @@ function Empty({ children }: { children: React.ReactNode }): React.JSX.Element {
  * 컨텍스트는 Claude Code CLI 의 컨텍스트 게이지에 대응 — 막대 + 퍼센트로 표시하고,
  * 자동 압축이 도는 동안에는 진행 표시로, 사용량 데이터가 아직 없으면(첫 턴 전) "—" 로 바뀐다.
  */
-function StatusLine({ workspace }: { workspace: Workspace }): React.JSX.Element {
+function StatusLine({
+  workspace,
+  onPick
+}: {
+  workspace: Workspace
+  /** 모델/effort 항목 클릭 시 해당 선택 카드를 연다(슬래시 /model·/effort 와 동일). */
+  onPick: (kind: 'model' | 'effort') => void
+}): React.JSX.Element {
   const usage = useStore((s) => s.contextUsage[workspace.id])
   const compacting = useStore((s) => s.compacting[workspace.id] ?? false)
   const liveBranch = useStore((s) => s.gitStatus[workspace.id]?.branch)
+  const settingsModel = useStore((s) => s.app!.settings.model)
+  const settingsEffort = useStore((s) => s.app!.settings.effort)
 
   // worktree 절대 경로의 마지막 구간(디렉토리명). 비정상 경로면 전체 경로로 폴백한다.
   const dirName = workspace.worktreePath.split('/').filter(Boolean).pop() ?? workspace.worktreePath
@@ -1170,6 +1224,10 @@ function StatusLine({ workspace }: { workspace: Workspace }): React.JSX.Element 
   // 세션 도중 브랜치명을 바꾸면 반영되지 못하므로, git status 로 읽은 현재 브랜치를
   // 사용한다. 아직 git 상태를 못 받았거나 불명('?')이면 저장된 branch 로 폴백한다.
   const branch = liveBranch && liveBranch !== '?' ? liveBranch : workspace.branch
+
+  // 표시는 "유효 값" 기준: workspace 오버라이드 → (모델은 init 으로 확정된 lastModel) → 전역 설정.
+  const modelText = modelLabel(workspace.model ?? workspace.lastModel ?? settingsModel)
+  const effortText = effortLabel(workspace.effort ?? settingsEffort)
 
   return (
     <div className="flex items-center gap-3 mb-1.5 px-1 text-xs text-neutral-500">
@@ -1181,7 +1239,163 @@ function StatusLine({ workspace }: { workspace: Workspace }): React.JSX.Element 
         <Folder size={11} className="shrink-0 text-neutral-600" />
         <span className="truncate">{dirName}</span>
       </span>
+      <button
+        onClick={() => onPick('model')}
+        className="flex items-center gap-1 min-w-0 shrink hover:text-neutral-300 transition-colors"
+        title={`Model: ${modelText} — click or type /model to change`}
+      >
+        <Cpu size={11} className="shrink-0 text-neutral-600" />
+        <span className="truncate">{modelText}</span>
+      </button>
+      <button
+        onClick={() => onPick('effort')}
+        className="flex items-center gap-1 min-w-0 shrink hover:text-neutral-300 transition-colors"
+        title={`Reasoning effort: ${effortText} — click or type /effort to change`}
+      >
+        <Zap size={11} className="shrink-0 text-neutral-600" />
+        <span className="truncate">{effortText}</span>
+      </button>
       <ContextStatus usage={usage} compacting={compacting} />
+    </div>
+  )
+}
+
+/** 선택 카드 1개의 옵션. value '' = 전역 설정 따름(Default). */
+type PickerOption = { value: string; label: string; hint?: string }
+
+/**
+ * 입력창 위에 뜨는 /model·/effort 선택 카드. 백엔드 왕복 없이 로컬에서 값을 고른다 —
+ * 현재 값을 강조하고, ↑↓ 로 이동·Enter 로 적용·Esc 로 닫는다(카드가 입력창 위에 떠 있고
+ * 포커스는 textarea 에 남으므로 document 캡처 단계에서 키를 가로챈다, McpPanel 과 동일한 방식).
+ * 모델/effort 는 query 시작 시점에 고정되므로 변경 시 세션이 재시작된다 — 그래서 턴 진행 중에는
+ * 적용을 막고 안내만 보여 준다(헤더 드롭다운 시절의 동작과 동일).
+ */
+function PickerCard({
+  kind,
+  workspace,
+  running,
+  onClose
+}: {
+  kind: 'model' | 'effort'
+  workspace: Workspace
+  running: boolean
+  onClose: () => void
+}): React.JSX.Element {
+  const settingsModel = useStore((s) => s.app!.settings.model)
+  const settingsEffort = useStore((s) => s.app!.settings.effort)
+
+  const options = useMemo<PickerOption[]>(() => {
+    if (kind === 'model') {
+      const base: PickerOption[] = [
+        { value: '', label: 'Default', hint: modelLabel(settingsModel) },
+        ...MODEL_OPTIONS.map((m) => ({ value: m.id, label: m.label }))
+      ]
+      // 목록에 없는 커스텀 모델을 이미 쓰고 있으면 그 항목도 노출해 선택 상태가 보이도록.
+      if (workspace.model && !MODEL_OPTIONS.some((m) => m.id === workspace.model)) {
+        base.push({ value: workspace.model, label: workspace.model })
+      }
+      return base
+    }
+    return [
+      { value: '', label: 'Default', hint: effortLabel(settingsEffort) },
+      ...EFFORT_OPTIONS.map((e) => ({ value: e.id, label: e.label, hint: e.hint }))
+    ]
+  }, [kind, settingsModel, settingsEffort, workspace.model])
+
+  const current = kind === 'model' ? workspace.model ?? '' : workspace.effort ?? ''
+  const currentIdx = Math.max(0, options.findIndex((o) => o.value === current))
+  const [cursor, setCursor] = useState(currentIdx)
+  const activeRef = useRef<HTMLButtonElement | null>(null)
+
+  const apply = (value: string): void => {
+    if (running) return // 턴 진행 중에는 세션 재시작을 막는다(안내만).
+    if (value !== current) {
+      if (kind === 'model') void window.api.workspace.setModel(workspace.id, value || null)
+      else void window.api.workspace.setEffort(workspace.id, (value || null) as EffortSetting | null)
+    }
+    onClose()
+  }
+
+  // 최신 상태를 보는 키 핸들러를 매 렌더 갱신하고 리스너는 한 번만 바인딩한다(stale closure 방지).
+  const handlerRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  handlerRef.current = (e: KeyboardEvent): void => {
+    if (!['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'Escape') onClose()
+    else if (e.key === 'ArrowDown') setCursor((c) => (c + 1) % options.length)
+    else if (e.key === 'ArrowUp') setCursor((c) => (c - 1 + options.length) % options.length)
+    else if (e.key === 'Enter') apply(options[Math.min(cursor, options.length - 1)].value)
+  }
+  useEffect(() => {
+    const listener = (e: KeyboardEvent): void => handlerRef.current(e)
+    document.addEventListener('keydown', listener, true)
+    return () => document.removeEventListener('keydown', listener, true)
+  }, [])
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [cursor])
+
+  const title = kind === 'model' ? '/model' : '/effort'
+  const icon =
+    kind === 'model' ? (
+      <Cpu size={13} className="text-[var(--accent-400)] shrink-0" />
+    ) : (
+      <Zap size={13} className="text-[var(--accent-400)] shrink-0" />
+    )
+
+  return (
+    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-96 overflow-y-auto rounded-xl border border-[var(--accent-500)]/30 bg-[var(--bg-3)] shadow-2xl z-20">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-3)]">
+        {icon}
+        <span className="text-sm font-medium text-[var(--accent-300)] shrink-0">{title}</span>
+        <span className="text-xs text-neutral-500 truncate">
+          {kind === 'model' ? 'Model for this workspace' : 'Reasoning effort for this workspace'}
+        </span>
+        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">Esc to close</span>
+        <button
+          onClick={onClose}
+          title="Dismiss (Esc)"
+          className="shrink-0 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:text-neutral-200 hover:bg-[var(--surface-3)]"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="py-1">
+        {options.map((opt, i) => {
+          const active = i === cursor
+          const selected = opt.value === current
+          return (
+            <button
+              key={opt.value || '__default'}
+              ref={(el) => {
+                if (active) activeRef.current = el
+              }}
+              onMouseEnter={() => setCursor(i)}
+              onMouseDown={(e) => {
+                e.preventDefault() // textarea blur 방지
+                apply(opt.value)
+              }}
+              disabled={running}
+              className={
+                'w-full flex items-baseline gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed ' +
+                (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
+              }
+            >
+              <Check
+                size={12}
+                className={'shrink-0 translate-y-0.5 ' + (selected ? 'text-[var(--accent-400)]' : 'text-transparent')}
+              />
+              <span className="text-sm font-medium text-neutral-100 shrink-0">{opt.label}</span>
+              {opt.hint && <span className="text-xs text-neutral-500 truncate">{opt.hint}</span>}
+            </button>
+          )
+        })}
+      </div>
+      <div className="px-3 py-1.5 text-xs text-neutral-600 border-t border-[var(--border)]">
+        {running ? 'Stop the current turn to change it.' : '↑↓ navigate · ↵ select · esc close'}
+      </div>
     </div>
   )
 }

@@ -33,6 +33,8 @@ import type {
   CommandResult,
   CreateWorkspaceArgs,
   ImageAttachment,
+  McpAction,
+  McpServerInfo,
   PermissionDecision,
   PermissionMode,
   Repo,
@@ -446,6 +448,24 @@ export function registerIpc(ctx: IpcContext): void {
       try {
         const result = await ctx.sessions.runCommand(workspaceId, kind)
         return { result }
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  // /mcp 패널의 서버별 동작(재연결·활성/비활성) — 적용 후 갱신된 서버 목록을 돌려준다.
+  ipcMain.handle(
+    IPC.mcpAction,
+    async (
+      _e,
+      workspaceId: string,
+      serverName: string,
+      action: McpAction
+    ): Promise<{ servers?: McpServerInfo[]; error?: string }> => {
+      try {
+        const servers = await ctx.sessions.mcpAction(workspaceId, serverName, action)
+        return { servers }
       } catch (err) {
         return { error: err instanceof Error ? err.message : String(err) }
       }

@@ -13,7 +13,12 @@ import {
   Receipt,
   Bot,
   GitBranch,
-  Folder
+  Folder,
+  ChevronRight,
+  ArrowLeft,
+  RotateCw,
+  Power,
+  PowerOff
 } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
@@ -24,6 +29,8 @@ import type {
   CommandResult,
   ImageAttachment,
   ImageMediaType,
+  McpAction,
+  McpServerInfo,
   SlashCommandInfo,
   Workspace
 } from '@shared/types'
@@ -333,7 +340,14 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           />
         )}
         {commandCard && !menuOpen && (
-          <CommandCard card={commandCard} onClose={() => setCommandCard(null)} />
+          <CommandCard
+            card={commandCard}
+            workspaceId={workspace.id}
+            onResult={(result) =>
+              setCommandCard((prev) => (prev ? { ...prev, result } : prev))
+            }
+            onClose={() => setCommandCard(null)}
+          />
         )}
         {sideAnswer && !menuOpen && !commandCard && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
@@ -578,15 +592,337 @@ const MCP_STATUS_COLOR: Record<string, string> = {
   disabled: 'bg-neutral-600'
 }
 
+const MCP_STATUS_LABEL: Record<McpServerInfo['status'], string> = {
+  connected: 'connected',
+  failed: 'failed',
+  'needs-auth': 'needs auth',
+  pending: 'connecting…',
+  disabled: 'disabled'
+}
+
+/** 상세 보기에서 서버 상태별로 가능한 동작 순서(키보드 커서 인덱스의 기준). */
+function mcpActionsFor(server: McpServerInfo): McpAction[] {
+  return server.status === 'disabled' ? ['enable'] : ['reconnect', 'disable']
+}
+
+/** 동작 메뉴 항목의 아이콘·라벨. */
+const MCP_ACTION_META: Record<McpAction, { icon: React.ReactNode; label: string }> = {
+  reconnect: { icon: <RotateCw size={12} />, label: 'Reconnect' },
+  enable: { icon: <Power size={12} />, label: 'Enable' },
+  disable: { icon: <PowerOff size={12} />, label: 'Disable' }
+}
+
+/** 키보드로 가로채는 내비게이션 키(나머지 입력은 textarea 로 그대로 흘려보낸다). */
+const MCP_NAV_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape']
+
+/**
+ * /mcp 패널. Claude Code CLI 의 /mcp 처럼 단순 목록이 아니라, 서버를 골라 들어가 재연결·
+ * 활성/비활성을 할 수 있는 인터랙티브 뷰다. 동작은 main 의 살아 있는 세션 제어 채널에서
+ * 일어나며(필요하면 세션을 warm up), 적용 후 갱신된 목록을 onResult 로 카드에 되돌린다.
+ *
+ * 카드는 입력창(textarea) 위에 떠 있고 포커스는 textarea 에 남으므로, 방향키/Enter 를
+ * document 캡처 단계에서 가로채 처리한다 — 가로챈 키는 stopPropagation 으로 textarea(=히스토리
+ * 탐색·전송)까지 가지 않게 막고, 그 외 키는 건드리지 않아 평소처럼 입력된다. 목록에서의 Esc 만은
+ * 가로채지 않고 흘려보내 Composer 가 카드를 닫게 둔다.
+ */
+function McpPanel({
+  servers,
+  workspaceId,
+  onResult
+}: {
+  servers: McpServerInfo[]
+  workspaceId: string
+  onResult: (result: CommandResult) => void
+}): React.JSX.Element {
+  const [selected, setSelected] = useState<string | null>(null)
+  const [busy, setBusy] = useState<McpAction | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [listCursor, setListCursor] = useState(0)
+  const [actionCursor, setActionCursor] = useState(0)
+  // 키보드 커서가 가리키는 항목(스크롤 추적용).
+  const activeRef = useRef<HTMLElement | null>(null)
+
+  const current = selected ? servers.find((s) => s.name === selected) ?? null : null
+
+  const open = (name: string): void => {
+    setSelected(name)
+    setActionCursor(0)
+    setError(null)
+  }
+  const back = (): void => {
+    setSelected(null)
+    setError(null)
+  }
+  const runAction = (action: McpAction, name: string): void => {
+    setBusy(action)
+    setError(null)
+    void window.api.commands.mcpAction(workspaceId, name, action).then((res) => {
+      setBusy(null)
+      if (res.error || !res.servers) {
+        setError(res.error || 'Action failed.')
+        return
+      }
+      onResult({ kind: 'mcp', servers: res.servers })
+    })
+  }
+
+  // 최신 상태를 보는 키 핸들러를 매 렌더 갱신하고, 리스너는 한 번만 바인딩한다(stale closure 방지).
+  const handlerRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  handlerRef.current = (e: KeyboardEvent): void => {
+    if (!servers.length || !MCP_NAV_KEYS.includes(e.key)) return
+    const stop = (): void => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    // 상세 보기: ↑/↓ 로 동작(+뒤로) 이동, Enter 실행, Esc/← 로 뒤로.
+    if (current) {
+      if (e.key === 'Escape' || e.key === 'ArrowLeft') {
+        stop()
+        back()
+        return
+      }
+      stop() // 그 외 내비 키는 진행 중이어도 textarea 로 새지 않게 가둔다.
+      if (busy) return
+      const acts = mcpActionsFor(current)
+      const count = acts.length + 1 // +뒤로
+      if (e.key === 'ArrowDown') setActionCursor((c) => (c + 1) % count)
+      else if (e.key === 'ArrowUp') setActionCursor((c) => (c - 1 + count) % count)
+      else if (e.key === 'Enter') {
+        if (actionCursor >= acts.length) back()
+        else runAction(acts[actionCursor], current.name)
+      }
+      return
+    }
+
+    // 목록 보기: Esc 는 카드 닫기(Composer)에 맡기고, 나머지는 가로채 이동/진입한다.
+    if (e.key === 'Escape') return
+    stop()
+    if (e.key === 'ArrowDown') setListCursor((c) => (c + 1) % servers.length)
+    else if (e.key === 'ArrowUp') setListCursor((c) => (c - 1 + servers.length) % servers.length)
+    else if (e.key === 'Enter' || e.key === 'ArrowRight') {
+      const s = servers[Math.min(listCursor, servers.length - 1)]
+      if (s) open(s.name)
+    }
+  }
+
+  useEffect(() => {
+    const listener = (e: KeyboardEvent): void => handlerRef.current(e)
+    document.addEventListener('keydown', listener, true)
+    return () => document.removeEventListener('keydown', listener, true)
+  }, [])
+
+  // 커서가 가리키는 항목을 화면 안으로 스크롤.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [listCursor, actionCursor, selected])
+
+  if (servers.length === 0) return <Empty>No MCP servers configured.</Empty>
+
+  if (current) {
+    return (
+      <McpServerDetail
+        server={current}
+        busy={busy}
+        error={error}
+        cursor={actionCursor}
+        activeRef={activeRef}
+        onHover={setActionCursor}
+        onActivate={(i) => {
+          const acts = mcpActionsFor(current)
+          if (i >= acts.length) back()
+          else runAction(acts[i], current.name)
+        }}
+      />
+    )
+  }
+
+  const cursor = Math.min(listCursor, servers.length - 1)
+  return (
+    <div className="space-y-1.5">
+      <ul className="space-y-0.5">
+        {servers.map((s, i) => {
+          const active = i === cursor
+          return (
+            <li key={s.name}>
+              <button
+                ref={(el) => {
+                  if (active) activeRef.current = el
+                }}
+                onMouseEnter={() => setListCursor(i)}
+                onClick={() => open(s.name)}
+                className={`w-full flex items-center gap-2 text-left rounded-md px-1.5 py-1 transition-colors ${active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface-3)]'}`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full shrink-0 ${MCP_STATUS_COLOR[s.status] ?? 'bg-neutral-500'}`}
+                  title={MCP_STATUS_LABEL[s.status]}
+                />
+                <span className="font-medium text-neutral-100 truncate">{s.name}</span>
+                <span className="text-[11px] text-neutral-500 shrink-0">
+                  {MCP_STATUS_LABEL[s.status]}
+                </span>
+                {s.scope && (
+                  <span className="text-[11px] text-neutral-600 shrink-0">· {s.scope}</span>
+                )}
+                {typeof s.toolCount === 'number' && (
+                  <span className="text-[11px] text-neutral-500 ml-auto shrink-0">
+                    {s.toolCount} {s.toolCount === 1 ? 'tool' : 'tools'}
+                  </span>
+                )}
+                <ChevronRight
+                  size={13}
+                  className={`text-neutral-600 shrink-0 ${typeof s.toolCount === 'number' ? '' : 'ml-auto'}`}
+                />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <McpHint text="↑↓ navigate · ↵ open · esc close" />
+    </div>
+  )
+}
+
+/** /mcp 서버 1개의 상세 + 동작(재연결·활성/비활성) 메뉴 뷰. */
+function McpServerDetail({
+  server,
+  busy,
+  error,
+  cursor,
+  activeRef,
+  onHover,
+  onActivate
+}: {
+  server: McpServerInfo
+  busy: McpAction | null
+  error: string | null
+  /** 키보드 커서 인덱스(0..actions.length, 마지막은 '뒤로'). */
+  cursor: number
+  activeRef: React.MutableRefObject<HTMLElement | null>
+  onHover: (index: number) => void
+  onActivate: (index: number) => void
+}): React.JSX.Element {
+  const actions = mcpActionsFor(server)
+  const items = actions.length // '뒤로' 항목 인덱스
+
+  return (
+    <div className="space-y-2.5">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full shrink-0 ${MCP_STATUS_COLOR[server.status] ?? 'bg-neutral-500'}`}
+          />
+          <span className="font-medium text-neutral-100 truncate">{server.name}</span>
+          <span className="text-[11px] text-neutral-500 shrink-0">
+            {MCP_STATUS_LABEL[server.status]}
+          </span>
+          {server.version && (
+            <span className="text-[11px] text-neutral-600 shrink-0">v{server.version}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-neutral-500">
+          {server.scope && <span>scope: {server.scope}</span>}
+          {server.transport && <span>transport: {server.transport}</span>}
+          {typeof server.toolCount === 'number' && (
+            <span>
+              {server.toolCount} {server.toolCount === 1 ? 'tool' : 'tools'}
+            </span>
+          )}
+        </div>
+        {server.endpoint && (
+          <div className="text-[11px] text-neutral-600 break-all" title={server.endpoint}>
+            {server.endpoint}
+          </div>
+        )}
+      </div>
+
+      {server.error && (
+        <div className="text-[11px] text-red-400 break-words rounded-md bg-red-500/10 px-2 py-1.5">
+          {server.error}
+        </div>
+      )}
+
+      {server.status === 'needs-auth' && (
+        <div className="text-[11px] text-amber-400">
+          Authentication required — reconnect to start the auth flow.
+        </div>
+      )}
+
+      {/* 동작 메뉴: CLI /mcp 와 동일하게 재연결 + 활성/비활성 + 뒤로. 키보드/마우스 모두 가능. */}
+      <div className="space-y-0.5">
+        {actions.map((action, i) => {
+          const active = i === cursor
+          const loading = busy === action
+          return (
+            <button
+              key={action}
+              ref={(el) => {
+                if (active) activeRef.current = el
+              }}
+              onMouseEnter={() => onHover(i)}
+              onClick={() => onActivate(i)}
+              disabled={busy !== null}
+              className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-[11.5px] transition-colors disabled:opacity-50 disabled:cursor-default ${active ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-300 hover:bg-[var(--surface-3)]'}`}
+            >
+              {loading ? <Loader2 size={12} className="animate-spin" /> : MCP_ACTION_META[action].icon}
+              {MCP_ACTION_META[action].label}
+            </button>
+          )
+        })}
+        <button
+          ref={(el) => {
+            if (cursor === items) activeRef.current = el
+          }}
+          onMouseEnter={() => onHover(items)}
+          onClick={() => onActivate(items)}
+          className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-[11.5px] transition-colors ${cursor === items ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-400 hover:bg-[var(--surface-3)]'}`}
+        >
+          <ArrowLeft size={12} /> Back to all servers
+        </button>
+      </div>
+
+      {error && <div className="text-[11px] text-red-400">{error}</div>}
+
+      {server.tools && server.tools.length > 0 && (
+        <div className="space-y-1 pt-1 border-t border-[var(--border)]">
+          <div className="text-[11px] text-neutral-500 pt-1.5">Tools</div>
+          <ul className="space-y-0.5">
+            {server.tools.map((t) => (
+              <li key={t.name} className="text-[11.5px]">
+                <span className="text-neutral-200">{t.name}</span>
+                {t.description && (
+                  <span className="text-neutral-600 truncate"> — {t.description}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <McpHint text="↑↓ navigate · ↵ select · esc/← back" />
+    </div>
+  )
+}
+
+/** /mcp 패널 하단의 키보드 조작 힌트. */
+function McpHint({ text }: { text: string }): React.JSX.Element {
+  return <div className="text-[10.5px] text-neutral-600 pt-0.5">{text}</div>
+}
+
 /**
  * 입력창 위에 뜨는 인터랙티브 명령 결과 카드(/mcp·/context 등).
  * /btw 카드와 같은 임시 표시 — 닫으면(Esc/✕) 사라지고 기록에 남지 않는다.
  */
 function CommandCard({
   card,
+  workspaceId,
+  onResult,
   onClose
 }: {
   card: CommandCardState
+  workspaceId: string
+  /** mcp 패널의 서버 동작 후 갱신된 결과를 카드에 반영하기 위한 콜백. */
+  onResult: (result: CommandResult) => void
   onClose: () => void
 }): React.JSX.Element {
   return (
@@ -611,7 +947,13 @@ function CommandCard({
         ) : card.status === 'error' ? (
           <span className="text-red-400">{card.error || 'Command failed.'}</span>
         ) : (
-          card.result && <CommandResultView result={card.result} />
+          card.result && (
+            <CommandResultView
+              result={card.result}
+              workspaceId={workspaceId}
+              onResult={onResult}
+            />
+          )
         )}
       </div>
     </div>
@@ -619,35 +961,19 @@ function CommandCard({
 }
 
 /** CommandResult 종류별 본문 렌더링. */
-function CommandResultView({ result }: { result: CommandResult }): React.JSX.Element {
+function CommandResultView({
+  result,
+  workspaceId,
+  onResult
+}: {
+  result: CommandResult
+  workspaceId: string
+  onResult: (result: CommandResult) => void
+}): React.JSX.Element {
   switch (result.kind) {
     case 'mcp':
-      return result.servers.length === 0 ? (
-        <Empty>No MCP servers configured.</Empty>
-      ) : (
-        <ul className="space-y-1.5">
-          {result.servers.map((s) => (
-            <li key={s.name} className="flex items-center gap-2">
-              <span
-                className={`h-2 w-2 rounded-full shrink-0 ${MCP_STATUS_COLOR[s.status] ?? 'bg-neutral-500'}`}
-                title={s.status}
-              />
-              <span className="font-medium text-neutral-100">{s.name}</span>
-              <span className="text-[11px] text-neutral-500">{s.status}</span>
-              {s.scope && <span className="text-[11px] text-neutral-600">· {s.scope}</span>}
-              {typeof s.toolCount === 'number' && (
-                <span className="text-[11px] text-neutral-500 ml-auto shrink-0">
-                  {s.toolCount} {s.toolCount === 1 ? 'tool' : 'tools'}
-                </span>
-              )}
-              {s.error && (
-                <span className="text-[11px] text-red-400 truncate" title={s.error}>
-                  {s.error}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+      return (
+        <McpPanel servers={result.servers} workspaceId={workspaceId} onResult={onResult} />
       )
 
     case 'agents':

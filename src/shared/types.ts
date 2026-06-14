@@ -302,6 +302,8 @@ export const IPC = {
   commandsList: 'commands:list',
   /** 인터랙티브 명령(/mcp·/context·/reload-plugins 등) 실행 — 결과 카드를 위한 데이터 조회. */
   commandRun: 'command:run',
+  /** /mcp 패널의 서버별 동작(재연결·활성/비활성) 실행 후 갱신된 서버 목록을 돌려준다. */
+  mcpAction: 'command:mcpAction',
   // 파일 브라우저 (All files 탭)
   fsList: 'fs:list',
   fsRead: 'fs:read',
@@ -476,7 +478,19 @@ export interface McpServerInfo {
   error?: string
   /** 연결된 서버 버전(있으면). */
   version?: string
+  /** 전송 방식(stdio/http/sse/claudeai-proxy). 상세 보기에서 표시. */
+  transport?: string
+  /** http/sse/claudeai 서버의 엔드포인트 URL, 또는 stdio 서버의 실행 명령. */
+  endpoint?: string
+  /** 연결된 경우 제공 도구 목록(상세 보기용). */
+  tools?: { name: string; description?: string }[]
 }
+
+/**
+ * /mcp 상세 보기에서 서버 1개에 대해 수행할 수 있는 동작.
+ * Claude Code CLI 의 /mcp 패널과 동일하게 재연결·활성/비활성 토글을 지원한다.
+ */
+export type McpAction = 'reconnect' | 'enable' | 'disable'
 
 /** /context — 컨텍스트 창 사용량 요약(상위 카테고리만). */
 export interface ContextUsageInfo {

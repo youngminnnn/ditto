@@ -445,6 +445,12 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.terminals.write(workspaceId, data)
   })
 
+  ipcMain.handle(IPC.terminalRunCommand, (_e, workspaceId: string, command: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return
+    ctx.terminals.runCommand(workspaceId, ws.worktreePath, command)
+  })
+
   ipcMain.handle(IPC.terminalResize, (_e, workspaceId: string, cols: number, rows: number) => {
     ctx.terminals.resize(workspaceId, cols, rows)
   })

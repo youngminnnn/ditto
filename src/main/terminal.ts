@@ -27,42 +27,65 @@ export class TerminalManager {
   constructor(private dispatch: Dispatch) {}
 
   /**
+   * workspace 의 PTY 를 생성·보장한다(이미 있으면 그대로 반환). 화면 재생(reset)은 하지 않는다.
+   * 화면이 붙어 있지 않은 상태에서도(우측 패널 숨김 등) 명령을 실행할 수 있도록,
+   * start() 와 runCommand() 가 공유하는 PTY 생성 지점이다.
+   */
+  private ensure(workspaceId: string, cwd: string, cols: number, rows: number): Term {
+    let term = this.terms.get(workspaceId)
+    if (term) return term
+
+    const shell = process.env.SHELL || '/bin/zsh'
+    const proc = pty.spawn(shell, ['-l'], {
+      name: 'xterm-256color',
+      cols: Math.max(cols, 1),
+      rows: Math.max(rows, 1),
+      cwd,
+      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
+    })
+    term = { proc, buffer: '' }
+    this.terms.set(workspaceId, term)
+
+    proc.onData((data) => {
+      const t = this.terms.get(workspaceId)
+      if (t) {
+        t.buffer += data
+        if (t.buffer.length > BUFFER_LIMIT) t.buffer = t.buffer.slice(-BUFFER_LIMIT)
+      }
+      this.dispatch(IPC.evtTerminalData, { workspaceId, data })
+    })
+    proc.onExit(({ exitCode }) => {
+      this.terms.delete(workspaceId)
+      this.dispatch(IPC.evtTerminalExit, { workspaceId, code: exitCode })
+    })
+    return term
+  }
+
+  /**
    * workspace 의 PTY 를 보장하고, 화면 복원을 위해 누적 버퍼를 reset 이벤트로 재생한다.
    * 이미 떠 있으면 새로 만들지 않고 버퍼만 재생한다(전환 후 복귀).
    */
   start(workspaceId: string, cwd: string, cols: number, rows: number): void {
-    let term = this.terms.get(workspaceId)
-    if (!term) {
-      const shell = process.env.SHELL || '/bin/zsh'
-      const proc = pty.spawn(shell, ['-l'], {
-        name: 'xterm-256color',
-        cols: Math.max(cols, 1),
-        rows: Math.max(rows, 1),
-        cwd,
-        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
-      })
-      term = { proc, buffer: '' }
-      this.terms.set(workspaceId, term)
-
-      proc.onData((data) => {
-        const t = this.terms.get(workspaceId)
-        if (t) {
-          t.buffer += data
-          if (t.buffer.length > BUFFER_LIMIT) t.buffer = t.buffer.slice(-BUFFER_LIMIT)
-        }
-        this.dispatch(IPC.evtTerminalData, { workspaceId, data })
-      })
-      proc.onExit(({ exitCode }) => {
-        this.terms.delete(workspaceId)
-        this.dispatch(IPC.evtTerminalExit, { workspaceId, code: exitCode })
-      })
-    } else {
-      // 이미 떠 있던 PTY 면 요청 크기에 맞춰 다시 맞춘다.
-      this.safeResize(term, cols, rows)
-    }
+    const existed = this.terms.has(workspaceId)
+    const term = this.ensure(workspaceId, cwd, cols, rows)
+    // 이미 떠 있던 PTY 면 요청 크기에 맞춰 다시 맞춘다.
+    if (existed) this.safeResize(term, cols, rows)
 
     // 누적 버퍼를 화면 복원용으로 재생(reset). 실시간 출력과 같은 채널이라 순서가 보장된다.
     this.dispatch(IPC.evtTerminalData, { workspaceId, data: term.buffer, reset: true })
+  }
+
+  /**
+   * 입력창의 `!명령` 을 PTY 에서 실행한다(Claude Code CLI 의 bash 모드).
+   * 화면(xterm)이 아직 안 붙어 있어도 동작하도록 PTY 를 기본 크기로 보장한 뒤 명령을 보낸다.
+   * 화면이 나중에 붙으면 누적 버퍼(명령 + 출력)가 재생되어 그대로 복원된다.
+   */
+  runCommand(workspaceId: string, cwd: string, command: string): void {
+    const cmd = command.trim()
+    if (!cmd) return
+    const term = this.ensure(workspaceId, cwd, 80, 24)
+    // 캐리지 리턴으로 셸에 한 줄을 제출한다. 줄 끝의 개행은 셸이 알아서 처리한다.
+    term.proc.write(`${cmd}\r`)
   }
 
   write(workspaceId: string, data: string): void {

@@ -278,6 +278,8 @@ export const IPC = {
   terminalInput: 'terminal:input',
   terminalResize: 'terminal:resize',
   terminalKill: 'terminal:kill',
+  /** 입력창의 `!명령` (Claude Code CLI bash 모드)을 PTY 에서 실행한다. */
+  terminalRunCommand: 'terminal:runCommand',
   // Dock 미확인 배지
   appSetBadge: 'app:setBadge',
 

@@ -115,6 +115,11 @@ export interface DittoApi {
     /** workspace PTY 를 보장하고 현재 화면 버퍼를 재생한다. */
     start(workspaceId: string, cols: number, rows: number): Promise<void>
     input(workspaceId: string, data: string): Promise<void>
+    /**
+     * 입력창의 `!명령` 을 PTY 에서 실행한다(Claude Code CLI 의 bash 모드).
+     * 터미널이 아직 안 떠 있으면 기본 크기로 띄운 뒤 명령을 보낸다.
+     */
+    runCommand(workspaceId: string, command: string): Promise<void>
     resize(workspaceId: string, cols: number, rows: number): Promise<void>
     kill(workspaceId: string): Promise<void>
     onData(cb: (e: TerminalDataEvent) => void): () => void

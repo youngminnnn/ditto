@@ -11,7 +11,9 @@ import {
   RefreshCw,
   Gauge,
   Receipt,
-  Bot
+  Bot,
+  GitBranch,
+  Folder
 } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
@@ -336,6 +338,8 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
         {sideAnswer && !menuOpen && !commandCard && (
           <SideAnswerCard answer={sideAnswer} onClose={() => setSideAnswer(null)} />
         )}
+        {/* 입력창 위 상태줄: 브랜치 · 디렉토리 · 컨텍스트 사용량(항상 노출). */}
+        <StatusLine workspace={workspace} />
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 focus-within:border-[var(--border-strong)] transition-colors">
           {images.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
@@ -405,7 +409,6 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
             )
           })()}
         </div>
-        <ContextMeter workspaceId={workspace.id} />
       </div>
     </div>
   )
@@ -766,36 +769,74 @@ function Empty({ children }: { children: React.ReactNode }): React.JSX.Element {
 }
 
 /**
- * 입력창 푸터 우측의 컨텍스트 사용량 미터(Claude Code CLI 의 컨텍스트 게이지에 대응).
- * 마지막 턴 기준 사용률을 막대 + 퍼센트로 보여 주고, 자동 압축이 도는 동안에는 진행 표시로 바뀐다.
- * 사용량 데이터가 아직 없으면(첫 턴 전) 아무것도 그리지 않는다.
+ * 입력창 바로 위에 항상 노출되는 상태줄.
+ * 현재 브랜치 · worktree 디렉토리명 · 컨텍스트 사용량을 한 줄로 보여 준다(옵셔널/토글 없음).
+ * 컨텍스트는 Claude Code CLI 의 컨텍스트 게이지에 대응 — 막대 + 퍼센트로 표시하고,
+ * 자동 압축이 도는 동안에는 진행 표시로, 사용량 데이터가 아직 없으면(첫 턴 전) "—" 로 바뀐다.
  */
-function ContextMeter({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
-  const usage = useStore((s) => s.contextUsage[workspaceId])
-  const compacting = useStore((s) => s.compacting[workspaceId] ?? false)
+function StatusLine({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const usage = useStore((s) => s.contextUsage[workspace.id])
+  const compacting = useStore((s) => s.compacting[workspace.id] ?? false)
 
+  // worktree 절대 경로의 마지막 구간(디렉토리명). 비정상 경로면 전체 경로로 폴백한다.
+  const dirName = workspace.worktreePath.split('/').filter(Boolean).pop() ?? workspace.worktreePath
+
+  return (
+    <div className="flex items-center gap-3 mb-1.5 px-1 text-[11px] text-neutral-500">
+      <span className="flex items-center gap-1 min-w-0 shrink" title={`Branch: ${workspace.branch}`}>
+        <GitBranch size={11} className="shrink-0 text-neutral-600" />
+        <span className="truncate">{workspace.branch}</span>
+      </span>
+      <span className="flex items-center gap-1 min-w-0 shrink" title={`Directory: ${workspace.worktreePath}`}>
+        <Folder size={11} className="shrink-0 text-neutral-600" />
+        <span className="truncate">{dirName}</span>
+      </span>
+      <ContextStatus usage={usage} compacting={compacting} />
+    </div>
+  )
+}
+
+/** 상태줄 우측의 컨텍스트 사용량 표시(막대 + 퍼센트 · 압축 중 · 데이터 없음). */
+function ContextStatus({
+  usage,
+  compacting
+}: {
+  usage?: { usedTokens: number; maxTokens: number; percentage: number }
+  compacting: boolean
+}): React.JSX.Element {
   if (compacting) {
     return (
-      <span className="shrink-0 flex items-center gap-1.5 text-[11px] text-violet-400">
+      <span className="ml-auto shrink-0 flex items-center gap-1.5 text-violet-400">
         <span className="h-2.5 w-2.5 rounded-full border-2 border-violet-400/40 border-t-violet-400 animate-spin" />
         Compacting…
       </span>
     )
   }
 
-  if (!usage || usage.maxTokens <= 0) return null
+  // 첫 턴 전(사용량 미집계)에도 항상 노출 — 자리만 잡고 "—" 로 표시한다.
+  if (!usage || usage.maxTokens <= 0) {
+    return (
+      <span
+        className="ml-auto shrink-0 flex items-center gap-1.5 text-neutral-600"
+        title="Context usage appears after the first turn"
+      >
+        <Gauge size={11} className="shrink-0" />
+        context —
+      </span>
+    )
+  }
 
   const pct = Math.min(100, Math.round(usage.percentage * 100))
   // 70% 미만 중립, 70~89% 주의(amber), 90%+ 위험(red).
-  const tone =
-    pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-neutral-500'
+  const tone = pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-neutral-500'
   const barTone = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-neutral-500'
 
   return (
     <span
-      className={'shrink-0 flex items-center gap-1.5 ' + tone}
+      className={'ml-auto shrink-0 flex items-center gap-1.5 ' + tone}
       title={`Context: ${usage.usedTokens.toLocaleString()} / ${usage.maxTokens.toLocaleString()} tokens (${pct}%)`}
     >
+      <Gauge size={11} className="shrink-0" />
       <span className="h-1 w-16 rounded-full bg-[var(--surface-3)] overflow-hidden">
         <span className={'block h-full rounded-full ' + barTone} style={{ width: `${pct}%` }} />
       </span>

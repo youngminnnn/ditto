@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useStore } from '../store'
 import Modal, { inputClass, labelClass, primaryBtn, ghostBtn } from './Modal'
 import { sanitizePreview } from '../lib/format'
@@ -13,23 +13,12 @@ export default function NewWorkspaceModal({
   const app = useStore((s) => s.app)!
   const repo = app.repos.find((r) => r.id === repoId)!
   const [name, setName] = useState('')
-  const [branches, setBranches] = useState<string[]>([repo.defaultBranch])
-  const [base, setBase] = useState(repo.defaultBranch)
-
-  useEffect(() => {
-    void window.api.repo.listBranches(repoId).then((list) => {
-      if (list.length) {
-        setBranches(list)
-        setBase(list[0])
-      }
-    })
-  }, [repoId])
 
   // 닫고 즉시 사이드바에 스피너 행을 띄운다(worktree 준비는 백그라운드). 실패는 토스트로 알린다.
   const create = (): void => {
     if (!name.trim()) return
     const trimmed = name.trim()
-    void useStore.getState().createWorkspace(repoId, { name: trimmed, baseBranch: base }, trimmed)
+    void useStore.getState().createWorkspace(repoId, { name: trimmed }, trimmed)
     onClose()
   }
 
@@ -68,17 +57,10 @@ export default function NewWorkspaceModal({
 
         <div>
           <label className={labelClass}>Base branch</label>
-          <select
-            className={inputClass}
-            value={base}
-            onChange={(e) => setBase(e.target.value)}
-          >
-            {branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
+          <p className="text-[11px] text-neutral-600">
+            Always branches from the latest{' '}
+            <span className="text-neutral-400">origin/{repo.defaultBranch}</span> (fetched first).
+          </p>
         </div>
       </div>
     </Modal>

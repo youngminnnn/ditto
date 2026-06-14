@@ -71,7 +71,30 @@ export function worktreePathFor(repoPath: string, branch: string): string {
   return join(app.getPath('home'), 'ditto', 'workspaces', repoName, slug)
 }
 
-/** 새 브랜치로 worktree 를 추가한다. 브랜치가 이미 있으면 그 브랜치를 체크아웃한다. */
+/** origin 에서 fetch 한다 (origin 미설정/오프라인 등은 조용히 무시). */
+export async function fetchRemote(repoPath: string): Promise<void> {
+  await git(repoPath, ['fetch', 'origin', '--prune']).catch(() => {
+    // 리모트가 없거나 네트워크 실패 — 로컬 ref 로 폴백한다.
+  })
+}
+
+/**
+ * base 브랜치의 origin tracking ref(`origin/<base>`)를 우선 사용하고,
+ * origin ref 가 없으면(리모트 미설정 등) 로컬 base 브랜치로 폴백한다.
+ */
+async function resolveBaseStartPoint(repoPath: string, baseBranch: string): Promise<string> {
+  const remoteRef = `origin/${baseBranch.replace(/^origin\//, '')}`
+  const hasRemote = await git(repoPath, ['rev-parse', '--verify', '--quiet', remoteRef])
+    .then(() => true)
+    .catch(() => false)
+  return hasRemote ? remoteRef : baseBranch
+}
+
+/**
+ * 새 브랜치로 worktree 를 추가한다. 브랜치가 이미 있으면 그 브랜치를 체크아웃한다.
+ * 새로 만들 때는 항상 먼저 fetch 한 뒤 origin tracking ref(`origin/<base>`)에서 분기해
+ * 최신 리모트 상태를 기준으로 삼는다.
+ */
 export async function addWorktree(
   repoPath: string,
   branch: string,
@@ -84,9 +107,13 @@ export async function addWorktree(
 
   if (branchExists) {
     await git(repoPath, ['worktree', 'add', worktreePath, branch])
-  } else {
-    await git(repoPath, ['worktree', 'add', '-b', branch, worktreePath, baseBranch])
+    return
   }
+
+  // 항상 최신 origin 기준으로 분기하기 위해 먼저 fetch 한다.
+  await fetchRemote(repoPath)
+  const startPoint = await resolveBaseStartPoint(repoPath, baseBranch)
+  await git(repoPath, ['worktree', 'add', '-b', branch, worktreePath, startPoint])
 }
 
 /** worktree 를 제거하고, 요청 시 브랜치도 삭제한다. */

@@ -365,7 +365,7 @@ export interface CreateWorkspaceArgs {
   repoId: string
   /** 비어 있으면 main 이 고유 이름을 자동 생성한다. */
   name?: string
-  /** 비어 있으면 리포 기본 브랜치를 사용한다. */
+  /** @deprecated 무시됨 — 항상 origin 기본 브랜치(origin/<defaultBranch>)에서 분기한다. */
   baseBranch?: string
 }
 

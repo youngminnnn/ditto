@@ -367,6 +367,8 @@ export const IPC = {
   workspaceArchive: 'workspace:archive',
   workspaceUnarchive: 'workspace:unarchive',
   workspaceRemove: 'workspace:remove',
+  /** 한 레포의 아카이브된 워크스페이스를 한 번에 영구 삭제한다(브랜치·기록 포함). */
+  workspaceRemoveArchived: 'workspace:removeArchived',
   workspaceSetPermissionMode: 'workspace:setPermissionMode',
   workspaceSetModel: 'workspace:setModel',
   workspaceSetEffort: 'workspace:setEffort',

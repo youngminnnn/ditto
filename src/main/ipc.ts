@@ -324,6 +324,36 @@ export function registerIpc(ctx: IpcContext): void {
     }
   )
 
+  // 일괄 삭제: 한 레포의 아카이브된 워크스페이스를 모두 영구 제거한다.
+  // 단건 remove 와 동일한 정리 절차(세션·스크립트·터미널·기록·worktree·브랜치)를 각 항목에
+  // 적용하되, 상태 갱신·broadcast 는 마지막에 한 번만 수행한다.
+  ipcMain.handle(
+    IPC.workspaceRemoveArchived,
+    async (_e, repoId: string): Promise<{ count: number }> => {
+      const targets = store.getState().workspaces.filter((w) => w.repoId === repoId && w.archived)
+      const repo = repoFor(repoId)
+
+      for (const ws of targets) {
+        ctx.sessions.dispose(ws.id)
+        ctx.scripts.disposeWorkspace(ws.id)
+        ctx.terminals.disposeWorkspace(ws.id)
+        getTranscripts().remove(ws.id)
+        // 아카이브된 워크스페이스는 worktree 디렉토리가 이미 제거된 상태일 수 있으나,
+        // removeWorktree 는 누락된 worktree 를 prune 으로 정리하므로 안전하다. 브랜치도 함께 삭제.
+        if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, true)
+      }
+
+      if (targets.length > 0) {
+        const ids = new Set(targets.map((w) => w.id))
+        store.update((st) => {
+          st.workspaces = st.workspaces.filter((w) => !ids.has(w.id))
+        })
+        broadcastState()
+      }
+      return { count: targets.length }
+    }
+  )
+
   ipcMain.handle(
     IPC.workspaceSetPermissionMode,
     async (_e, workspaceId: string, mode: PermissionMode) => {

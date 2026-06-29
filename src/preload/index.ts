@@ -24,6 +24,7 @@ const api: DittoApi = {
     unarchive: (workspaceId) => ipcRenderer.invoke(IPC.workspaceUnarchive, workspaceId),
     remove: (workspaceId, deleteBranch) =>
       ipcRenderer.invoke(IPC.workspaceRemove, workspaceId, deleteBranch),
+    removeArchived: (repoId) => ipcRenderer.invoke(IPC.workspaceRemoveArchived, repoId),
     setPermissionMode: (workspaceId, mode) =>
       ipcRenderer.invoke(IPC.workspaceSetPermissionMode, workspaceId, mode),
     setModel: (workspaceId, model) => ipcRenderer.invoke(IPC.workspaceSetModel, workspaceId, model),

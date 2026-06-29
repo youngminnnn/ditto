@@ -55,6 +55,8 @@ export interface DittoApi {
     archive(workspaceId: string): Promise<void>
     unarchive(workspaceId: string): Promise<{ error?: string }>
     remove(workspaceId: string, deleteBranch: boolean): Promise<void>
+    /** 한 레포의 아카이브된 워크스페이스를 모두 영구 삭제한다(브랜치·기록 포함). 삭제된 개수를 반환. */
+    removeArchived(repoId: string): Promise<{ count: number }>
     setPermissionMode(workspaceId: string, mode: PermissionMode): Promise<void>
     setModel(workspaceId: string, model: string | null): Promise<void>
     setEffort(workspaceId: string, effort: EffortSetting | null): Promise<void>

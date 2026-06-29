@@ -9,13 +9,14 @@ import {
   ArchiveRestore,
   Trash2,
   ChevronRight,
-  ShieldQuestion
+  ShieldQuestion,
+  Pencil
 } from 'lucide-react'
 import { useStore } from '../store'
 import { workspaceDisplayName } from '@shared/types'
 import { useNow } from '../lib/useNow'
 import { formatDuration } from '../lib/format'
-import type { Workspace } from '@shared/types'
+import type { PrState, PrStatus, Workspace } from '@shared/types'
 
 /** running 상태가 이 시간을 넘기면 사이드바에 "오래 실행 중" 힌트(멈춤일 수 있음)를 표시한다. */
 const RUNNING_STALE_MS = 5 * 60 * 1000
@@ -160,6 +161,8 @@ function WorkspaceRow({
   const awaitingPermission = useStore((s) =>
     s.permissions.some((p) => p.workspaceId === workspace.id)
   )
+  // null 이 아니면 표시 이름 인라인 편집 중. 초깃값은 현재 표시 이름으로 채운다.
+  const [editingName, setEditingName] = useState<string | null>(null)
 
   const active = workspace.id === selectedId
   // running 인 채로 오래 머무르면(상태 변화 없이) "멈춤일 수 있음" 으로 본다. 정확한 진입 시각은
@@ -169,6 +172,13 @@ function WorkspaceRow({
   const stale = runningMs >= RUNNING_STALE_MS
   // 표시 이름: 사용자 override → PR 제목 → worktree 이름. override 가 없으면 PR 제목이 자동 반영된다.
   const displayName = workspaceDisplayName(workspace, pr?.title)
+
+  const commitName = (): void => {
+    const name = (editingName ?? '').trim()
+    // 비우면 override 가 지워져 기본 규칙(PR 제목 → worktree 이름)으로 돌아간다.
+    if (name !== displayName) void window.api.workspace.rename(workspace.id, name)
+    setEditingName(null)
+  }
 
   const archive = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
@@ -208,14 +218,52 @@ function WorkspaceRow({
         compacting={compacting}
         stale={stale}
         runningMs={runningMs}
+        pr={pr}
       />
       <div className="flex-1 min-w-0">
-        <div
-          className={'truncate text-sm ' + (active ? 'text-neutral-100' : 'text-neutral-300')}
-          title={displayName}
-        >
-          {displayName}
-        </div>
+        {editingName !== null ? (
+          <input
+            autoFocus
+            value={editingName}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setEditingName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              // 행의 Enter/Space=선택 핸들러로 전파되지 않게 막는다.
+              e.stopPropagation()
+              if (e.key === 'Enter') commitName()
+              else if (e.key === 'Escape') setEditingName(null)
+            }}
+            className="w-full text-sm text-neutral-100 bg-[var(--surface)] border border-[var(--border-strong)] rounded px-1 py-0 outline-none"
+          />
+        ) : (
+          <div className="flex items-center gap-1 min-w-0">
+            <div
+              className={
+                'truncate text-sm cursor-text ' +
+                (active ? 'text-neutral-100' : 'text-neutral-300')
+              }
+              title={`${displayName}\n(double-click to rename · clear to reset)`}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                setEditingName(displayName)
+              }}
+            >
+              {displayName}
+            </div>
+            {/* 편집 가능 힌트: 호버 시 연필 아이콘을 띄워 이름을 바꿀 수 있음을 알린다. */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingName(displayName)
+              }}
+              className="opacity-0 group-hover/ws:opacity-100 shrink-0 grid place-items-center text-neutral-500 hover:text-neutral-200"
+              title="Rename workspace"
+            >
+              <Pencil size={11} />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-1 text-xs text-neutral-500 truncate">
           <GitBranch size={10} className="shrink-0" />
           <span className="truncate">{workspace.branch}</span>
@@ -343,18 +391,35 @@ function ArchivedRow({ workspace }: { workspace: Workspace }): React.JSX.Element
   )
 }
 
+/**
+ * PR 상태별 점 색(bg) 과 라벨. Tailwind v4 는 보간한 클래스명을 스캔하지 못하므로
+ * 상태마다 전체 클래스 문자열을 그대로 둔다(ChatView 의 PR_STYLE 와 색 일치).
+ */
+const PR_DOT: Record<PrState, { dotClass: string; label: string }> = {
+  draft: { dotClass: 'bg-neutral-400', label: 'Draft' },
+  review_required: { dotClass: 'bg-[var(--warning-400)]', label: 'Review required' },
+  changes_requested: { dotClass: 'bg-orange-400', label: 'Changes requested' },
+  approved: { dotClass: 'bg-[var(--success-400)]', label: 'Ready to merge' },
+  conflict: { dotClass: 'bg-[var(--danger-400)]', label: 'Conflict' },
+  open: { dotClass: 'bg-[var(--accent-400)]', label: 'Open' },
+  merged: { dotClass: 'bg-purple-400', label: 'Merged' },
+  closed: { dotClass: 'bg-neutral-500', label: 'Closed' }
+}
+
 function StatusDot({
   status,
   awaitingPermission,
   compacting,
   stale,
-  runningMs
+  runningMs,
+  pr
 }: {
   status: Workspace['status']
   awaitingPermission: boolean
   compacting: boolean
   stale: boolean
   runningMs: number
+  pr?: PrStatus | null
 }): React.JSX.Element {
   // 권한 대기는 가장 행동 가능한 상태라 다른 표시보다 우선한다.
   if (awaitingPermission) {
@@ -378,7 +443,26 @@ function StatusDot({
       </span>
     )
   }
-  const color = status === 'error' ? 'bg-[var(--danger-500)]' : 'bg-neutral-600'
-  const title = status === 'error' ? 'Last turn ended with an error' : 'Idle — ready for input'
-  return <span title={title} className={`h-2 w-2 rounded-full shrink-0 ${color}`} />
+  // 에러는 PR 상태보다 우선해 빨갛게 알린다.
+  if (status === 'error') {
+    return (
+      <span
+        title="Last turn ended with an error"
+        className="h-2 w-2 rounded-full shrink-0 bg-[var(--danger-500)]"
+      />
+    )
+  }
+  // idle 이면서 PR 이 있으면 점 색으로 PR 상태를 한눈에 보여 준다.
+  if (pr) {
+    const { dotClass, label } = PR_DOT[pr.state]
+    return (
+      <span
+        title={`PR #${pr.number} — ${label}`}
+        className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`}
+      />
+    )
+  }
+  return (
+    <span title="Idle — ready for input" className="h-2 w-2 rounded-full shrink-0 bg-neutral-600" />
+  )
 }

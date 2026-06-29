@@ -131,7 +131,9 @@ export default function Sidebar({
                 ))}
               </div>
 
-              {archived.length > 0 && <ArchivedSection workspaces={archived} />}
+              {archived.length > 0 && (
+                <ArchivedSection repoId={repo.id} workspaces={archived} />
+              )}
             </div>
           )
         })}
@@ -272,18 +274,48 @@ function PendingRow({ name }: { name: string }): React.JSX.Element {
   )
 }
 
-function ArchivedSection({ workspaces }: { workspaces: Workspace[] }): React.JSX.Element {
+function ArchivedSection({
+  repoId,
+  workspaces
+}: {
+  repoId: string
+  workspaces: Workspace[]
+}): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const confirm = useStore((s) => s.confirm)
+  const pushToast = useStore((s) => s.pushToast)
+
+  // 일괄 삭제: 이 레포의 아카이브된 워크스페이스를 모두 영구 제거한다.
+  const removeAll = async (): Promise<void> => {
+    const ok = await confirm({
+      title: `Delete all ${workspaces.length} archived workspaces?`,
+      body: 'This permanently removes their history and branches, and cannot be undone.',
+      confirmLabel: 'Delete all',
+      danger: true
+    })
+    if (!ok) return
+    const { count } = await window.api.workspace.removeArchived(repoId)
+    if (count > 0) pushToast('info', `Deleted ${count} archived workspaces.`)
+  }
 
   return (
     <div className="mt-1">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-600 hover:text-neutral-400"
-      >
-        <ChevronRight size={11} className={open ? 'rotate-90 transition' : 'transition'} />
-        Archived ({workspaces.length})
-      </button>
+      <div className="group/arcsec flex items-center">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex-1 flex items-center gap-1 px-2 py-1 text-xs text-neutral-600 hover:text-neutral-400"
+        >
+          <ChevronRight size={11} className={open ? 'rotate-90 transition' : 'transition'} />
+          Archived ({workspaces.length})
+        </button>
+        <button
+          onClick={removeAll}
+          className="opacity-0 group-hover/arcsec:opacity-100 mr-1.5 h-5 w-5 grid place-items-center rounded text-neutral-500 hover:bg-[var(--danger-500)]/15 hover:text-[var(--danger-400)]"
+          title="Delete all archived workspaces"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
       {open && (
         <div className="space-y-0.5">
           {workspaces.map((ws) => (

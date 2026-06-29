@@ -74,10 +74,23 @@ export function workspaceDisplayName(
   return workspace.displayName?.trim() || prTitle?.trim() || workspace.name
 }
 
-/** 하나의 작업 단위. git worktree + 전용 브랜치 + Claude 세션 1개. */
+/**
+ * 이 워크스페이스를 구동하는 AI 코딩 에이전트 백엔드 식별자.
+ * 현재는 'claude'(Claude Code, Claude Agent SDK) 하나뿐이지만, 백엔드 추상화 계층을 통해
+ * 추후 다른 에이전트(예: Codex)를 식별자만 추가해 붙일 수 있도록 도메인에 남겨 둔다.
+ * 백엔드별 기능 지원 여부(capabilities)·기본 모델 등 메타데이터는 main 의 agent 레지스트리가 보유한다.
+ */
+export type AgentBackendId = 'claude'
+
+/** 백엔드를 지정하지 않은(레거시·신규) 워크스페이스의 기본 백엔드. */
+export const DEFAULT_AGENT_BACKEND: AgentBackendId = 'claude'
+
+/** 하나의 작업 단위. git worktree + 전용 브랜치 + 에이전트 세션 1개. */
 export interface Workspace {
   id: string
   repoId: string
+  /** 이 워크스페이스를 구동하는 에이전트 백엔드. 레거시 워크스페이스는 'claude' 로 마이그레이션된다. */
+  agentBackend: AgentBackendId
   /** worktree 이름. 생성 시 정해지는 기본 이름으로, 표시 이름의 최종 폴백이다. */
   name: string
   /**
@@ -331,6 +344,27 @@ export interface GitStatus {
   behind: number
   /** 변경된(staged + unstaged + untracked) 파일 수 */
   changedFiles: number
+  /** 미해결 머지 충돌이 있는지(예: updateFromBase 후 충돌). UI 가 해결 안내를 띄울 때 쓴다. */
+  conflicted: boolean
+}
+
+// ── base 브랜치에서 업데이트(머지) ────────────────────────────────────────
+
+/**
+ * updateFromBase 결과.
+ * - updated: base 의 새 커밋을 브랜치로 머지함
+ * - up-to-date: 이미 최신이라 머지할 것이 없음
+ * - conflict: 머지 충돌 — 워킹트리가 충돌 상태로 남음(해결 또는 abortMerge 필요)
+ * - dirty: 미커밋 변경이 있어 머지를 시작하지 않음(먼저 커밋/스태시 필요)
+ * - error: 그 밖의 실패(머지는 자동으로 abort 됨)
+ */
+export interface UpdateFromBaseResult {
+  status: 'updated' | 'up-to-date' | 'conflict' | 'dirty' | 'error'
+  baseBranch: string
+  /** status==='conflict' 일 때 충돌난 파일 경로들. */
+  conflictedFiles?: string[]
+  /** dirty/error 등 사용자에게 보여 줄 사유. */
+  message?: string
 }
 
 // ── git diff (변경 검토용) ───────────────────────────────────────────────
@@ -390,6 +424,10 @@ export const IPC = {
   scriptGetStatus: 'script:getStatus',
   gitStatus: 'git:status',
   gitDiff: 'git:diff',
+  /** base 브랜치를 현재 워크스페이스 브랜치로 머지해 드리프트를 해소한다. */
+  gitUpdateFromBase: 'git:updateFromBase',
+  /** 진행 중인 머지를 취소한다(충돌 포기). */
+  gitAbortMerge: 'git:abortMerge',
   prStatus: 'pr:status',
   prCreate: 'pr:create',
   prChecks: 'pr:checks',

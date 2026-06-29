@@ -5,6 +5,7 @@ import { getStore } from '../store'
 import { getTranscripts } from '../transcripts'
 import { log } from '../logger'
 import { IPC, workspaceDisplayName } from '@shared/types'
+import { CLAUDE_META, type AgentBackend } from '../agent/backend'
 import type { HostCommand, HostEvent, SessionConfig } from './protocol'
 import type {
   ChatEvent,
@@ -34,7 +35,10 @@ type Dispatch = (channel: string, payload: unknown) => void
  * 네이티브 fatal 등으로) 죽어도 메인은 살아남아, 진행 중이던 workspace 를 idle 로 되돌리고
  * 다음 사용 시 호스트를 다시 띄운다. 권한 요청은 호스트 → 메인 → 렌더러로 라우팅한다.
  */
-export class SessionManager {
+export class SessionManager implements AgentBackend {
+  /** 이 백엔드의 메타데이터(식별·표시·capabilities). 추상화 계층이 라우팅/가드에 사용한다. */
+  readonly meta = CLAUDE_META
+
   private host: UtilityProcess | null = null
   private hostReady = false
   /** 호스트가 spawn 되기 전 들어온 명령을 모았다가 'spawn' 시 비운다. */

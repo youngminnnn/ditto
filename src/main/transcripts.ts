@@ -1,7 +1,7 @@
 import { app } from 'electron'
-import { readFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { writeFileAtomic } from './fsutil'
+import { writeFileAtomic, appendFileDurable } from './fsutil'
 import type { ChatItem } from '@shared/types'
 
 /** 메모리 캐시에 동시에 보유할 최대 workspace 수. 초과 시 LRU 로 가장 오래된 것을 제거한다. */
@@ -77,7 +77,7 @@ class TranscriptStore {
     // append 가 옛 기록과 분리된 .jsonl 을 새로 만들어 버리는 일을 막는다.
     if (!this.cache.has(workspaceId)) this.load(workspaceId)
 
-    appendFileSync(this.fileFor(workspaceId), serializeItem(item), 'utf-8')
+    appendFileDurable(this.fileFor(workspaceId), serializeItem(item))
 
     const cached = this.cache.get(workspaceId)
     if (cached) {

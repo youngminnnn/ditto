@@ -1,17 +1,20 @@
 import { app } from 'electron'
-import { readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFileAtomic } from './fsutil'
-import { BASE_DEV_PORT } from '@shared/types'
+import { log } from './logger'
+import { CLAUDE_DEFAULT_MODEL } from './agent/backend'
+import { BASE_DEV_PORT, DEFAULT_AGENT_BACKEND } from '@shared/types'
 import type { AppState, AppSettings, PermissionMode, Repo, Workspace } from '@shared/types'
 
-const DEFAULT_MODEL = 'claude-opus-4-8[1m]'
+// 기본 모델은 백엔드 메타(agent/backend.ts)와 같은 출처를 본다 — 모델 ID 가 한 곳에만 박혀 있도록.
+const DEFAULT_MODEL = CLAUDE_DEFAULT_MODEL
 
 /**
  * 디스크 영속 형식의 현재 스키마 버전. 영속 데이터 모양이 바뀔 때마다 1 올리고,
  * MIGRATIONS 에 직전 버전 → 새 버전 변환 함수를 추가한다.
  */
-const CURRENT_SCHEMA_VERSION = 4
+const CURRENT_SCHEMA_VERSION = 5
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
@@ -111,6 +114,15 @@ const MIGRATIONS: Array<(raw: Record<string, unknown>) => Record<string, unknown
       effort: w.effort ?? null
     }))
     return { ...raw, workspaces }
+  },
+  // v4 → v5: 에이전트 백엔드 식별자(agentBackend) 도입. 기존 workspace 는 모두 Claude 로 동작했으므로
+  // 기본 백엔드('claude')로 채운다. 백엔드 추상화 계층이 이 값으로 호출을 라우팅한다.
+  (raw) => {
+    const workspaces = ((raw.workspaces as Partial<Workspace>[]) ?? []).map((w) => ({
+      ...w,
+      agentBackend: w.agentBackend ?? DEFAULT_AGENT_BACKEND
+    }))
+    return { ...raw, workspaces }
   }
 ]
 
@@ -123,19 +135,50 @@ const MIGRATIONS: Array<(raw: Record<string, unknown>) => Record<string, unknown
  */
 class Store {
   private filePath: string
+  /** 직전에 정상 영속된 상태의 미러. 주 파일이 손상됐을 때 복구 출처로 쓴다. */
+  private backupPath: string
   private state: PersistedState
 
   constructor() {
     const dir = app.getPath('userData')
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     this.filePath = join(dir, 'ditto.json')
+    this.backupPath = join(dir, 'ditto.bak.json')
     this.state = this.load()
   }
 
+  /**
+   * 주 파일 → 백업 파일 순으로 읽기를 시도하고, 둘 다 실패하면 빈 상태로 시작한다.
+   * 주 파일이 손상(부분 쓰기·디스크 비트로트·외부 편집)됐어도 직전 정상 상태를 살려,
+   * 설정·워크스페이스 목록 전체가 한 번의 손상으로 날아가지 않게 한다.
+   */
   private load(): PersistedState {
-    if (!existsSync(this.filePath)) return this.empty()
+    const fromMain = this.tryLoad(this.filePath)
+    if (fromMain) return fromMain
+
+    const fromBackup = this.tryLoad(this.backupPath)
+    if (fromBackup) {
+      log.error('ditto.json 손상/누락 — 백업(ditto.bak.json)에서 복구했습니다.')
+      // 복구한 상태를 곧장 주 파일로 다시 써, 다음 부팅부터 정상 파일을 읽게 한다.
+      try {
+        writeFileAtomic(this.filePath, JSON.stringify(fromBackup, null, 2))
+      } catch (err) {
+        log.error('백업으로부터 주 파일 재기록 실패', err)
+      }
+      return fromBackup
+    }
+
+    if (existsSync(this.filePath) || existsSync(this.backupPath)) {
+      log.error('ditto.json 과 백업 모두 읽기 실패 — 빈 상태로 시작합니다.')
+    }
+    return this.empty()
+  }
+
+  /** 한 파일을 읽어 파싱·마이그레이션한다. 없거나 손상이면 null. */
+  private tryLoad(path: string): PersistedState | null {
+    if (!existsSync(path)) return null
     try {
-      const raw = JSON.parse(readFileSync(this.filePath, 'utf-8')) as Record<string, unknown>
+      const raw = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>
 
       // 버전 필드가 없거나 비정상(음수·소수·비숫자)이면 레거시(v0)로 간주한다.
       const rawVersion = raw.schemaVersion
@@ -167,8 +210,8 @@ class Store {
         settings: { ...DEFAULT_SETTINGS, ...((migrated.settings as Partial<AppSettings>) ?? {}) }
       }
     } catch {
-      // 손상된 설정 파일은 빈 상태로 시작 (앱 기동을 막지 않는다).
-      return this.empty()
+      // 손상/파싱 실패 — 호출 측이 백업으로 폴백할 수 있게 null 을 돌려준다.
+      return null
     }
   }
 
@@ -177,7 +220,15 @@ class Store {
   }
 
   private persist(): void {
-    writeFileAtomic(this.filePath, JSON.stringify(this.state, null, 2))
+    const json = JSON.stringify(this.state, null, 2)
+    writeFileAtomic(this.filePath, json)
+    // 주 파일을 성공적으로 쓴 뒤에만 백업을 갱신한다 — 그래야 백업은 항상 "한 번은 정상이었던"
+    // 상태를 가리킨다. 백업 쓰기 실패는 best-effort 로 무시한다(주 파일은 이미 안전하다).
+    try {
+      copyFileSync(this.filePath, this.backupPath)
+    } catch {
+      // 백업 갱신 실패는 무시 — 다음 persist 에서 다시 시도된다.
+    }
   }
 
   getState(): AppState {

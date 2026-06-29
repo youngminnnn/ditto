@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '@shared/types'
-import { SessionManager } from './claude/manager'
+import { AgentOrchestrator } from './agent/orchestrator'
 import { ScriptRunner } from './scripts'
 import { TerminalManager } from './terminal'
 import { registerIpc } from './ipc'
@@ -20,7 +20,7 @@ process.on('uncaughtException', (err) => log.error('uncaughtException', err))
 process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason))
 
 /**
- * 모든 창으로 채널 이벤트를 방송한다 (SessionManager/ScriptRunner 가 사용).
+ * 모든 창으로 채널 이벤트를 방송한다 (AgentOrchestrator/ScriptRunner 가 사용).
  *
  * 각 send 를 개별 try/catch 로 감싼다: 파괴된 webContents 로의 송신이나 직렬화 실패(과도하게
  * 큰/직렬화 불가 페이로드)가 던지는 예외가 호출 측 루프를 끊지 않게 한다. 페이로드 크기 자체는
@@ -37,7 +37,7 @@ function dispatch(channel: string, payload: unknown): void {
   }
 }
 
-const sessions = new SessionManager(dispatch, () => mainWindow)
+const sessions = new AgentOrchestrator(dispatch, () => mainWindow)
 const scripts = new ScriptRunner(dispatch)
 const terminals = new TerminalManager(dispatch)
 

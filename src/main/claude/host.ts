@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { ClaudeSession } from './session'
 import { askSideQuestion } from './sideQuestion'
-import { runCommandOn, runCommandShortLived, runMcpAction, invalidateAfterReload } from './control'
+import {
+  runCommandOn,
+  runCommandShortLived,
+  runMcpAction,
+  invalidateAfterReload,
+  readPermissions
+} from './control'
 import { listSlashCommands } from './commands'
 import { clampText } from './clamp'
 import { log } from '../logger'
@@ -110,12 +116,33 @@ async function handle(msg: HostCommand): Promise<void> {
 
     case 'runCommand':
       await respond(msg.reqId, async () => {
+        // /rewind 는 살아 있는 세션의 체크포인트 목록(라이브 Query 가 아님)을 읽는다.
+        if (msg.kind === 'rewind') {
+          return { kind: 'rewind', checkpoints: sessions.get(msg.workspaceId)?.getCheckpoints() ?? [] }
+        }
+        // /permissions 는 설정 파일을 읽어 현재 모드와 함께 돌려준다(Query 불필요).
+        if (msg.kind === 'permissions') {
+          return readPermissions(msg.config)
+        }
         const live = sessions.get(msg.workspaceId)?.liveQuery
         const result = live
           ? await runCommandOn(msg.kind, live)
           : await runCommandShortLived(msg.kind, msg.config.cwd, msg.config.repoPath)
         invalidateAfterReload(msg.kind, msg.config.cwd)
         return result
+      })
+      break
+
+    case 'rewindAction':
+      await respond(msg.reqId, async () => {
+        const session = sessions.get(msg.workspaceId)
+        if (!session) {
+          return {
+            canRewind: false,
+            error: 'No live session to rewind. Send a message first, then rewind within the same session.'
+          }
+        }
+        return session.rewind(msg.userMessageId)
       })
       break
 

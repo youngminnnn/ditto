@@ -18,6 +18,7 @@ import type {
   PermissionDecision,
   PermissionMode,
   PermissionRequest,
+  RewindActionResult,
   SlashCommandInfo,
   Workspace
 } from '@shared/types'
@@ -255,6 +256,36 @@ export class SessionManager {
       serverName,
       action
     }))
+  }
+
+  /** /rewind — 고른 체크포인트로 추적된 파일을 되돌리고 결과를 돌려준다. */
+  async rewindAction(workspaceId: string, userMessageId: string): Promise<RewindActionResult> {
+    const ws = this.getWorkspace(workspaceId)
+    if (!ws) throw new Error('Workspace not found.')
+    return this.request<RewindActionResult>((reqId) => ({
+      type: 'rewindAction',
+      reqId,
+      workspaceId,
+      config: this.configFor(ws),
+      userMessageId
+    }))
+  }
+
+  /**
+   * /clear — 세션을 정리하고 대화 맥락을 초기화한다(워크스페이스·worktree 는 유지).
+   * 세션 핸들을 dispose 하고 sessionId 를 비워, 다음 메시지가 빈 맥락의 새 세션으로 시작하게 한다.
+   * (트랜스크립트 파일 삭제는 ipc 가 broadcastState 와 함께 처리한다.)
+   */
+  clearSession(workspaceId: string): void {
+    this.dispose(workspaceId)
+    getStore().update((st) => {
+      const w = st.workspaces.find((x) => x.id === workspaceId)
+      if (w) {
+        w.sessionId = null
+        w.status = 'idle'
+      }
+    })
+    this.forceIdle(workspaceId)
   }
 
   /** 입력창 자동완성용 슬래시 명령 목록을 조회한다. */

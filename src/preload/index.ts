@@ -32,7 +32,8 @@ const api: DittoApi = {
       ipcRenderer.invoke(IPC.workspaceSetEffort, workspaceId, effort),
     rename: (workspaceId, name) => ipcRenderer.invoke(IPC.workspaceRename, workspaceId, name),
     revealInFinder: (workspaceId) => ipcRenderer.invoke(IPC.workspaceRevealInFinder, workspaceId),
-    openInEditor: (workspaceId) => ipcRenderer.invoke(IPC.workspaceOpenInEditor, workspaceId)
+    openInEditor: (workspaceId) => ipcRenderer.invoke(IPC.workspaceOpenInEditor, workspaceId),
+    openMemory: (workspaceId) => ipcRenderer.invoke(IPC.workspaceOpenMemory, workspaceId)
   },
 
   chat: {
@@ -40,7 +41,8 @@ const api: DittoApi = {
     interrupt: (workspaceId) => ipcRenderer.invoke(IPC.chatInterrupt, workspaceId),
     getHistory: (workspaceId) => ipcRenderer.invoke(IPC.chatGetHistory, workspaceId),
     sideQuestion: (workspaceId, question) =>
-      ipcRenderer.invoke(IPC.chatSideQuestion, workspaceId, question)
+      ipcRenderer.invoke(IPC.chatSideQuestion, workspaceId, question),
+    clear: (workspaceId) => ipcRenderer.invoke(IPC.chatClear, workspaceId)
   },
 
   permission: {
@@ -74,7 +76,9 @@ const api: DittoApi = {
     list: (workspaceId) => ipcRenderer.invoke(IPC.commandsList, workspaceId),
     run: (workspaceId, kind) => ipcRenderer.invoke(IPC.commandRun, workspaceId, kind),
     mcpAction: (workspaceId, serverName, action) =>
-      ipcRenderer.invoke(IPC.mcpAction, workspaceId, serverName, action)
+      ipcRenderer.invoke(IPC.mcpAction, workspaceId, serverName, action),
+    rewindAction: (workspaceId, userMessageId) =>
+      ipcRenderer.invoke(IPC.commandRewindAction, workspaceId, userMessageId)
   },
 
   terminal: {

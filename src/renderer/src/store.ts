@@ -158,6 +158,8 @@ interface UIState {
   /** 대기 큐에서 index 번째 메시지를 취소(제거)한다. */
   removeQueued: (workspaceId: string, index: number) => void
   setDraft: (workspaceId: string, text: string) => void
+  /** /clear — 해당 workspace 의 대화 기록·컨텍스트 사용량을 화면에서 비운다(맥락 초기화). */
+  resetTranscript: (workspaceId: string) => void
   setScrollPosition: (workspaceId: string, top: number) => void
   setScriptPanelOpen: (workspaceId: string, open: boolean) => void
   setRightWidth: (px: number) => void
@@ -563,6 +565,20 @@ export const useStore = create<UIState>((set, get) => ({
     }),
 
   setDraft: (workspaceId, text) => set((s) => ({ drafts: { ...s.drafts, [workspaceId]: text } })),
+
+  resetTranscript: (workspaceId) =>
+    set((s) => {
+      const contextUsage = { ...s.contextUsage }
+      delete contextUsage[workspaceId]
+      const compacting = { ...s.compacting }
+      delete compacting[workspaceId]
+      return {
+        transcripts: { ...s.transcripts, [workspaceId]: [] },
+        loadedTranscripts: { ...s.loadedTranscripts, [workspaceId]: true },
+        contextUsage,
+        compacting
+      }
+    }),
 
   setScrollPosition: (workspaceId, top) =>
     set((s) => ({ scrollPositions: { ...s.scrollPositions, [workspaceId]: top } })),

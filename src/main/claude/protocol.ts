@@ -56,6 +56,13 @@ export type HostCommand =
       serverName: string
       action: McpAction
     }
+  | {
+      type: 'rewindAction'
+      reqId: string
+      workspaceId: string
+      config: SessionConfig
+      userMessageId: string
+    }
   | { type: 'listCommands'; reqId: string; cwd: string }
   | {
       type: 'sideQuestion'

@@ -8,6 +8,7 @@ import { getTranscripts } from './transcripts'
 import { listDir, readFileInRoot } from './fsbrowse'
 import { log } from './logger'
 import {
+  abortMerge,
   addWorktree,
   detectDefaultBranch,
   getDiff,
@@ -17,9 +18,11 @@ import {
   removeWorktree,
   repoNameFromPath,
   sanitizeBranch,
+  updateFromBase,
   worktreePathFor
 } from './git'
 import { generateWorkspaceName } from './names'
+import { findFreePort, waitForPortFree } from './net'
 import { getPrStatus, getPrChecks, createPrWeb } from './github'
 import {
   getAuthStatus,
@@ -28,7 +31,7 @@ import {
   githubLogin,
   githubLogout
 } from './auth'
-import { IPC, allocateDevPort } from '@shared/types'
+import { IPC, DEFAULT_AGENT_BACKEND } from '@shared/types'
 import type {
   AppSettings,
   CommandPanelKind,
@@ -42,14 +45,15 @@ import type {
   PermissionMode,
   Repo,
   RewindActionResult,
-  ScriptKind
+  ScriptKind,
+  UpdateFromBaseResult
 } from '@shared/types'
-import type { SessionManager } from './claude/manager'
+import type { AgentOrchestrator } from './agent/orchestrator'
 import type { ScriptRunner } from './scripts'
 import type { TerminalManager } from './terminal'
 
 interface IpcContext {
-  sessions: SessionManager
+  sessions: AgentOrchestrator
   scripts: ScriptRunner
   terminals: TerminalManager
   getWindow: () => BrowserWindow | null
@@ -79,7 +83,7 @@ export function registerIpc(ctx: IpcContext): void {
    * workspace 의 dev 포트를 반환한다. 아직 배정 전(레거시)이면 다른 workspace 와 겹치지 않는
    * 포트를 BASE_DEV_PORT 부터 골라 배정·영속한 뒤 반환한다.
    */
-  const ensureDevPort = (workspaceId: string): number | null => {
+  const ensureDevPort = async (workspaceId: string): Promise<number | null> => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return null
     if (typeof ws.devPort === 'number') return ws.devPort
@@ -89,7 +93,7 @@ export function registerIpc(ctx: IpcContext): void {
         .workspaces.map((w) => w.devPort)
         .filter((p): p is number => typeof p === 'number')
     )
-    const port = allocateDevPort(used)
+    const port = await findFreePort(used)
     store.update((st) => {
       const w = st.workspaces.find((x) => x.id === workspaceId)
       if (w) w.devPort = port
@@ -207,11 +211,12 @@ export function registerIpc(ctx: IpcContext): void {
           .workspaces.map((w) => w.devPort)
           .filter((p): p is number => typeof p === 'number')
       )
-      const devPort = allocateDevPort(used)
+      const devPort = await findFreePort(used)
       store.update((st) =>
         st.workspaces.push({
           id,
           repoId: repo.id,
+          agentBackend: DEFAULT_AGENT_BACKEND,
           name: rawName,
           displayName: null,
           branch,
@@ -464,14 +469,39 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ── 스크립트 ───────────────────────────────────────────────────────────
 
-  ipcMain.handle(IPC.scriptRun, (_e, workspaceId: string, kind: ScriptKind) => {
+  ipcMain.handle(IPC.scriptRun, async (_e, workspaceId: string, kind: ScriptKind) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return
     const repo = repoFor(ws.repoId)
     if (!repo) return
     const command = kind === 'setup' ? repo.setupScript : repo.devScript
     // 고유 포트를 env(PORT/DITTO_DEV_PORT)로 주입한다. 레거시 workspace 는 여기서 lazy 배정.
-    const port = ensureDevPort(workspaceId)
+    let port = await ensureDevPort(workspaceId)
+
+    // dev 서버는 실제로 포트를 바인딩하므로, 배정된 포트가 며칠 전 값이라 그 사이 다른 프로세스가
+    // 차지했을 수 있다. 실행 직전에 실제 가용성을 확인하고, 외부 프로세스가 점유 중이면 비어 있는
+    // 포트로 재배정해 bind 실패를 막는다. 이 워크스페이스 자신의 이전 dev 가 같은 포트를 잡고 있을
+    // 수 있으므로 먼저 종료하고 잠깐 기다린다 — 자기 포트를 외부 점유로 오인해 매번 바꾸지 않도록.
+    if (kind === 'dev' && port != null) {
+      ctx.scripts.stop(workspaceId, 'dev')
+      const freed = await waitForPortFree(port, 1500)
+      if (!freed) {
+        const used = new Set<number>(
+          store
+            .getState()
+            .workspaces.map((w) => w.devPort)
+            .filter((p): p is number => typeof p === 'number')
+        )
+        // 외부 점유 중인 현재 포트는 findFreePort 의 OS 프로브에서 자동으로 걸러진다.
+        const next = await findFreePort(used)
+        store.update((st) => {
+          const w = st.workspaces.find((x) => x.id === workspaceId)
+          if (w) w.devPort = next
+        })
+        port = next
+      }
+    }
+
     const env = port != null ? scriptEnvFor(port) : undefined
     if (env) broadcastState()
     ctx.scripts.run(workspaceId, kind, command, ws.worktreePath, env)
@@ -497,6 +527,28 @@ export function registerIpc(ctx: IpcContext): void {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws || ws.archived) return null
     return getDiff(ws.worktreePath, ws.baseBranch).catch(() => null)
+  })
+
+  // base 브랜치를 현재 브랜치로 머지해 드리프트를 해소한다(충돌 시 워킹트리에 충돌이 남는다).
+  ipcMain.handle(
+    IPC.gitUpdateFromBase,
+    async (_e, workspaceId: string): Promise<UpdateFromBaseResult> => {
+      const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+      if (!ws || ws.archived) {
+        return { status: 'error', baseBranch: '', message: 'Workspace not found.' }
+      }
+      return updateFromBase(ws.worktreePath, ws.baseBranch).catch((err) => ({
+        status: 'error' as const,
+        baseBranch: ws.baseBranch,
+        message: err instanceof Error ? err.message : String(err)
+      }))
+    }
+  )
+
+  ipcMain.handle(IPC.gitAbortMerge, async (_e, workspaceId: string) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return
+    await abortMerge(ws.worktreePath).catch(() => {})
   })
 
   ipcMain.handle(IPC.prStatus, async (_e, workspaceId: string) => {
@@ -544,7 +596,7 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(IPC.commandsList, (_e, workspaceId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return []
-    return ctx.sessions.listCommands(ws.worktreePath).catch(() => [])
+    return ctx.sessions.listCommands(ws.id, ws.worktreePath).catch(() => [])
   })
 
   // 인터랙티브 명령(/mcp·/context·/reload-plugins 등) — 결과 카드용 데이터를 조회한다.

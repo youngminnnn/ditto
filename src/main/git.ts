@@ -3,13 +3,37 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { basename, join } from 'node:path'
 import { readFileSync, statSync } from 'node:fs'
-import type { FileDiff, FileDiffStatus, GitStatus, WorkspaceDiff } from '@shared/types'
+import type {
+  FileDiff,
+  FileDiffStatus,
+  GitStatus,
+  UpdateFromBaseResult,
+  WorkspaceDiff
+} from '@shared/types'
 
 const exec = promisify(execFile)
 
 async function git(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await exec('git', args, { cwd, maxBuffer: 1024 * 1024 * 32 })
   return stdout.trim()
+}
+
+/** 종료 코드를 throw 하지 않고 그대로 받아, 충돌처럼 "정상적인 실패"를 분기 처리할 때 쓴다. */
+async function gitTry(
+  cwd: string,
+  args: string[]
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  try {
+    const { stdout } = await exec('git', args, { cwd, maxBuffer: 1024 * 1024 * 32 })
+    return { ok: true, stdout: stdout.trim(), stderr: '' }
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string }
+    return {
+      ok: false,
+      stdout: (err.stdout ?? '').toString().trim(),
+      stderr: (err.stderr ?? '').toString().trim()
+    }
+  }
 }
 
 /** 경로가 git 워킹트리인지 확인. */
@@ -137,9 +161,13 @@ export async function getStatus(worktreePath: string, baseBranch: string): Promi
   const branch = await git(worktreePath, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => '?')
 
   let changedFiles = 0
+  let conflicted = false
   try {
     const porcelain = await git(worktreePath, ['status', '--porcelain'])
-    changedFiles = porcelain ? porcelain.split('\n').filter(Boolean).length : 0
+    const lines = porcelain ? porcelain.split('\n').filter(Boolean) : []
+    changedFiles = lines.length
+    // 미해결 머지 충돌은 XY 상태 코드에 'U' 가 있거나 AA/DD 인 항목으로 드러난다.
+    conflicted = lines.some((l) => /^(DD|AU|UD|UA|DU|AA|UU)/.test(l))
   } catch {
     // 무시 — 0 으로 둔다.
   }
@@ -160,11 +188,64 @@ export async function getStatus(worktreePath: string, baseBranch: string): Promi
     // base 브랜치 ref 가 없으면 0 으로 둔다.
   }
 
-  return { branch, ahead, behind, changedFiles }
+  return { branch, ahead, behind, changedFiles, conflicted }
 }
 
 export function repoNameFromPath(path: string): string {
   return basename(path)
+}
+
+// ── base 브랜치에서 업데이트(머지) ────────────────────────────────────────
+
+/**
+ * 최신 base 브랜치를 현재 워크스페이스 브랜치로 머지해, 병렬 작업 중 움직인 base 와의 드리프트를
+ * 해소한다(GitHub 의 "Update branch" 와 같은 의미 — base 를 브랜치로 끌어온다).
+ *
+ * 안전 장치:
+ * - 미커밋 변경이 있으면 머지가 워킹트리를 덮어쓸 수 있어 먼저 막는다('dirty').
+ * - 이미 최신이면 머지하지 않는다('up-to-date').
+ * - 충돌이 나면 워킹트리를 충돌 상태로 남겨 두고 파일 목록을 돌려준다('conflict') —
+ *   사용자가 에디터/에이전트로 해결하거나 abortMerge 로 되돌릴 수 있다.
+ */
+export async function updateFromBase(
+  worktreePath: string,
+  baseBranch: string
+): Promise<UpdateFromBaseResult> {
+  const dirty = (await git(worktreePath, ['status', '--porcelain']).catch(() => '')).trim()
+  if (dirty) {
+    return {
+      status: 'dirty',
+      baseBranch,
+      message: 'Commit or stash your changes before updating from base.'
+    }
+  }
+
+  // 최신 origin 을 먼저 가져온 뒤 origin/<base>(없으면 로컬 base)를 머지 대상으로 삼는다.
+  await fetchRemote(worktreePath)
+  const startPoint = await resolveBaseStartPoint(worktreePath, baseBranch)
+
+  const behind = await git(worktreePath, ['rev-list', '--count', `HEAD..${startPoint}`])
+    .then((s) => parseInt(s, 10) || 0)
+    .catch(() => 0)
+  if (behind === 0) return { status: 'up-to-date', baseBranch }
+
+  const merge = await gitTry(worktreePath, ['merge', '--no-edit', startPoint])
+  if (merge.ok) return { status: 'updated', baseBranch }
+
+  const conflicts = await git(worktreePath, ['diff', '--name-only', '--diff-filter=U']).catch(
+    () => ''
+  )
+  const conflictedFiles = conflicts.split('\n').map((s) => s.trim()).filter(Boolean)
+  if (conflictedFiles.length) return { status: 'conflict', baseBranch, conflictedFiles }
+
+  // 충돌이 아닌 다른 실패(예: 머지 진행 중 중단) — 머지를 깔끔히 되돌리고 메시지를 전달한다.
+  await abortMerge(worktreePath)
+  return { status: 'error', baseBranch, message: merge.stderr || 'Failed to update from base.' }
+}
+
+/** 진행 중인 머지를 취소해 워크스페이스를 머지 직전 상태로 되돌린다(충돌 포기용). */
+export async function abortMerge(worktreePath: string): Promise<void> {
+  await git(worktreePath, ['merge', '--abort']).catch(() => {})
 }
 
 // ── diff (변경 검토용) ───────────────────────────────────────────────────

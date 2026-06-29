@@ -58,7 +58,9 @@ const api: DittoApi = {
 
   git: {
     status: (workspaceId) => ipcRenderer.invoke(IPC.gitStatus, workspaceId),
-    diff: (workspaceId) => ipcRenderer.invoke(IPC.gitDiff, workspaceId)
+    diff: (workspaceId) => ipcRenderer.invoke(IPC.gitDiff, workspaceId),
+    updateFromBase: (workspaceId) => ipcRenderer.invoke(IPC.gitUpdateFromBase, workspaceId),
+    abortMerge: (workspaceId) => ipcRenderer.invoke(IPC.gitAbortMerge, workspaceId)
   },
 
   pr: {

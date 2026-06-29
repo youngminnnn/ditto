@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   GitBranch,
   FolderOpen,
@@ -86,6 +86,16 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
   const toggleRightPanel = useStore((s) => s.toggleRightPanel)
   const [showDiff, setShowDiff] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+
+  // Composer 의 /diff 명령이 이 workspace 를 대상으로 보내는 신호를 받아 diff 모달을 연다
+  // (Composer 는 ChatView 의 로컬 showDiff 상태에 직접 접근할 수 없어 window 이벤트로 전달한다).
+  useEffect(() => {
+    const onOpenDiff = (e: Event): void => {
+      if ((e as CustomEvent<string>).detail === workspace.id) setShowDiff(true)
+    }
+    window.addEventListener('ditto:open-diff', onOpenDiff)
+    return () => window.removeEventListener('ditto:open-diff', onOpenDiff)
+  }, [workspace.id])
   const [editingName, setEditingName] = useState<string | null>(null)
   const git = useStore((s) => s.gitStatus[workspace.id])
   const pr = useStore((s) => s.prStatus[workspace.id])

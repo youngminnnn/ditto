@@ -1,6 +1,8 @@
 import { ipcMain, app, dialog, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { getStore } from './store'
 import { getTranscripts } from './transcripts'
 import { listDir, readFileInRoot } from './fsbrowse'
@@ -39,6 +41,7 @@ import type {
   PermissionDecision,
   PermissionMode,
   Repo,
+  RewindActionResult,
   ScriptKind
 } from '@shared/types'
 import type { SessionManager } from './claude/manager'
@@ -406,6 +409,23 @@ export function registerIpc(ctx: IpcContext): void {
     })
   })
 
+  // /memory — worktree 의 CLAUDE.md 를 에디터로 연다. 파일이 없으면 worktree 디렉토리를 열어
+  // 사용자가 새로 만들 수 있게 한다(VS Code `code`, 실패 시 Finder 폴백).
+  ipcMain.handle(IPC.workspaceOpenMemory, (_e, workspaceId: string): { error?: string } => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return { error: 'Workspace not found.' }
+
+    const memoryPath = join(ws.worktreePath, 'CLAUDE.md')
+    const target = existsSync(memoryPath) ? memoryPath : ws.worktreePath
+    const loginShell = process.env.SHELL || '/bin/zsh'
+    const proc = spawn(loginShell, ['-lc', 'code "$1"', loginShell, target])
+    proc.on('error', () => shell.openPath(ws.worktreePath))
+    proc.on('exit', (code) => {
+      if (code !== 0) shell.openPath(ws.worktreePath)
+    })
+    return {}
+  })
+
   // ── 채팅 ───────────────────────────────────────────────────────────────
 
   ipcMain.handle(
@@ -421,6 +441,14 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle(IPC.chatSideQuestion, (_e, workspaceId: string, question: string) => {
     ctx.sessions.sideQuestion(workspaceId, question)
+  })
+
+  // /clear — 세션을 정리하고 대화 맥락(sessionId)·트랜스크립트를 비운다(워크스페이스는 유지).
+  // 다음 메시지는 빈 맥락의 새 세션으로 시작한다. 렌더러는 호출 후 자기 트랜스크립트를 비운다.
+  ipcMain.handle(IPC.chatClear, (_e, workspaceId: string) => {
+    ctx.sessions.clearSession(workspaceId)
+    getTranscripts().remove(workspaceId)
+    broadcastState()
   })
 
   ipcMain.handle(IPC.chatGetHistory, (_e, workspaceId: string) => {
@@ -550,6 +578,23 @@ export function registerIpc(ctx: IpcContext): void {
       try {
         const servers = await ctx.sessions.mcpAction(workspaceId, serverName, action)
         return { servers }
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  // /rewind 패널 — 고른 체크포인트(사용자 메시지 UUID)로 추적된 파일을 되돌린다.
+  ipcMain.handle(
+    IPC.commandRewindAction,
+    async (
+      _e,
+      workspaceId: string,
+      userMessageId: string
+    ): Promise<{ result?: RewindActionResult; error?: string }> => {
+      try {
+        const result = await ctx.sessions.rewindAction(workspaceId, userMessageId)
+        return { result }
       } catch (err) {
         return { error: err instanceof Error ? err.message : String(err) }
       }

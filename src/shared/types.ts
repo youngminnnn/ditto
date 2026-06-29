@@ -375,11 +375,15 @@ export const IPC = {
   workspaceRename: 'workspace:rename',
   workspaceOpenInEditor: 'workspace:openInEditor',
   workspaceRevealInFinder: 'workspace:revealInFinder',
+  /** /memory — worktree 의 CLAUDE.md 를 에디터로 연다(없으면 worktree 를 연다). */
+  workspaceOpenMemory: 'workspace:openMemory',
   chatSend: 'chat:send',
   chatInterrupt: 'chat:interrupt',
   chatGetHistory: 'chat:getHistory',
   /** /btw 사이드 질문 — 메인 대화를 건드리지 않는 임시 질의를 띄운다. */
   chatSideQuestion: 'chat:sideQuestion',
+  /** /clear — 트랜스크립트를 비우고 세션을 새로 시작한다(워크스페이스는 유지). */
+  chatClear: 'chat:clear',
   permissionRespond: 'permission:respond',
   scriptRun: 'script:run',
   scriptStop: 'script:stop',
@@ -402,6 +406,8 @@ export const IPC = {
   commandRun: 'command:run',
   /** /mcp 패널의 서버별 동작(재연결·활성/비활성) 실행 후 갱신된 서버 목록을 돌려준다. */
   mcpAction: 'command:mcpAction',
+  /** /rewind 패널에서 고른 체크포인트로 코드를 되돌린다(SDK rewindFiles). */
+  commandRewindAction: 'command:rewindAction',
   // 파일 브라우저 (All files 탭)
   fsList: 'fs:list',
   fsRead: 'fs:read',
@@ -533,6 +539,8 @@ export interface SlashCommandInfo {
   description: string
   /** 인자 힌트 (예: "<file>"). */
   argumentHint?: string
+  /** 같은 명령으로 해석되는 다른 이름들 (예: /usage 의 /cost·/stats). 자동완성 매칭에 함께 쓴다. */
+  aliases?: string[]
 }
 
 // ── 인터랙티브(TUI 전용) 슬래시 명령 ─────────────────────────────────────────
@@ -548,6 +556,8 @@ export type CommandPanelKind =
   | 'agents'
   | 'reloadPlugins'
   | 'reloadSkills'
+  | 'rewind'
+  | 'permissions'
 
 /**
  * 입력창 인터셉트(Composer)와 자동완성 보강(commands.ts)이 같은 목록을 보도록 하는 SSOT.
@@ -557,11 +567,28 @@ export const INTERACTIVE_COMMANDS: {
   name: string
   kind: CommandPanelKind
   description: string
+  /** Claude Code 에서 이 명령으로 해석되는 별칭(예: /usage 의 /cost·/stats). */
+  aliases?: string[]
 }[] = [
   { name: 'mcp', kind: 'mcp', description: 'Show MCP server connection status and tools' },
   { name: 'context', kind: 'context', description: 'Visualize current context window usage' },
-  { name: 'usage', kind: 'usage', description: 'Show session cost and plan usage limits' },
+  {
+    name: 'usage',
+    kind: 'usage',
+    description: 'Show session cost and plan usage limits',
+    aliases: ['cost', 'stats']
+  },
   { name: 'agents', kind: 'agents', description: 'List subagents available to this session' },
+  {
+    name: 'rewind',
+    kind: 'rewind',
+    description: 'Restore code to a checkpoint from an earlier message'
+  },
+  {
+    name: 'permissions',
+    kind: 'permissions',
+    description: 'View permission mode and tool allow/ask/deny rules'
+  },
   { name: 'reload-plugins', kind: 'reloadPlugins', description: 'Reload plugins from disk' },
   { name: 'reload-skills', kind: 'reloadSkills', description: 'Reload skills from disk' }
 ]
@@ -634,6 +661,36 @@ export interface ReloadResult {
   errorCount?: number
 }
 
+/** /rewind — 되돌릴 수 있는 체크포인트 1개(사용자 메시지 기준). */
+export interface RewindPoint {
+  /** SDK 가 부여한 사용자 메시지 UUID. rewindFiles 에 그대로 넘긴다. */
+  userMessageId: string
+  /** 그 메시지의 첫 줄(표시용). */
+  text: string
+  ts: number
+}
+
+/** /rewind 실행 결과(SDK rewindFiles 응답을 표시용으로 추린 것). */
+export interface RewindActionResult {
+  canRewind: boolean
+  error?: string
+  filesChanged?: string[]
+  insertions?: number
+  deletions?: number
+}
+
+/** /permissions — 현재 권한 모드 + 설정 파일에서 모은 도구 규칙(읽기 전용). */
+export interface PermissionsInfo {
+  /** 현재 워크스페이스의 권한 모드(default/acceptEdits/plan/auto). */
+  mode: PermissionMode
+  /** settings.json 들에서 합친 allow/ask/deny 규칙. */
+  allow: string[]
+  ask: string[]
+  deny: string[]
+  /** 규칙을 읽어 온 설정 파일 경로(있는 것만). 출처를 알려 준다. */
+  sources: string[]
+}
+
 /** 인터랙티브 명령 실행 결과. kind 로 카드 렌더링을 분기한다. */
 export type CommandResult =
   | { kind: 'mcp'; servers: McpServerInfo[] }
@@ -642,6 +699,8 @@ export type CommandResult =
   | { kind: 'agents'; agents: AgentInfoLite[] }
   | { kind: 'reloadPlugins'; reload: ReloadResult }
   | { kind: 'reloadSkills'; reload: ReloadResult }
+  | { kind: 'rewind'; checkpoints: RewindPoint[] }
+  | { kind: 'permissions'; permissions: PermissionsInfo }
 
 // ── 파일 브라우저 (All files 탭) ──────────────────────────────────────────
 

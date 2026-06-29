@@ -20,6 +20,7 @@ import type {
   PrChecks,
   PrStatus,
   Repo,
+  RewindActionResult,
   ScriptExitEvent,
   ScriptKind,
   ScriptOutputEvent,
@@ -64,6 +65,8 @@ export interface DittoApi {
     rename(workspaceId: string, name: string): Promise<void>
     revealInFinder(workspaceId: string): Promise<void>
     openInEditor(workspaceId: string): Promise<void>
+    /** /memory — worktree 의 CLAUDE.md 를 에디터로 연다(없으면 worktree 디렉토리를 연다). */
+    openMemory(workspaceId: string): Promise<{ error?: string }>
   }
 
   chat: {
@@ -73,6 +76,8 @@ export interface DittoApi {
     getHistory(workspaceId: string): Promise<ChatItem[]>
     /** /btw 사이드 질문을 띄운다. 답변은 onSideQuestion 으로 스트리밍되며 기록에 남지 않는다. */
     sideQuestion(workspaceId: string, question: string): Promise<void>
+    /** /clear — 대화 기록을 비우고 세션을 새로 시작한다(맥락 초기화, 워크스페이스는 유지). */
+    clear(workspaceId: string): Promise<void>
   }
 
   permission: {
@@ -126,6 +131,14 @@ export interface DittoApi {
       serverName: string,
       action: McpAction
     ): Promise<{ servers?: McpServerInfo[]; error?: string }>
+    /**
+     * /rewind 패널에서 고른 체크포인트(사용자 메시지 UUID)로 추적된 파일을 되돌린다.
+     * 파일 체크포인팅이 켜진 살아 있는 세션 위에서만 의미가 있다(세션이 없으면 canRewind=false).
+     */
+    rewindAction(
+      workspaceId: string,
+      userMessageId: string
+    ): Promise<{ result?: RewindActionResult; error?: string }>
   }
 
   terminal: {

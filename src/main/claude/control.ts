@@ -1,9 +1,13 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { AsyncQueue } from './asyncQueue'
 import { resolveClaudeExecutable } from './executable'
 import { MCP_SETTING_SOURCES, resolveUserMcpServers } from './mcp'
 import { clearCommandsCache } from './commands'
+import type { SessionConfig } from './protocol'
 import type {
   CommandPanelKind,
   CommandResult,
@@ -77,6 +81,49 @@ export async function runCommandOn(kind: CommandPanelKind, q: Query): Promise<Co
     case 'reloadSkills': {
       const r = await withTimeout(q.reloadSkills(), 'reloadSkills')
       return { kind, reload: { skillCount: r.skills.length } }
+    }
+    case 'rewind':
+    case 'permissions':
+      // 이 둘은 라이브 Query 가 아니라 세션 상태(체크포인트)·설정 파일을 읽어야 하므로
+      // host 에서 직접 처리한다(여기로 오면 라우팅이 잘못된 것).
+      throw new Error(`${kind} is handled in the host, not runCommandOn`)
+  }
+}
+
+/** /permissions — settings.json 들에서 권한 규칙(allow/ask/deny)을 모아 현재 모드와 함께 돌려준다. */
+export function readPermissions(config: SessionConfig): CommandResult {
+  // 우선순위가 낮은 것부터: 유저 → 프로젝트(worktree) → 로컬 오버라이드.
+  const files = [
+    join(homedir(), '.claude', 'settings.json'),
+    join(config.cwd, '.claude', 'settings.json'),
+    join(config.cwd, '.claude', 'settings.local.json')
+  ]
+  const allow = new Set<string>()
+  const ask = new Set<string>()
+  const deny = new Set<string>()
+  const sources: string[] = []
+  for (const file of files) {
+    let json: { permissions?: { allow?: string[]; ask?: string[]; deny?: string[] } } | null = null
+    try {
+      json = JSON.parse(readFileSync(file, 'utf-8'))
+    } catch {
+      continue // 파일이 없거나 손상 → 건너뛴다.
+    }
+    const perms = json?.permissions
+    if (!perms) continue
+    sources.push(file)
+    for (const r of perms.allow ?? []) allow.add(r)
+    for (const r of perms.ask ?? []) ask.add(r)
+    for (const r of perms.deny ?? []) deny.add(r)
+  }
+  return {
+    kind: 'permissions',
+    permissions: {
+      mode: config.permissionMode,
+      allow: [...allow],
+      ask: [...ask],
+      deny: [...deny],
+      sources
     }
   }
 }

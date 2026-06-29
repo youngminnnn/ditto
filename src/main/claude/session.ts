@@ -17,7 +17,9 @@ import type {
   ImageAttachment,
   PermissionMode,
   PermissionRequest,
-  PermissionDecision
+  PermissionDecision,
+  RewindPoint,
+  RewindActionResult
 } from '@shared/types'
 
 export interface SessionDeps {
@@ -139,10 +141,50 @@ export class ClaudeSession {
   private preflightPending = false
   /** preflight 가 끝날 때까지 잡아 두는 사용자 메시지(끝나면 입력 큐로 흘려보낸다). */
   private bufferedMessages: SDKUserMessage[] = []
+  /**
+   * /rewind 용 체크포인트(되돌릴 수 있는 사용자 메시지 지점). 보낸 메시지의 첫 줄을
+   * pendingUserTexts 에 모았다가, SDK 가 그 메시지를 echo 하며 부여한 uuid 와 짝지어 쌓는다.
+   * 파일 체크포인팅(enableFileCheckpointing)이 켜진 살아 있는 세션에서만 의미가 있다.
+   */
+  private pendingUserTexts: string[] = []
+  private checkpoints: RewindPoint[] = []
 
   constructor(private deps: SessionDeps) {
     // resume + autoCompact 일 때만 preflight 한다(콜드스타트 이중 패스가 생길 수 있는 유일한 조건).
     this.preflightPending = Boolean(deps.resumeSessionId) && deps.autoCompact
+  }
+
+  /** /rewind 패널용: 최근이 위로 오도록 뒤집은 체크포인트 목록. */
+  getCheckpoints(): RewindPoint[] {
+    return [...this.checkpoints].reverse()
+  }
+
+  /**
+   * 고른 체크포인트(사용자 메시지 uuid)로 추적된 파일을 되돌린다.
+   * 체크포인트 백업 blob 은 살아 있는 query 안에 있으므로, 같은 세션이 떠 있을 때만 동작한다 —
+   * 세션이 없으면(앱 재시작·dispose 후) canRewind=false 로 안내한다(warm up 으로 새 query 를
+   * 열어도 과거 편집의 백업이 없어 되돌릴 수 없다).
+   */
+  async rewind(userMessageId: string): Promise<RewindActionResult> {
+    const q = this.q
+    if (!q) {
+      return {
+        canRewind: false,
+        error: 'No live session to rewind. Send a message first, then rewind within the same session.'
+      }
+    }
+    try {
+      const r = await q.rewindFiles(userMessageId)
+      return {
+        canRewind: r.canRewind,
+        error: r.error,
+        filesChanged: r.filesChanged,
+        insertions: r.insertions,
+        deletions: r.deletions
+      }
+    } catch (err) {
+      return { canRewind: false, error: err instanceof Error ? err.message : String(err) }
+    }
   }
 
   /**
@@ -182,6 +224,10 @@ export class ClaudeSession {
     this.deps.emit({ type: 'item', item })
     this.deps.emit({ type: 'status', status: 'running' })
     this.active = true
+
+    // /rewind 체크포인트 라벨용으로 이 메시지의 첫 줄을 큐에 둔다 — SDK 가 이 사용자 메시지를
+    // echo 하며 부여하는 uuid 와 handleUser 에서 짝지어 체크포인트로 확정한다.
+    this.pendingUserTexts.push(firstLine(text || (imgs.length ? `${imgs.length} image(s)` : '')))
 
     // 이미지가 있으면 멀티모달 content 배열로(텍스트 블록 + base64 이미지 블록), 없으면 문자열.
     const content = imgs.length
@@ -305,6 +351,9 @@ export class ClaudeSession {
         options: {
           cwd: this.deps.cwd,
           includePartialMessages: true,
+          // /rewind 가 동작하도록 편집 전 파일 스냅샷을 남긴다(세션 단위). resume 옵션과는
+          // 호환되며(sessionStore 와 달리), 켜두기만 하면 추적 비용은 무시할 만하다.
+          enableFileCheckpointing: true,
           permissionMode: this.deps.permissionMode,
           // CLI 와 동일하게 파일시스템 설정(settings.json·CLAUDE.md·.mcp.json)을 로드.
           settingSources: MCP_SETTING_SOURCES,
@@ -644,9 +693,24 @@ export class ClaudeSession {
     }
   }
 
-  /** user 메시지(여기서는 tool_result 블록)를 항목으로 변환한다. */
+  /** user 메시지(프롬프트 echo 또는 tool_result 블록)를 처리한다. */
   private handleUser(msg: Extract<SDKMessage, { type: 'user' }>): void {
     const content = (msg.message as { content?: unknown }).content
+
+    // 프롬프트 echo(문자열이거나 tool_result 가 아닌 블록들)면 /rewind 체크포인트로 기록한다.
+    // tool_result 가 섞인 user 메시지(도구 응답)는 제외하고, 우리가 보낸 실제 사용자 메시지
+    // (pendingUserTexts 에 라벨을 미리 넣어 둔 것)만 uuid 와 짝지어 확정한다 — 자동 /compact
+    // 주입은 pendingUserTexts 에 라벨이 없으므로 자연히 걸러진다.
+    const uuid = (msg as { uuid?: string }).uuid
+    const isToolResult =
+      Array.isArray(content) && content.some((b) => (b as Block).type === 'tool_result')
+    if (uuid && !isToolResult && this.pendingUserTexts.length > 0) {
+      const text = this.pendingUserTexts.shift() ?? ''
+      this.checkpoints.push({ userMessageId: uuid, text, ts: Date.now() })
+      // 메모리 상한 — 아주 긴 세션에서도 목록이 무한정 커지지 않게 한다(최근 100개 유지).
+      if (this.checkpoints.length > 100) this.checkpoints.shift()
+    }
+
     if (!Array.isArray(content)) return
 
     for (const block of content as Block[]) {
@@ -770,6 +834,12 @@ export class ClaudeSession {
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
   }
+}
+
+/** 체크포인트 라벨용으로 메시지의 첫 줄만 추려 길이를 제한한다. */
+function firstLine(text: string): string {
+  const line = text.split('\n')[0]?.trim() ?? ''
+  return line.length > 80 ? line.slice(0, 79) + '…' : line || '(message)'
 }
 
 /** 토큰 수를 1.2k / 45k / 1.0M 처럼 짧게 표기한다(압축 전후 안내 문구용). */

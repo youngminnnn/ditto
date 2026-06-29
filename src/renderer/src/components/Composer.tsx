@@ -22,7 +22,10 @@ import {
   PowerOff,
   Cpu,
   Zap,
-  Check
+  Check,
+  History,
+  ShieldCheck,
+  RotateCcw
 } from 'lucide-react'
 import { useStore } from '../store'
 import { PERMISSION_FOOTER } from '../lib/permission'
@@ -38,6 +41,8 @@ import type {
   ImageMediaType,
   McpAction,
   McpServerInfo,
+  PermissionsInfo,
+  RewindPoint,
   SlashCommandInfo,
   Workspace
 } from '@shared/types'
@@ -75,6 +80,9 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   const queue = useStore((s) => s.messageQueue[workspace.id]) ?? EMPTY_QUEUE
   const enqueueMessage = useStore((s) => s.enqueueMessage)
   const removeQueued = useStore((s) => s.removeQueued)
+  const pushToast = useStore((s) => s.pushToast)
+  const confirm = useStore((s) => s.confirm)
+  const resetTranscript = useStore((s) => s.resetTranscript)
   const taRef = useRef<HTMLTextAreaElement>(null)
   // ↑ 로 이전 사용자 메시지를 불러올 때의 커서(끝에서부터). -1 = 미사용.
   const historyIdx = useRef(-1)
@@ -185,8 +193,13 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     const q = slashQuery.toLowerCase()
     const scored = commands
       .map((c) => {
-        const name = c.name.toLowerCase()
-        const rank = name.startsWith(q) ? 0 : name.includes(q) ? 1 : 2
+        // 이름 우선, 없으면 별칭(/cost·/stats 등)으로도 매칭한다.
+        const names = [c.name, ...(c.aliases ?? [])].map((n) => n.toLowerCase())
+        const rank = names.some((n) => n.startsWith(q))
+          ? 0
+          : names.some((n) => n.includes(q))
+            ? 1
+            : 2
         return { c, rank }
       })
       .filter((x) => x.rank < 2)
@@ -257,6 +270,16 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       return
     }
 
+    // /diff·/copy·/help·/clear·/memory 는 Ditto UI 에서 직접 처리한다(에이전트로 보내지 않는다).
+    // runLocal 이 입력창 텍스트를 알맞게 정리하므로(대부분 비우고, /help 만 '/' 로 메뉴를 띄움)
+    // 여기서는 setText 를 호출하지 않는다.
+    const local = images.length ? null : matchLocal(trimmed)
+    if (local) {
+      runLocal(local)
+      historyIdx.current = -1
+      return
+    }
+
     // /btw 는 사이드 질문으로 분기한다 — 일반 메시지로 보내면 현재 턴 뒤에 큐잉되어 메인 대화에
     // 쌓이므로(=오염), 맥락만 공유하는 임시 질의로 처리하고 답변은 별도 카드로 보여 준다.
     // (사이드 질문은 텍스트 전용 — 첨부가 있으면 일반 메시지로 보낸다.)
@@ -302,6 +325,70 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
         return { ...prev, status: 'done', result }
       })
     })
+  }
+
+  /** /clear — 확인 후 대화 기록·세션을 초기화한다(백엔드 + 화면 모두). */
+  const doClear = async (): Promise<void> => {
+    const ok = await confirm({
+      title: 'Clear this conversation?',
+      body: 'Clears the transcript and starts a fresh session with empty context. This cannot be undone.',
+      confirmLabel: 'Clear',
+      danger: true
+    })
+    if (!ok) return
+    await window.api.chat.clear(workspace.id)
+    resetTranscript(workspace.id)
+    pushToast('success', 'Started a fresh session.')
+  }
+
+  /**
+   * Ditto UI 에서 직접 처리하는 로컬 명령(/diff·/copy·/help·/clear·/memory). 에이전트로
+   * 보내지 않고 앱 기능으로 매핑한다. 입력창 텍스트 정리도 여기서 한다(대부분 비우고, /help 만
+   * 자동완성 메뉴를 다시 띄우도록 '/' 를 남긴다).
+   */
+  const runLocal = (kind: LocalCommand): void => {
+    setSideAnswer(null)
+    setCommandCard(null)
+    setPickerCard(null)
+
+    if (kind === 'help') {
+      setText('/') // 자동완성 메뉴로 사용 가능한 명령을 모두 보여 준다.
+      taRef.current?.focus()
+      return
+    }
+
+    setText('')
+    if (kind === 'diff') {
+      // ChatView 가 가진 diff 모달을 연다(Composer 에서 직접 접근할 수 없어 이벤트로 신호한다).
+      window.dispatchEvent(new CustomEvent('ditto:open-diff', { detail: workspace.id }))
+      return
+    }
+    if (kind === 'copy') {
+      const last = [...items]
+        .reverse()
+        .find(
+          (i): i is Extract<ChatItem, { type: 'assistant' }> =>
+            i.type === 'assistant' && !!i.text?.trim()
+        )
+      if (!last) {
+        pushToast('info', 'No assistant response to copy yet.')
+        return
+      }
+      void navigator.clipboard.writeText(last.text).then(
+        () => pushToast('success', 'Copied the last response to the clipboard.'),
+        () => pushToast('error', 'Could not copy to the clipboard.')
+      )
+      return
+    }
+    if (kind === 'memory') {
+      void window.api.workspace.openMemory(workspace.id).then((r) => {
+        if (r.error) pushToast('error', r.error)
+      })
+      return
+    }
+    if (kind === 'clear') {
+      void doClear()
+    }
   }
 
   /** 선택한 슬래시 명령을 입력창에 채운다(인자를 이어 쓸 수 있도록 공백을 붙이고 포커스 유지). */
@@ -654,11 +741,26 @@ function matchPicker(text: string): 'model' | 'effort' | null {
   return m ? (m[1] as 'model' | 'effort') : null
 }
 
-/** "/mcp" 처럼 인자 없는 인터랙티브 명령이면 해당 정의를 돌려준다(아니면 null). */
+/**
+ * "/mcp" 처럼 인자 없는 인터랙티브 명령이면 해당 정의를 돌려준다(아니면 null).
+ * 별칭도 함께 해석한다(예: /cost·/stats → /usage).
+ */
 function matchInteractive(text: string): (typeof INTERACTIVE_COMMANDS)[number] | null {
   const m = /^\/([\w-]+)\s*$/.exec(text)
   if (!m) return null
-  return INTERACTIVE_COMMANDS.find((c) => c.name === m[1]) ?? null
+  const name = m[1]
+  return INTERACTIVE_COMMANDS.find((c) => c.name === name || c.aliases?.includes(name)) ?? null
+}
+
+/** Ditto UI 가 직접 처리하는 로컬 명령(에이전트로 보내지 않음). */
+type LocalCommand = 'diff' | 'copy' | 'help' | 'clear' | 'memory'
+const LOCAL_COMMANDS: readonly LocalCommand[] = ['diff', 'copy', 'help', 'clear', 'memory']
+
+/** "/diff" 처럼 로컬에서 처리하는 명령이면 그 종류를 돌려준다(뒤따르는 인자는 무시). */
+function matchLocal(text: string): LocalCommand | null {
+  const m = /^\/([\w-]+)(?:\s[\s\S]*)?$/.exec(text)
+  if (!m) return null
+  return (LOCAL_COMMANDS as readonly string[]).includes(m[1]) ? (m[1] as LocalCommand) : null
 }
 
 /** 인터랙티브 명령 결과 카드의 임시 상태(트랜스크립트에 저장되지 않음). */
@@ -676,7 +778,9 @@ const CARD_ICON: Record<CommandPanelKind, React.ReactNode> = {
   usage: <Receipt size={13} className="text-[var(--accent-400)] shrink-0" />,
   agents: <Bot size={13} className="text-[var(--accent-400)] shrink-0" />,
   reloadPlugins: <RefreshCw size={13} className="text-[var(--accent-400)] shrink-0" />,
-  reloadSkills: <RefreshCw size={13} className="text-[var(--accent-400)] shrink-0" />
+  reloadSkills: <RefreshCw size={13} className="text-[var(--accent-400)] shrink-0" />,
+  rewind: <History size={13} className="text-[var(--accent-400)] shrink-0" />,
+  permissions: <ShieldCheck size={13} className="text-[var(--accent-400)] shrink-0" />
 }
 
 /** 토큰 수를 1.2k 형태로 간결하게 표기. */
@@ -1191,7 +1295,157 @@ function CommandResultView({
 
     case 'reloadSkills':
       return <div className="text-[var(--success-400)]">Reloaded {result.reload.skillCount ?? 0} skills.</div>
+
+    case 'rewind':
+      return <RewindPanel checkpoints={result.checkpoints} workspaceId={workspaceId} />
+
+    case 'permissions':
+      return <PermissionsPanel info={result.permissions} />
   }
+}
+
+/** 권한 모드별 한 줄 설명(상태줄·footer 와 같은 의미). */
+const PERMISSION_MODE_LABEL: Record<string, string> = {
+  default: 'Default — ask before edits and commands',
+  acceptEdits: 'Accept edits — auto-approve file edits',
+  plan: 'Plan — read-only, proposes a plan first',
+  auto: 'Auto — run without asking (use with care)'
+}
+
+/**
+ * /permissions — 현재 권한 모드와 설정 파일에서 모은 allow/ask/deny 규칙을 읽기 전용으로 보여 준다.
+ * 모드 변경은 Claude Code 처럼 Shift+Tab 으로 순환한다(이 카드는 현황 표시 전용).
+ */
+function PermissionsPanel({ info }: { info: PermissionsInfo }): React.JSX.Element {
+  const Section = ({ title, rules, tone }: { title: string; rules: string[]; tone: string }): React.JSX.Element => (
+    <div className="space-y-1">
+      <div className="text-xs text-neutral-500">
+        {title} <span className="text-neutral-600">({rules.length})</span>
+      </div>
+      {rules.length === 0 ? (
+        <div className="text-xs text-neutral-600">—</div>
+      ) : (
+        <ul className="space-y-0.5">
+          {rules.map((r) => (
+            <li key={r} className={`text-xs font-mono ${tone}`}>
+              {r}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+  return (
+    <div className="space-y-2.5">
+      <div className="space-y-0.5">
+        <div className="text-neutral-200">
+          {PERMISSION_MODE_LABEL[info.mode] ?? info.mode}
+        </div>
+        <div className="text-xs text-neutral-600">shift+tab to cycle the permission mode</div>
+      </div>
+      <div className="space-y-2 pt-1 border-t border-[var(--border)]">
+        <Section title="Allow" rules={info.allow} tone="text-[var(--success-400)]" />
+        <Section title="Ask" rules={info.ask} tone="text-[var(--warning-400)]" />
+        <Section title="Deny" rules={info.deny} tone="text-[var(--danger-400)]" />
+      </div>
+      {info.sources.length > 0 ? (
+        <div className="text-xs text-neutral-600 pt-1 border-t border-[var(--border)] break-all">
+          From: {info.sources.join(' · ')}
+        </div>
+      ) : (
+        <div className="text-xs text-neutral-600 pt-1 border-t border-[var(--border)]">
+          No permission rules found in settings files.
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * /rewind — 파일 체크포인트(보낸 메시지 지점) 목록. 하나를 고르면 그 시점으로 추적된 파일을 되돌린다.
+ * 체크포인트 백업은 살아 있는 세션 안에 있으므로, 같은 세션이 떠 있을 때만 동작한다 —
+ * 비어 있거나 되돌릴 수 없으면 그 사정을 안내한다.
+ */
+function RewindPanel({
+  checkpoints,
+  workspaceId
+}: {
+  checkpoints: RewindPoint[]
+  workspaceId: string
+}): React.JSX.Element {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [done, setDone] = useState<{ id: string; text: string; ok: boolean } | null>(null)
+  const pushToast = useStore((s) => s.pushToast)
+
+  if (checkpoints.length === 0) {
+    return (
+      <Empty>
+        No checkpoints yet. Each message you send while this session is live becomes a restore
+        point.
+      </Empty>
+    )
+  }
+
+  const restore = (cp: RewindPoint): void => {
+    setBusyId(cp.userMessageId)
+    setDone(null)
+    void window.api.commands.rewindAction(workspaceId, cp.userMessageId).then(({ result, error }) => {
+      setBusyId(null)
+      if (error || !result) {
+        setDone({ id: cp.userMessageId, text: error || 'Rewind failed.', ok: false })
+        return
+      }
+      if (!result.canRewind) {
+        setDone({ id: cp.userMessageId, text: result.error || 'Nothing to restore.', ok: false })
+        return
+      }
+      const n = result.filesChanged?.length ?? 0
+      const detail =
+        typeof result.insertions === 'number' || typeof result.deletions === 'number'
+          ? ` (+${result.insertions ?? 0} −${result.deletions ?? 0})`
+          : ''
+      const summary = `Restored ${n} file${n === 1 ? '' : 's'}${detail}.`
+      setDone({ id: cp.userMessageId, text: summary, ok: true })
+      pushToast('success', summary)
+    })
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="text-xs text-neutral-600">Restore tracked files to a message:</div>
+      <ul className="space-y-0.5">
+        {checkpoints.map((cp) => {
+          const busy = busyId === cp.userMessageId
+          const result = done?.id === cp.userMessageId ? done : null
+          return (
+            <li key={cp.userMessageId}>
+              <button
+                onClick={() => restore(cp)}
+                disabled={busyId !== null}
+                className="w-full flex items-center gap-2 text-left rounded-md px-1.5 py-1 transition-colors hover:bg-[var(--surface-3)] disabled:opacity-50 disabled:cursor-default"
+              >
+                {busy ? (
+                  <Loader2 size={12} className="shrink-0 animate-spin text-neutral-500" />
+                ) : (
+                  <RotateCcw size={12} className="shrink-0 text-neutral-500" />
+                )}
+                <span className="flex-1 min-w-0 truncate text-sm text-neutral-200" title={cp.text}>
+                  {cp.text}
+                </span>
+              </button>
+              {result && (
+                <div
+                  className={`px-1.5 pb-1 text-xs ${result.ok ? 'text-[var(--success-400)]' : 'text-[var(--danger-400)]'}`}
+                >
+                  {result.text}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
 }
 
 function Empty({ children }: { children: React.ReactNode }): React.JSX.Element {

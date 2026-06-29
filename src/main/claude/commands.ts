@@ -31,7 +31,24 @@ const BUILTIN_COMMANDS: SlashCommandInfo[] = [
   // /model·/effort 는 Composer 가 로컬 선택 카드로 처리한다(백엔드 왕복 없음). 자동완성에만 보강.
   { name: 'model', description: 'Choose the model for this workspace' },
   { name: 'effort', description: 'Choose the reasoning effort for this workspace' },
-  ...INTERACTIVE_COMMANDS.map((c) => ({ name: c.name, description: c.description }))
+  // 패스스루(메시지로 보내면 CLI 가 확장) — 자동완성에만 보강한다.
+  {
+    name: 'compact',
+    description: 'Summarize the conversation so far to free up context',
+    argumentHint: '[instructions]'
+  },
+  // Composer 가 로컬/메인에서 직접 처리하는 명령들(SDK 목록엔 없음).
+  { name: 'clear', description: 'Clear the conversation and start a fresh session' },
+  { name: 'diff', description: 'Open the changes (diff) view for this workspace' },
+  { name: 'copy', description: "Copy the assistant's last response to the clipboard" },
+  { name: 'help', description: 'List the slash commands available here' },
+  { name: 'memory', description: 'Open this project’s CLAUDE.md in your editor' },
+  // /mcp·/context·/usage(+cost·stats)·/rewind·/permissions 등 인터셉트 명령(SSOT: INTERACTIVE_COMMANDS).
+  ...INTERACTIVE_COMMANDS.map((c) => ({
+    name: c.name,
+    description: c.description,
+    ...(c.aliases ? { aliases: c.aliases } : {})
+  }))
 ]
 
 /** 플러그인/스킬 리로드 후 자동완성 명령 목록을 다시 받도록 캐시를 비운다. */
@@ -78,7 +95,9 @@ async function fetchCommands(cwd: string): Promise<SlashCommandInfo[]> {
     const fromSdk = commands.map((c) => ({
       name: c.name,
       description: c.description ?? '',
-      argumentHint: c.argumentHint || undefined
+      argumentHint: c.argumentHint || undefined,
+      // SDK 가 돌려주는 별칭(예: /cost·/stats → /usage)을 자동완성 매칭에 함께 싣는다.
+      ...(c.aliases && c.aliases.length ? { aliases: c.aliases } : {})
     }))
 
     // 내장 명령을 앞에 보강하되, SDK 가 같은 이름을 이미 돌려줬다면 중복을 피한다.

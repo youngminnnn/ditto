@@ -26,7 +26,9 @@ import { findFreePort, waitForPortFree } from './net'
 import { getPrStatus, getPrChecks, createPrWeb } from './github'
 import {
   getAuthStatus,
-  claudeLogin,
+  claudeLoginStart,
+  claudeLoginSubmitCode,
+  claudeLoginCancel,
   claudeLogout,
   githubLogin,
   githubLogout
@@ -67,6 +69,18 @@ export function registerIpc(ctx: IpcContext): void {
     const state = store.getState()
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IPC.evtState, state)
+    }
+  }
+
+  /** 단방향 이벤트를 모든 창에 보낸다(파괴된 webContents 송신 예외가 호출부를 끊지 않게 가드). */
+  const dispatch = (channel: string, payload: unknown): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed() || win.webContents.isDestroyed()) continue
+      try {
+        win.webContents.send(channel, payload)
+      } catch (err) {
+        log.error(`dispatch failed on ${channel}`, err)
+      }
     }
   }
 
@@ -710,7 +724,10 @@ export function registerIpc(ctx: IpcContext): void {
   // ── 외부 연동 인증 ──────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.authGetStatus, () => getAuthStatus())
-  ipcMain.handle(IPC.authClaudeLogin, () => claudeLogin())
+  // 별도 Terminal 창 없이 앱 내부 PTY 에서 로그인하고, 진행 상황은 evtClaudeLogin 으로 흘려보낸다.
+  ipcMain.handle(IPC.authClaudeLoginStart, () => claudeLoginStart(dispatch))
+  ipcMain.handle(IPC.authClaudeLoginSubmitCode, (_e, code: string) => claudeLoginSubmitCode(code))
+  ipcMain.handle(IPC.authClaudeLoginCancel, () => claudeLoginCancel())
   ipcMain.handle(IPC.authClaudeLogout, async () => {
     // 로그아웃 완료까지 await 해야, 렌더러의 invoke Promise 가 그 시점에 resolve 된다.
     // 그래야 UI 의 로딩 표시가 실제 소요 시간만큼 유지되고, 이어지는 refreshAuth()가

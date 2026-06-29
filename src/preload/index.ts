@@ -109,7 +109,9 @@ const api: DittoApi = {
 
   auth: {
     getStatus: () => ipcRenderer.invoke(IPC.authGetStatus),
-    claudeLogin: () => ipcRenderer.invoke(IPC.authClaudeLogin),
+    claudeLoginStart: () => ipcRenderer.invoke(IPC.authClaudeLoginStart),
+    claudeLoginSubmitCode: (code) => ipcRenderer.invoke(IPC.authClaudeLoginSubmitCode, code),
+    claudeLoginCancel: () => ipcRenderer.invoke(IPC.authClaudeLoginCancel),
     claudeLogout: () => ipcRenderer.invoke(IPC.authClaudeLogout),
     githubLogin: () => ipcRenderer.invoke(IPC.authGithubLogin),
     githubLogout: () => ipcRenderer.invoke(IPC.authGithubLogout)
@@ -124,7 +126,8 @@ const api: DittoApi = {
   onState: (cb) => subscribe(IPC.evtState, cb),
   onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb),
   onWindowFocus: (cb) => subscribe(IPC.evtWindowFocus, () => cb()),
-  onWindowBlur: (cb) => subscribe(IPC.evtWindowBlur, () => cb())
+  onWindowBlur: (cb) => subscribe(IPC.evtWindowBlur, () => cb()),
+  onClaudeLogin: (cb) => subscribe(IPC.evtClaudeLogin, cb)
 }
 
 contextBridge.exposeInMainWorld('api', api)

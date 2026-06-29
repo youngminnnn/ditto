@@ -4,6 +4,7 @@ import type {
   AuthStatus,
   ChatItem,
   ChatEnvelope,
+  ClaudeLoginEvent,
   CommandPanelKind,
   CommandResult,
   CreateWorkspaceArgs,
@@ -179,7 +180,12 @@ export interface DittoApi {
 
   auth: {
     getStatus(): Promise<AuthStatus>
-    claudeLogin(): Promise<void>
+    /** 앱 내부 PTY 에서 `claude auth login` 을 시작한다(별도 Terminal 창 없이). 진행은 onClaudeLogin 으로. */
+    claudeLoginStart(): Promise<void>
+    /** 모달에서 붙여넣은 OAuth 코드를 진행 중인 로그인 PTY 로 제출한다. */
+    claudeLoginSubmitCode(code: string): Promise<void>
+    /** 진행 중인 로그인 PTY 를 취소·종료한다(모달 닫기). */
+    claudeLoginCancel(): Promise<void>
     claudeLogout(): Promise<void>
     githubLogin(): Promise<void>
     githubLogout(): Promise<void>
@@ -201,4 +207,6 @@ export interface DittoApi {
   onWindowFocus(cb: () => void): () => void
   /** main 창이 포커스를 잃었을 때의 알림(이후 완료를 미확인으로 잡는 신뢰 신호). */
   onWindowBlur(cb: () => void): () => void
+  /** 앱 내부 Claude 로그인 진행 이벤트(인증 URL / 코드 입력 요청 / 완료) 구독. */
+  onClaudeLogin(cb: (e: ClaudeLoginEvent) => void): () => void
 }

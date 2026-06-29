@@ -125,8 +125,25 @@ export class ClaudeSession {
    * 워크플로우로 등록한 실행만 여기 모아 두고 갱신을 병합한다(서브에이전트 등 비워크플로우 task 는 무시).
    */
   private workflowTasks = new Map<string, WorkflowTaskState>()
+  /**
+   * resume 콜드스타트의 "이중 패스"를 피하기 위한 상태.
+   *
+   * 다른 계정 로그인 등으로 세션을 콜드 resume 하면, 첫 턴이 디스크 트랜스크립트 전체를 다시
+   * 입력으로 보낸다(계정이 바뀌면 프롬프트 캐시가 무효라 정가로). 이때 맥락이 이미 자동압축
+   * 임계치를 넘겨 있으면 기존 코드는 "사용자 턴(전체 로드) → 직후 /compact(전체 재로드)" 로 큰
+   * 맥락을 두 번 흘려보낸다. 그래서 resume + autoCompact 인 세션은 사용자 첫 메시지를 잠시
+   * 버퍼링하고, 첫 턴 처리 전에 컨텍스트를 한 번만 확인한다(preflight): 임계치를 넘었으면 /compact
+   * 를 먼저 보내(compact-first) 사용자 턴이 압축된(작은) 맥락 위에서 돌게 한다. 확인이 실패하면
+   * (라이브 쿼리 없음/타임아웃) 버퍼를 그대로 흘려보내 기존 동작으로 안전하게 폴백한다.
+   */
+  private preflightPending = false
+  /** preflight 가 끝날 때까지 잡아 두는 사용자 메시지(끝나면 입력 큐로 흘려보낸다). */
+  private bufferedMessages: SDKUserMessage[] = []
 
-  constructor(private deps: SessionDeps) {}
+  constructor(private deps: SessionDeps) {
+    // resume + autoCompact 일 때만 preflight 한다(콜드스타트 이중 패스가 생길 수 있는 유일한 조건).
+    this.preflightPending = Boolean(deps.resumeSessionId) && deps.autoCompact
+  }
 
   /**
    * 현재 살아 있는 streaming query(없으면 null). 인터랙티브 명령(/mcp·/context 등)을 "지금 돌고
@@ -177,13 +194,80 @@ export class ClaudeSession {
         ]
       : text
 
-    this.input.push({
+    this.enqueue({
       type: 'user',
       message: { role: 'user', content },
       parent_tool_use_id: null
     })
 
     if (!this.q) this.run()
+  }
+
+  /**
+   * 사용자 메시지를 입력 큐로 보낸다. preflight 대기 중이면(콜드 resume 첫 턴 전) 큐에 직접 넣지
+   * 않고 버퍼링한다 — preflight 가 끝나면(필요 시 /compact 를 먼저 보낸 뒤) flushBuffered 로 방출한다.
+   */
+  private enqueue(msg: SDKUserMessage): void {
+    if (this.preflightPending) this.bufferedMessages.push(msg)
+    else this.input.push(msg)
+  }
+
+  /** 버퍼링해 둔 사용자 메시지를 입력 큐로 흘려보내고 preflight 를 종료한다. */
+  private flushBuffered(): void {
+    this.preflightPending = false
+    const msgs = this.bufferedMessages
+    this.bufferedMessages = []
+    for (const m of msgs) this.input.push(m)
+  }
+
+  /**
+   * 콜드 resume 첫 턴 전에 컨텍스트를 한 번 확인해, 이미 임계치를 넘었으면 사용자 턴보다 /compact 를
+   * 먼저 흘려보낸다(compact-first). 버퍼링된 사용자 메시지는 압축 result(handleResult)에서 방출된다.
+   * 임계치 미만이거나 확인이 실패하면 즉시 버퍼를 비워 기존 동작으로 폴백한다.
+   */
+  private async runResumePreflight(): Promise<void> {
+    if (!this.preflightPending) return
+    // 보낼 사용자 메시지가 없으면(예: /mcp warm-up) 압축할 이유가 없다 — preflight 만 종료한다.
+    if (this.bufferedMessages.length === 0) {
+      this.preflightPending = false
+      return
+    }
+
+    const q = this.q
+    if (!q) {
+      this.flushBuffered()
+      return
+    }
+
+    let percentage: number
+    try {
+      const ctx = await withTimeout(q.getContextUsage(), CONTEXT_USAGE_TIMEOUT_MS)
+      percentage = ctx.percentage
+    } catch {
+      // 확인 실패 시 압축 없이 그대로 진행한다(기존 동작과 동일 — 큰 패스 1회는 불가피).
+      this.flushBuffered()
+      return
+    }
+
+    if (this.deps.autoCompact && !this.autoCompactInFlight && percentage >= AUTO_COMPACT_THRESHOLD) {
+      // compact-first: 사용자 턴 전에 압축한다. 버퍼는 압축 result 후 flushBuffered 로 방출(preflightPending 유지).
+      this.autoCompactInFlight = true
+      this.emitItem({
+        id: `compacting:${Date.now()}`,
+        type: 'system',
+        text: 'Auto-compacting conversation to free up space…',
+        ts: Date.now()
+      })
+      this.deps.emit({ type: 'compacting', active: true, trigger: 'auto' })
+      this.input.push({
+        type: 'user',
+        message: { role: 'user', content: '/compact' },
+        parent_tool_use_id: null
+      })
+      return
+    }
+
+    this.flushBuffered()
   }
 
   async interrupt(): Promise<void> {
@@ -248,6 +332,9 @@ export class ClaudeSession {
         this.handleMessage(msg)
       }
     } catch (err) {
+      // 아직 큐로 내보내지 않고 버퍼링해 둔 사용자 메시지가 있으면 입력 큐로 옮긴다 — 폴백 재시도
+      // 세션이나 다음 send 가 이어서 처리할 수 있도록(메시지를 잃지 않게). preflight 도 함께 종료된다.
+      if (this.preflightPending) this.flushBuffered()
       // resume 대상 세션이 사라졌거나 손상돼 첫 메시지 전에 실패한 경우, 맥락만 포기하고
       // 새 세션으로 1회 폴백한다 — 보존하려던 맥락 때문에 오히려 워크스페이스가 막히는 것을 막는다.
       if (this.deps.resumeSessionId && !this.sawAnyMessage && !this.resumeRetried) {
@@ -370,6 +457,9 @@ export class ClaudeSession {
     if (msg.subtype === 'init') {
       this.deps.onSessionId(msg.session_id)
       this.deps.emit({ type: 'session', sessionId: msg.session_id, model: msg.model })
+      // 콜드 resume 첫 턴 전에 컨텍스트를 확인해, 필요하면 사용자 턴보다 /compact 를 먼저 보낸다.
+      // (세션이 정상 시작된 지금 시점에서 getContextUsage 제어 채널이 준비된다.)
+      if (this.preflightPending) void this.runResumePreflight()
     } else if (msg.subtype === 'permission_denied') {
       this.emitItem({
         id: `denied:${msg.tool_use_id}`,
@@ -592,6 +682,14 @@ export class ClaudeSession {
     if (wasAutoCompact) {
       this.autoCompactInFlight = false
       this.deps.emit({ type: 'compacting', active: false, trigger: 'auto' })
+    }
+
+    // 방금 끝난 게 preflight 의 compact-first 턴이라면, idle 로 가지 않고 버퍼링해 둔 사용자 첫
+    // 메시지를 이제 방출한다 — 사용자 턴이 압축된(작은) 맥락 위에서 돌아 큰 패스를 1회로 줄인다.
+    // 상태는 running 으로 유지하고(active 그대로), 곧 이어질 사용자 턴의 result 가 idle 로 푼다.
+    if (wasAutoCompact && this.preflightPending && this.bufferedMessages.length > 0) {
+      this.flushBuffered()
+      return
     }
 
     this.deps.emit({ type: 'status', status: 'idle' })

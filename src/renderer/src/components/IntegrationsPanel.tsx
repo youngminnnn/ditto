@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Loader2, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
 import { ClaudeMark, GithubMark } from './BrandIcons'
@@ -61,7 +61,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
           void window.api.auth.claudeLogin()
           pollUntilChange()
         }}
-        onDisconnect={() => void window.api.auth.claudeLogout().then(() => refreshAuth())}
+        onDisconnect={() => window.api.auth.claudeLogout().then(() => refreshAuth())}
       />
 
       <IntegrationRow
@@ -123,9 +123,17 @@ function IntegrationRow({
   loading: boolean
   installed: boolean
   installUrl: string
-  onConnect: () => void
-  onDisconnect: () => void
+  onConnect: () => void | Promise<void>
+  onDisconnect: () => void | Promise<void>
 }): React.JSX.Element {
+  // 로그아웃/재연결은 CLI 실행이 끝날 때까지 수 초가 걸릴 수 있어, 진행 중에는
+  // 버튼에 스피너를 띄우고 버튼을 비활성화해 멈춘 것처럼 보이지 않게 한다.
+  const [busy, setBusy] = useState<'connect' | 'disconnect' | null>(null)
+  const run = (which: 'connect' | 'disconnect', fn: () => void | Promise<void>): void => {
+    if (busy) return
+    setBusy(which)
+    void Promise.resolve(fn()).finally(() => setBusy(null))
+  }
   return (
     <div className="flex items-center gap-3 bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3.5 py-3">
       <div className="h-8 w-8 grid place-items-center rounded-lg bg-[var(--surface-2)] text-neutral-300 shrink-0">
@@ -151,22 +159,26 @@ function IntegrationRow({
       ) : connected ? (
         <div className="flex gap-1.5">
           <button
-            onClick={onConnect}
-            className="text-sm px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)]"
+            onClick={() => run('connect', onConnect)}
+            disabled={busy !== null}
+            className="text-sm px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-[var(--surface-2)] disabled:opacity-50 disabled:hover:bg-transparent"
           >
             Reconnect
           </button>
           <button
-            onClick={onDisconnect}
-            className="text-sm px-2.5 py-1.5 rounded-lg text-neutral-400 hover:bg-[var(--danger-500)]/15 hover:text-[var(--danger-400)]"
+            onClick={() => run('disconnect', onDisconnect)}
+            disabled={busy !== null}
+            className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg text-neutral-400 hover:bg-[var(--danger-500)]/15 hover:text-[var(--danger-400)] disabled:opacity-50 disabled:hover:bg-transparent"
           >
-            Sign out
+            {busy === 'disconnect' && <Loader2 size={13} className="animate-spin" />}
+            {busy === 'disconnect' ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
       ) : (
         <button
-          onClick={onConnect}
-          className="text-sm px-3 py-1.5 rounded-lg bg-[var(--info-600)] text-white font-medium hover:bg-[var(--info-500)]"
+          onClick={() => run('connect', onConnect)}
+          disabled={busy !== null}
+          className="text-sm px-3 py-1.5 rounded-lg bg-[var(--info-600)] text-white font-medium hover:bg-[var(--info-500)] disabled:opacity-60"
         >
           Sign in
         </button>

@@ -73,10 +73,10 @@ export default function IntegrationsPanel(): React.JSX.Element {
         connected={!!github?.loggedIn}
         detail={
           !github?.installed
-            ? 'Not installed — the GitHub CLI (gh) is optional, for PRs'
+            ? 'Required — install the GitHub CLI (gh) to use Ditto'
             : github.loggedIn
               ? `@${github.account ?? '?'}${github.protocol ? ` · ${github.protocol}` : ''}`
-              : 'Connect to push branches and open PRs'
+              : 'Sign in to GitHub to continue'
         }
         onConnect={() => {
           void window.api.auth.githubLogin()

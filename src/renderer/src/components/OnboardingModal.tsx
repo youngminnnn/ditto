@@ -2,6 +2,7 @@ import { useState } from 'react'
 import IntegrationsPanel from './IntegrationsPanel'
 import Logo from './Logo'
 import { primaryBtn } from './Modal'
+import { useStore } from '../store'
 import { CURRENT_TERMS_VERSION } from '@shared/types'
 
 // 배포 시 실제 공개 URL 로 교체한다(현재는 앱과 함께 제공되는 repo 문서를 가리킨다).
@@ -121,17 +122,29 @@ function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Elem
 }
 
 function IntegrationsStep({ onDone }: { onDone: () => void }): React.JSX.Element {
+  // gh(GitHub CLI)는 필수다 — 설치 + 로그인이 모두 끝나기 전에는 온보딩을 마칠 수 없게 막는다.
+  const auth = useStore((s) => s.authStatus)
+  const githubReady = !!auth && auth.github.installed && auth.github.loggedIn
+
   return (
     <>
       <div className="px-6 py-4">
         <p className="mb-3 text-sm text-neutral-500 text-center leading-relaxed">
-          Connect your accounts to get started — you can change these later in Settings.
+          Connect your accounts to get started — the GitHub CLI (gh) is required. You can change
+          these later in Settings.
         </p>
         <IntegrationsPanel />
       </div>
 
-      <div className="px-6 py-4 border-t border-[var(--border)] flex justify-end">
-        <button className={primaryBtn} onClick={onDone}>
+      <div className="px-6 py-4 border-t border-[var(--border)] flex items-center justify-end gap-3">
+        {!githubReady && (
+          <span className="text-xs text-neutral-500">Sign in to GitHub to continue</span>
+        )}
+        <button
+          className={primaryBtn + ' disabled:opacity-40 disabled:cursor-not-allowed'}
+          disabled={!githubReady}
+          onClick={onDone}
+        >
           Get started
         </button>
       </div>

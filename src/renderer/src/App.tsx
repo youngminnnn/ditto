@@ -15,6 +15,7 @@ import SettingsModal from './components/SettingsModal'
 import NewWorkspaceModal from './components/NewWorkspaceModal'
 import RepoConfigModal from './components/RepoConfigModal'
 import OnboardingModal from './components/OnboardingModal'
+import GithubGate from './components/GithubGate'
 import Toaster from './components/Toaster'
 import ConfirmDialog from './components/ConfirmDialog'
 import Logo from './components/Logo'
@@ -60,8 +61,20 @@ export default function App(): React.JSX.Element {
   // 온보딩(약관 동의·계정 연결) 모달이 떠 있는 동안에는 전역 단축키도 막아, 동의 전 앱 조작을 차단한다.
   const onboardingOpen =
     !!app && (!app.settings.onboarded || app.settings.acceptedTermsVersion !== CURRENT_TERMS_VERSION)
+
+  // gh(GitHub CLI)는 필수다 — "설치 + 로그인"이 모두 끝나기 전에는 본 화면을 막는다(하드 게이트).
+  // 온보딩(약관 동의)을 먼저 끝낸 뒤에만 게이트를 띄우고, 인증 상태가 로드되기 전에는 깜빡임을
+  // 피하려 띄우지 않는다. gh 가 제거·로그아웃되면 다음 갱신에서 다시 게이트가 뜬다.
+  const githubReady =
+    authStatus !== null && authStatus.github.installed && authStatus.github.loggedIn
+  const githubGateOpen = !!app && !onboardingOpen && authStatus !== null && !githubReady
+
   const anyModalOpen =
-    showSettings || newWsRepoId !== null || configRepoId !== null || onboardingOpen
+    showSettings ||
+    newWsRepoId !== null ||
+    configRepoId !== null ||
+    onboardingOpen ||
+    githubGateOpen
 
   // 키보드: ⇧⇥ 권한 모드 순환, ⌘1–9 워크스페이스 선택, ⌘[ / ⌘] 이전/다음.
   useEffect(() => {
@@ -211,6 +224,7 @@ export default function App(): React.JSX.Element {
       {(needsConsent || needsOnboarding) && (
         <OnboardingModal needsConsent={needsConsent} needsOnboarding={needsOnboarding} />
       )}
+      {githubGateOpen && <GithubGate />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {newWsRepoId && <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />}
       {configRepoId && <RepoConfigModal repoId={configRepoId} onClose={() => setConfigRepoId(null)} />}

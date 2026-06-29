@@ -396,7 +396,12 @@ export const IPC = {
   openExternal: 'shell:openExternal',
   settingsUpdate: 'settings:update',
   authGetStatus: 'auth:getStatus',
-  authClaudeLogin: 'auth:claudeLogin',
+  /** 앱 내부 PTY 에서 `claude auth login` 을 시작한다(별도 Terminal 창 없이). */
+  authClaudeLoginStart: 'auth:claudeLoginStart',
+  /** 사용자가 붙여넣은 OAuth 코드를 진행 중인 로그인 PTY 로 제출한다. */
+  authClaudeLoginSubmitCode: 'auth:claudeLoginSubmitCode',
+  /** 진행 중인 로그인 PTY 를 취소·종료한다(모달 닫기). */
+  authClaudeLoginCancel: 'auth:claudeLoginCancel',
   authClaudeLogout: 'auth:claudeLogout',
   authGithubLogin: 'auth:githubLogin',
   authGithubLogout: 'auth:githubLogout',
@@ -442,7 +447,9 @@ export const IPC = {
   /** 터미널 PTY 출력 스트림. */
   evtTerminalData: 'evt:terminalData',
   /** 터미널 PTY 종료. */
-  evtTerminalExit: 'evt:terminalExit'
+  evtTerminalExit: 'evt:terminalExit',
+  /** 앱 내부 Claude 로그인 진행 이벤트(인증 URL 노출 / 코드 입력 요청 / 완료). */
+  evtClaudeLogin: 'evt:claudeLogin'
 } as const
 
 // ── IPC 페이로드 타입 ────────────────────────────────────────────────────
@@ -733,6 +740,16 @@ export interface TerminalExitEvent {
   workspaceId: string
   code: number | null
 }
+
+/**
+ * 앱 내부 Claude 로그인 진행 이벤트.
+ * - awaiting-code: `claude auth login` 이 인증 URL 을 띄우고 코드 입력을 기다린다.
+ *   url 은 브라우저가 안 열렸을 때를 위한 폴백 링크. reprompt 면 직전 코드가 거절돼 다시 요청된 것.
+ * - done: 로그인 프로세스가 종료됨. success 면 로그인 성공.
+ */
+export type ClaudeLoginEvent =
+  | { phase: 'awaiting-code'; url?: string; reprompt?: boolean }
+  | { phase: 'done'; success: boolean }
 
 export interface ChatEnvelope {
   workspaceId: string

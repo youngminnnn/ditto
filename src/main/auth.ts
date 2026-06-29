@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import * as pty from 'node-pty'
+import { IPC } from '@shared/types'
 import type { AuthStatus, ClaudeAuthStatus, GithubAuthStatus } from '@shared/types'
 import { log } from './logger'
 
@@ -7,9 +9,19 @@ import { log } from './logger'
  *
  * 상태 조회는 사용자 로그인 셸(`$SHELL -lc`)로 실행한다 — `claude`(~/.local/bin)·
  * `gh`(homebrew) 가 GUI 로 띄운 앱의 빈약한 PATH 에는 없기 때문이다.
- * 인터랙티브 로그인(OAuth/디바이스 플로우)은 Terminal.app 에서 실행해 흐름이
- * 정상 동작하게 한다(앱 내 가짜 TTY 보다 안정적).
+ * Claude 로그인(OAuth 코드 붙여넣기 플로우)은 별도 Terminal.app 을 띄우지 않고
+ * 앱 내부 PTY 에서 실행한다 — `claude auth login` 이 브라우저를 열고 출력하는 인증 URL 과
+ * "Paste code here" 프롬프트를 가로채, URL 은 모달에 노출하고 사용자가 붙여넣은 코드는
+ * 다시 PTY 로 흘려보내 흐름을 앱 안에서 끝낸다. (gh 로그인은 여전히 Terminal 을 쓴다.)
  */
+
+type Dispatch = (channel: string, payload: unknown) => void
+
+/** ANSI 이스케이프(색·커서 제어)를 제거해 URL·프롬프트 텍스트를 안정적으로 매칭한다. */
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
+}
 
 function runLoginShell(
   command: string
@@ -101,8 +113,79 @@ export async function getAuthStatus(): Promise<AuthStatus> {
   return { claude, github }
 }
 
-export function claudeLogin(): void {
-  openInTerminal('claude auth login')
+/**
+ * 진행 중인 Claude 로그인 PTY 세션. 동시에 하나만 둔다(새 시작 시 기존 것을 정리).
+ * cancelled 는 사용자가 모달을 닫아 우리가 죽인 종료를 "실패"로 잘못 보고하지 않기 위한 가드.
+ */
+let claudeLoginSession: { proc: pty.IPty; cancelled: boolean } | null = null
+
+/**
+ * 앱 내부 PTY 에서 `claude auth login` 을 실행한다. 출력에서 인증 URL 과 "Paste code here"
+ * 프롬프트를 감지해 renderer 에 알리고(awaiting-code), 프로세스 종료 시 성공 여부를 알린다(done).
+ * 코드 제출은 claudeLoginSubmitCode(), 취소는 claudeLoginCancel() 로 이어진다.
+ */
+export function claudeLoginStart(dispatch: Dispatch): void {
+  // 이미 떠 있는 세션이 있으면 조용히 정리하고 새로 시작한다(재시도/중복 클릭 대비).
+  claudeLoginCancel()
+
+  const shell = process.env.SHELL || '/bin/zsh'
+  let proc: pty.IPty
+  try {
+    proc = pty.spawn(shell, ['-lc', 'claude auth login'], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 30,
+      env: { ...process.env, TERM: 'xterm-256color' } as Record<string, string>
+    })
+  } catch (err) {
+    log.error('auth: failed to spawn claude login pty', err)
+    dispatch(IPC.evtClaudeLogin, { phase: 'done', success: false })
+    return
+  }
+
+  const session = { proc, cancelled: false }
+  claudeLoginSession = session
+
+  // PTY 출력을 누적하며 "Paste code here" 프롬프트가 새로 나타날 때마다 코드 입력을 요청한다.
+  // 잘못된 코드로 CLI 가 같은 프롬프트를 다시 띄우면 prompts 카운트가 늘어 재요청이 나간다.
+  let out = ''
+  let prompts = 0
+  proc.onData((data) => {
+    out += stripAnsi(data)
+    const count = (out.match(/Paste code here/g) || []).length
+    if (count > prompts) {
+      prompts = count
+      const url = out.match(/https?:\/\/\S+/)?.[0]
+      dispatch(IPC.evtClaudeLogin, { phase: 'awaiting-code', url, reprompt: count > 1 })
+    }
+  })
+
+  proc.onExit(({ exitCode }) => {
+    if (claudeLoginSession === session) claudeLoginSession = null
+    // 우리가 취소(kill)한 종료는 사용자 의도이므로 실패로 보고하지 않는다.
+    if (session.cancelled) return
+    dispatch(IPC.evtClaudeLogin, { phase: 'done', success: exitCode === 0 })
+  })
+}
+
+/** 모달에서 붙여넣은 OAuth 코드를 진행 중인 로그인 PTY 로 제출한다(개행으로 줄 확정). */
+export function claudeLoginSubmitCode(code: string): void {
+  const trimmed = code.trim()
+  if (!trimmed) return
+  claudeLoginSession?.proc.write(`${trimmed}\r`)
+}
+
+/** 진행 중인 로그인 PTY 를 종료한다(모달 닫기/취소). 종료는 실패로 보고하지 않는다. */
+export function claudeLoginCancel(): void {
+  const session = claudeLoginSession
+  if (!session) return
+  session.cancelled = true
+  claudeLoginSession = null
+  try {
+    session.proc.kill()
+  } catch {
+    // 이미 종료됨.
+  }
 }
 
 export async function claudeLogout(): Promise<void> {

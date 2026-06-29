@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Loader2, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
 import { ClaudeMark, GithubMark } from './BrandIcons'
+import ClaudeLoginModal from './ClaudeLoginModal'
 
 export default function IntegrationsPanel(): React.JSX.Element {
   const auth = useStore((s) => s.authStatus)
   const refreshAuth = useStore((s) => s.refreshAuth)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [claudeLoginOpen, setClaudeLoginOpen] = useState(false)
 
   useEffect(() => {
     void refreshAuth()
@@ -15,8 +17,9 @@ export default function IntegrationsPanel(): React.JSX.Element {
     }
   }, [refreshAuth])
 
-  // 로그인은 Terminal 에서 진행되므로, 트리거 후 인증 상태를 폴링해 자동 반영한다.
-  // 상태가 바뀌면(로그인/로그아웃 감지) 즉시 멈추고, 최대 60초까지만 시도한다.
+  // GitHub(gh) 로그인/로그아웃은 Terminal 에서 진행되므로, 트리거 후 인증 상태를 폴링해 자동
+  // 반영한다. 상태가 바뀌면(로그인/로그아웃 감지) 즉시 멈추고, 최대 60초까지만 시도한다.
+  // (Claude 로그인은 앱 내부 모달이 직접 refreshAuth 하므로 폴링하지 않는다.)
   const pollUntilChange = (): void => {
     if (pollRef.current) clearInterval(pollRef.current)
     const before = JSON.stringify(useStore.getState().authStatus)
@@ -57,10 +60,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
             ? 'ANTHROPIC_API_KEY is set in your environment — agents authenticate and bill via that key, not the account here.'
             : undefined
         }
-        onConnect={() => {
-          void window.api.auth.claudeLogin()
-          pollUntilChange()
-        }}
+        onConnect={() => setClaudeLoginOpen(true)}
         onDisconnect={() => window.api.auth.claudeLogout().then(() => refreshAuth())}
       />
 
@@ -90,7 +90,8 @@ export default function IntegrationsPanel(): React.JSX.Element {
 
       <div className="flex items-center justify-between pt-1">
         <p className="text-xs text-neutral-500 leading-relaxed pr-3">
-          Sign-in opens your Terminal to finish the flow. Status refreshes automatically — or click Refresh.
+          Claude sign-in finishes in-app via your browser. GitHub opens your Terminal. Status
+          refreshes automatically — or click Refresh.
         </p>
         <button
           onClick={() => void refreshAuth()}
@@ -99,6 +100,8 @@ export default function IntegrationsPanel(): React.JSX.Element {
           <RefreshCw size={13} /> Refresh
         </button>
       </div>
+
+      {claudeLoginOpen && <ClaudeLoginModal onClose={() => setClaudeLoginOpen(false)} />}
     </div>
   )
 }

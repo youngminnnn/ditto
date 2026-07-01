@@ -137,6 +137,8 @@ interface UIState {
   ) => Promise<void>
   selectWorkspace: (id: string | null) => Promise<void>
   refreshGit: (workspaceId: string) => Promise<void>
+  /** 진입 여부와 무관하게 모든(비아카이브) 워크스페이스의 git 상태를 한 번에 갱신한다. */
+  refreshAllGit: () => Promise<void>
   refreshPr: (workspaceId: string) => Promise<void>
   refreshScriptStatus: (workspaceId: string) => Promise<void>
   refreshAuth: () => Promise<void>
@@ -176,6 +178,11 @@ let initialized = false
 // 창 포커스 상태(완료를 미확인으로 잡을지 판단용). DOM 의 document.hasFocus() 는 Dock 클릭·앱
 // 전환 시 신뢰할 수 없어, main 의 권위 있는 focus/blur 이벤트로 갱신한다. 시작 시 포커스 가정.
 let windowFocused = true
+
+// 모든 워크트리의 git 상태를 주기적으로 갱신하기 위한 타이머. 진입하지 않은 워크스페이스도
+// 사이드바 배지(변경 파일 수·ahead/behind·충돌)가 최신으로 보이도록 백그라운드에서 폴링한다.
+let statusPollTimer: ReturnType<typeof setInterval> | null = null
+const STATUS_POLL_INTERVAL_MS = 15_000
 
 function upsertItem(items: ChatItem[], item: ChatItem): ChatItem[] {
   const idx = items.findIndex((i) => i.id === item.id)
@@ -229,6 +236,17 @@ export const useStore = create<UIState>((set, get) => ({
     set({ app, ready: true, runningSince: seededRunningSince, rightPanelOpen })
     void get().refreshAuth()
 
+    // 최초 진입 시 모든 워크트리의 git 상태를 한 번 받아오고(진입 전에도 사이드바에 노출),
+    // 이후 일정 간격으로 폴링해 백그라운드에서 변한 변경 파일 수·ahead/behind 를 최신으로 유지한다.
+    void get().refreshAllGit()
+    if (!statusPollTimer) {
+      statusPollTimer = setInterval(() => {
+        // 창이 가려져 사이드바가 보이지 않을 때는 폴링을 건너뛰고(불필요한 git 프로세스 방지),
+        // 다시 포커스되는 순간 onWindowFocus 에서 즉시 한 번 갱신한다.
+        if (windowFocused) void get().refreshAllGit()
+      }, STATUS_POLL_INTERVAL_MS)
+    }
+
     // 패널을 토글할 때마다(키보드 ⌘J·버튼·Composer 등 경로 무관) 마지막 상태를 기억해 둔다.
     useStore.subscribe((state, prev) => {
       if (state.rightPanelOpen !== prev.rightPanelOpen) rememberRightPanel(state.rightPanelOpen)
@@ -275,6 +293,8 @@ export const useStore = create<UIState>((set, get) => ({
     window.api.onWindowFocus(() => {
       windowFocused = true
       clearSelectedUnread()
+      // 자리를 비운 사이 바뀌었을 수 있으니 모든 워크트리 상태를 즉시 한 번 갱신한다.
+      void get().refreshAllGit()
     })
     window.api.onWindowBlur(() => {
       windowFocused = false
@@ -488,6 +508,23 @@ export const useStore = create<UIState>((set, get) => ({
   refreshGit: async (workspaceId) => {
     const status = await window.api.git.status(workspaceId)
     set((s) => ({ gitStatus: { ...s.gitStatus, [workspaceId]: status } }))
+  },
+
+  refreshAllGit: async () => {
+    const workspaces = get().app?.workspaces.filter((w) => !w.archived) ?? []
+    if (!workspaces.length) return
+    // 워크스페이스별로 병렬 조회하되, 결과가 모두 도착한 뒤 한 번만 반영해 리렌더를 줄인다.
+    const entries = await Promise.all(
+      workspaces.map(async (w) => {
+        const status = await window.api.git.status(w.id).catch(() => null)
+        return [w.id, status] as const
+      })
+    )
+    set((s) => {
+      const gitStatus = { ...s.gitStatus }
+      for (const [id, status] of entries) gitStatus[id] = status
+      return { gitStatus }
+    })
   },
 
   refreshPr: async (workspaceId) => {

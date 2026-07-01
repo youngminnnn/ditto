@@ -78,7 +78,10 @@ const STEPS: Step[] = [
     body: (
       <>
         Your files, the diff of what changed, CI-style checks, and an interactive terminal — all
-        scoped to the current workspace. Open a pull request and pull base updates from here too.
+        scoped to the current workspace. Open a pull request and pull base updates from here too. Set
+        whether it starts open by default in{' '}
+        <b className="text-neutral-200">Settings</b> — your last <b className="text-neutral-200">⌘J</b>{' '}
+        toggle is then remembered from there.
       </>
     ),
     shortcuts: [{ keys: '⌘J', label: 'Toggle the work panel' }]

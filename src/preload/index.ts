@@ -90,6 +90,8 @@ const api: DittoApi = {
     runCommand: (workspaceId, command) =>
       ipcRenderer.invoke(IPC.terminalRunCommand, workspaceId, command),
     exec: (workspaceId, command) => ipcRenderer.invoke(IPC.terminalExec, workspaceId, command),
+    killInline: (workspaceId, itemId) =>
+      ipcRenderer.invoke(IPC.terminalKillInline, workspaceId, itemId),
     resize: (workspaceId, cols, rows) =>
       ipcRenderer.invoke(IPC.terminalResize, workspaceId, cols, rows),
     kill: (workspaceId) => ipcRenderer.invoke(IPC.terminalKill, workspaceId),

@@ -161,6 +161,8 @@ export interface DittoApi {
      * (Claude Code CLI 의 bash 모드 — 우측 터미널 패널이 아니라 메시지 영역에 표시).
      */
     exec(workspaceId: string, command: string): Promise<void>
+    /** 진행 중인 인라인 `!명령`(exec)을 중단한다. itemId 는 해당 bash 아이템의 id. */
+    killInline(workspaceId: string, itemId: string): Promise<void>
     resize(workspaceId: string, cols: number, rows: number): Promise<void>
     kill(workspaceId: string): Promise<void>
     onData(cb: (e: TerminalDataEvent) => void): () => void

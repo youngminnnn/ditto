@@ -718,6 +718,10 @@ export function registerIpc(ctx: IpcContext): void {
     ctx.terminals.execInline(workspaceId, ws.worktreePath, command)
   })
 
+  ipcMain.handle(IPC.terminalKillInline, (_e, workspaceId: string, itemId: string) => {
+    ctx.terminals.killInline(workspaceId, itemId)
+  })
+
   ipcMain.handle(IPC.terminalResize, (_e, workspaceId: string, cols: number, rows: number) => {
     ctx.terminals.resize(workspaceId, cols, rows)
   })

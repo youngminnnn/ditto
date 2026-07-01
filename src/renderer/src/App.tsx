@@ -123,6 +123,14 @@ export default function App(): React.JSX.Element {
         return
       }
 
+      // ⌘U: 다음 미확인(완료된 응답) 세션으로 이동.
+      if (e.key.toLowerCase() === 'u') {
+        e.preventDefault()
+        const id = st.nextUnreadId()
+        if (id) void st.selectWorkspace(id)
+        return
+      }
+
       const list = (st.app?.workspaces ?? []).filter((w) => !w.archived)
       if (!list.length) return
 

@@ -411,10 +411,13 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                   if (id) void selectWorkspace(id)
                 }}
                 className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--info-600)]/90 text-white text-xs font-medium hover:bg-[var(--info-500)] shadow-lg"
-                title="Jump to the next session with a completed response"
+                title="Jump to the next session with a completed response — ⌘U"
               >
                 <BellDot size={13} />
                 Next unread ({unreadCount})
+                <kbd className="ml-0.5 rounded bg-white/20 px-1 py-0.5 text-[10px] leading-none font-medium tabular-nums">
+                  ⌘U
+                </kbd>
               </button>
             )}
           </div>

@@ -19,6 +19,7 @@ import {
   BellDot,
   ShieldQuestion,
   PanelRight,
+  Pencil,
   type LucideIcon
 } from 'lucide-react'
 import { useStore } from '../store'
@@ -212,12 +213,22 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
               className="text-base font-semibold text-neutral-100 bg-[var(--surface)] border border-[var(--border-strong)] rounded px-1.5 py-0.5 outline-none"
             />
           ) : (
-            <div
-              className="text-base font-semibold text-neutral-100 truncate cursor-text"
-              title={`${displayName}\n(double-click to rename · clear to reset)`}
-              onDoubleClick={() => setEditingName(displayName)}
-            >
-              {displayName}
+            <div className="group/name flex items-center gap-1 min-w-0">
+              <div
+                className="text-base font-semibold text-neutral-100 truncate cursor-text"
+                title={`${displayName}\n(double-click to rename · clear to reset)`}
+                onDoubleClick={() => setEditingName(displayName)}
+              >
+                {displayName}
+              </div>
+              {/* 편집 가능 힌트: 호버 시 연필 아이콘을 띄워 이름을 바꿀 수 있음을 알린다. */}
+              <button
+                onClick={() => setEditingName(displayName)}
+                className="opacity-0 group-hover/name:opacity-100 shrink-0 grid place-items-center text-neutral-500 hover:text-neutral-200"
+                title="Rename workspace"
+              >
+                <Pencil size={12} />
+              </button>
             </div>
           )}
           <div className="flex items-center gap-1.5 text-xs text-neutral-500">

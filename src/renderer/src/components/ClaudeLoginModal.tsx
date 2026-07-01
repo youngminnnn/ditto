@@ -21,6 +21,13 @@ export default function ClaudeLoginModal({ onClose }: { onClose: () => void }): 
   // 코드를 제출한 직후인지 추적 — 같은 프롬프트가 다시 오면 "거절된 코드"로 해석한다.
   const submittedRef = useRef(false)
 
+  // 콜백은 ref 로 최신값을 참조한다. effect 의존성에 넣으면 부모 리렌더로 onClose 참조가
+  // 바뀔 때마다 effect 가 재실행(cleanup→start)돼 브라우저가 무한히 다시 열리기 때문이다.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const refreshAuthRef = useRef(refreshAuth)
+  refreshAuthRef.current = refreshAuth
+
   useEffect(() => {
     const unsub = window.api.onClaudeLogin((e) => {
       if (e.phase === 'awaiting-code') {
@@ -34,8 +41,8 @@ export default function ClaudeLoginModal({ onClose }: { onClose: () => void }): 
         setPhase('awaiting-code')
       } else if (e.phase === 'done') {
         if (e.success) {
-          void refreshAuth()
-          onClose()
+          void refreshAuthRef.current()
+          onCloseRef.current()
         } else {
           submittedRef.current = false
           setPhase('error')
@@ -49,7 +56,9 @@ export default function ClaudeLoginModal({ onClose }: { onClose: () => void }): 
       // 모달을 닫으면 진행 중인 로그인 PTY 를 정리한다(완료된 경우엔 no-op).
       void window.api.auth.claudeLoginCancel()
     }
-  }, [onClose, refreshAuth])
+    // 마운트 시 한 번만 로그인 PTY 를 시작하고, 언마운트 시 정리한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const submit = (): void => {
     if (!code.trim()) return

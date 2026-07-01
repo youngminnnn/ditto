@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Loader2, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
 import { ClaudeMark, GithubMark } from './BrandIcons'
@@ -9,6 +9,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
   const refreshAuth = useStore((s) => s.refreshAuth)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [claudeLoginOpen, setClaudeLoginOpen] = useState(false)
+  const closeClaudeLogin = useCallback(() => setClaudeLoginOpen(false), [])
 
   useEffect(() => {
     void refreshAuth()
@@ -101,7 +102,7 @@ export default function IntegrationsPanel(): React.JSX.Element {
         </button>
       </div>
 
-      {claudeLoginOpen && <ClaudeLoginModal onClose={() => setClaudeLoginOpen(false)} />}
+      {claudeLoginOpen && <ClaudeLoginModal onClose={closeClaudeLogin} />}
     </div>
   )
 }

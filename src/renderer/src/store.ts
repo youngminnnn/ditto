@@ -312,16 +312,15 @@ export const useStore = create<UIState>((set, get) => ({
       if (event.type === 'item') {
         set({ transcripts: { ...transcripts, [workspaceId]: upsertItem(items, event.item) } })
 
-        // 응답 완료: 알림음 + 미확인 표시 + git/PR 상태 새로고침
+        // 응답 완료: 알림음 + git/PR 상태 새로고침
         // (에이전트가 방금 커밋·PR 생성을 했을 수 있으므로 칩이 곧바로 반영되도록).
+        // 미확인(unread) 표시는 여기서 하지 않는다 — result 아이템은 자동 압축(auto-compact)·
+        // preflight 압축의 중간 턴에서도, 또 대기 큐가 남아 곧 다음 턴이 이어질 때도 방출되므로,
+        // "작업이 안 끝났는데 unread(=Next unread)" 가 뜨던 원인이었다. 대신 턴이 실제로 idle 로
+        // 정착하고 대기 큐가 빈 시점(아래 status 처리)에서만 unread 를 켠다.
         if (event.item.type === 'result') {
           const s = get()
           if (s.app?.settings.soundOnComplete) playNotification()
-          // 다른 workspace 의 완료, 또는 창이 비활성일 때 본 workspace 의 완료도 미확인으로 표시
-          // (자리를 비운 사이 끝난 작업을 Dock 배지·점프 버튼으로 알린다).
-          if (workspaceId !== s.selectedWorkspaceId || !windowFocused) {
-            set({ unread: { ...s.unread, [workspaceId]: true } })
-          }
           void s.refreshGit(workspaceId)
           void s.refreshPr(workspaceId)
         }
@@ -371,17 +370,37 @@ export const useStore = create<UIState>((set, get) => ({
             return { runningSince }
           })
         }
+        // 다시 실행에 들어가면 이전 완료의 미확인 표시를 지운다 — 자동 압축 재실행이나 대기 큐의
+        // 후속 턴처럼 "끝난 줄 알았는데 다시 도는" 경우 running 과 unread 가 동시에 켜져
+        // Next unread 가 뜨는 것을 막는다(작업 중에는 unread 가 아니어야 한다).
+        if (event.type === 'status' && event.status === 'running') {
+          set((s) => {
+            if (!s.unread[workspaceId]) return {}
+            const unread = { ...s.unread }
+            delete unread[workspaceId]
+            return { unread }
+          })
+        }
         // 턴이 정상 종료되면 대기 큐에 쌓인 후속 메시지를 순서대로 전송한다(취소 기회는 여기서 끝).
         // 에러 종료 시에는 자동 전송하지 않고 큐를 남겨, 사용자가 검토/취소하도록 둔다.
         if (event.type === 'status' && event.status === 'idle') {
           const queued = get().messageQueue[workspaceId]
           if (queued && queued.length) {
+            // 아직 처리할 메시지가 남았으니 곧 다시 running 이 된다 — 여기서는 unread 로 표시하지
+            // 않는다(작업이 이어지는데 Next unread 가 뜨면 안 된다).
             set((s) => {
               const messageQueue = { ...s.messageQueue }
               delete messageQueue[workspaceId]
               return { messageQueue }
             })
             for (const m of queued) void window.api.chat.send(workspaceId, m.text, m.images)
+          } else {
+            // 큐가 비어 턴이 완전히 끝났다. 이제서야 미확인으로 표시한다 — 다른 workspace 의 완료,
+            // 또는 창이 비활성일 때 본 workspace 의 완료를 Dock 배지·점프 버튼으로 알린다.
+            const s = get()
+            if (workspaceId !== s.selectedWorkspaceId || !windowFocused) {
+              set({ unread: { ...s.unread, [workspaceId]: true } })
+            }
           }
         }
         // 백그라운드 세션이 에러로 끝나면 미확인으로 표시(빨간 점 + 점프 대상).

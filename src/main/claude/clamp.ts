@@ -33,7 +33,7 @@ export function clampText(text: string, max = MAX_TEXT): string {
  */
 export function clampInput(input: unknown): unknown {
   const clamped = clampStringLeaves(input)
-  let size = 0
+  let size: number
   try {
     size = JSON.stringify(clamped)?.length ?? 0
   } catch {

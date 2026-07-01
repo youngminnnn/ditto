@@ -107,7 +107,7 @@ class TranscriptStore {
 
     const legacy = this.legacyFileFor(workspaceId)
     if (existsSync(legacy)) {
-      let items: ChatItem[] = []
+      let items: ChatItem[]
       try {
         items = JSON.parse(readFileSync(legacy, 'utf-8')) as ChatItem[]
       } catch {

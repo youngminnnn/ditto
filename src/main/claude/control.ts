@@ -103,7 +103,7 @@ export function readPermissions(config: SessionConfig): CommandResult {
   const deny = new Set<string>()
   const sources: string[] = []
   for (const file of files) {
-    let json: { permissions?: { allow?: string[]; ask?: string[]; deny?: string[] } } | null = null
+    let json: { permissions?: { allow?: string[]; ask?: string[]; deny?: string[] } } | null
     try {
       json = JSON.parse(readFileSync(file, 'utf-8'))
     } catch {

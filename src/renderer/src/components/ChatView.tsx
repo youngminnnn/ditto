@@ -389,6 +389,9 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
               >
                 <CircleCheck size={13} />
                 Approve all ({approvableCount})
+                <kbd className="ml-0.5 rounded bg-white/20 px-1 py-0.5 text-[10px] leading-none font-medium tabular-nums">
+                  ⇧⌘A
+                </kbd>
               </button>
             )}
             {pendingElsewhereCount > 0 && (
@@ -398,10 +401,13 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                   if (id) void selectWorkspace(id)
                 }}
                 className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--warning-500)]/90 text-black text-xs font-medium hover:bg-[var(--warning-400)] shadow-lg"
-                title="Jump to a session waiting for permission"
+                title="Jump to a session waiting for permission — ⌘I"
               >
                 <ShieldQuestion size={13} />
                 Needs input ({pendingElsewhereCount})
+                <kbd className="ml-0.5 rounded bg-black/20 px-1 py-0.5 text-[10px] leading-none font-medium tabular-nums">
+                  ⌘I
+                </kbd>
               </button>
             )}
             {unreadCount > 0 && (

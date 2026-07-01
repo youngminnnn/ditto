@@ -131,6 +131,14 @@ export default function App(): React.JSX.Element {
         return
       }
 
+      // ⌘I: 다음 권한 대기(입력 필요) 세션으로 이동.
+      if (e.key.toLowerCase() === 'i') {
+        e.preventDefault()
+        const id = st.nextPendingPermissionId()
+        if (id) void st.selectWorkspace(id)
+        return
+      }
+
       const list = (st.app?.workspaces ?? []).filter((w) => !w.archived)
       if (!list.length) return
 

@@ -14,7 +14,7 @@ const DEFAULT_MODEL = CLAUDE_DEFAULT_MODEL
  * 디스크 영속 형식의 현재 스키마 버전. 영속 데이터 모양이 바뀔 때마다 1 올리고,
  * MIGRATIONS 에 직전 버전 → 새 버전 변환 함수를 추가한다.
  */
-const CURRENT_SCHEMA_VERSION = 5
+const CURRENT_SCHEMA_VERSION = 6
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
@@ -124,6 +124,15 @@ const MIGRATIONS: Array<(raw: Record<string, unknown>) => Record<string, unknown
       agentBackend: w.agentBackend ?? DEFAULT_AGENT_BACKEND
     }))
     return { ...raw, workspaces }
+  },
+  // v5 → v6: 온보딩 재노출. 현재 배포 버전(v0.4.0)까지의 파일은 모두 스키마 v5 이므로,
+  // v0.4.0 이하에서 이미 온보딩을 마친(onboarded=true) 기존 사용자도 이 변환을 타면서
+  // onboarded 가 false 로 초기화돼 다음 실행 때 온보딩을 다시 보게 된다. 신규 설치는 스키마가
+  // 처음부터 v6 이라 이 변환을 타지 않으므로 영향이 없다. (약관 동의는 건드리지 않는다.)
+  (raw) => {
+    const settings = { ...((raw.settings as Partial<AppSettings>) ?? {}) }
+    settings.onboarded = false
+    return { ...raw, settings }
   }
 ]
 

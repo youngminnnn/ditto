@@ -286,7 +286,33 @@ function WorkspaceRow({
           <GitBranch size={10} className="shrink-0" />
           <span className="truncate">{workspace.branch}</span>
           {git && git.changedFiles > 0 && (
-            <span className="text-[var(--warning-500)]/80 shrink-0">·{git.changedFiles}</span>
+            <span
+              className="text-[var(--warning-500)]/80 shrink-0"
+              title={`${git.changedFiles} changed file(s)`}
+            >
+              ·{git.changedFiles}
+            </span>
+          )}
+          {git && git.behind > 0 && (
+            <span
+              className="text-neutral-500 shrink-0 tabular-nums"
+              title={`${git.behind} commit(s) behind ${workspace.baseBranch}`}
+            >
+              ↓{git.behind}
+            </span>
+          )}
+          {git && git.ahead > 0 && (
+            <span
+              className="text-neutral-500 shrink-0 tabular-nums"
+              title={`${git.ahead} commit(s) ahead of ${workspace.baseBranch}`}
+            >
+              ↑{git.ahead}
+            </span>
+          )}
+          {git && git.conflicted && (
+            <span className="text-[var(--danger-fg)] shrink-0" title="Merge conflicts">
+              ⚠
+            </span>
           )}
           {workspace.status === 'running' && runningSince && (
             <span

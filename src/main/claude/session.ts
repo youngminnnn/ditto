@@ -440,7 +440,10 @@ export class ClaudeSession {
         title: options.title,
         displayName: options.displayName,
         decisionReason: options.decisionReason,
-        input
+        // 표시용 사본만 클램프한다 — 원본 input 은 아래 allow 분기의 updatedInput 으로 그대로 돌려준다.
+        // 클램프하지 않으면 거대한 input(예: 큰 Write 본문)이 IPC 직렬화 경계에서 네이티브 CHECK 를
+        // 터뜨려 메인 프로세스를 통째로 abort 시킨다(clamp.ts 참고).
+        input: clampInput(input) as Record<string, unknown>
       })
 
       if (decision.behavior === 'allow') {
@@ -465,7 +468,9 @@ export class ClaudeSession {
       title: options.title,
       displayName: options.displayName,
       decisionReason: options.decisionReason,
-      input
+      // 표시용 사본만 클램프한다 — 원본 input 은 allow 분기의 updatedInput 으로 그대로 돌려준다.
+      // (거대한 input 이 IPC 직렬화에서 메인을 abort 시키는 것을 막는다. clamp.ts 참고.)
+      input: clampInput(input) as Record<string, unknown>
     })
 
     // allow 분기는 런타임 스키마상 updatedInput(record) 이 필수다(.d.ts 에는 optional 로

@@ -27,8 +27,10 @@ prompt** — nothing runs until you send your first message.
 When you first launch Ditto, onboarding walks you through:
 
 1. **Consent** to the Terms / Privacy Policy (required to continue).
-2. **Signing in** to Claude (`claude auth`) and GitHub (`gh auth`). If a CLI isn't
-   installed, an install link is shown. Sign-in flows run in Terminal, and you can
+2. **Signing in** to Claude and GitHub. If a CLI isn't installed, an install link is
+   shown. **Claude sign-in finishes in-app** through your browser, while **GitHub
+   sign-in opens your Terminal**. The **GitHub CLI (`gh`) is required** — you can't
+   finish onboarding (or use the app) until `gh` is installed and signed in. You can
    change connections anytime under **Settings → Integrations**.
 
 Ditto **reuses the credentials of your installed Claude Code and `gh` CLIs** — no
@@ -39,7 +41,8 @@ separate API key is needed.
 - macOS (Apple Silicon)
 - [Claude Code](https://claude.com/claude-code) — required, and signed in.
 - `git`
-- `gh` (GitHub CLI) — optional; only needed for viewing/creating PRs and CI checks.
+- `gh` (GitHub CLI) — **required**. Ditto uses it for branch/PR management, and a hard
+  gate blocks the app until it's installed and signed in.
 
 ## Features
 
@@ -51,8 +54,9 @@ separate API key is needed.
   `witty-otter`) and branch off the repo's default branch. Turn on **manual setup** in
   Settings to choose the name and base branch yourself. Rename a workspace by
   double-clicking its name in the header.
-- **Per-workspace model override** (header dropdown). When unset it follows the global
-  setting; changing it resumes the same conversation.
+- **Per-workspace model & reasoning effort** — set from the status line above the input
+  box, or by typing `/model` and `/effort`. When unset they follow the global settings;
+  changing them resumes the same conversation. Effort ranges through to **ultracode**.
 - **Sessions resume across restarts** — your conversation context is restored, so the
   next message after a restart continues where you left off.
 
@@ -71,6 +75,9 @@ separate API key is needed.
   notifications and a Dock badge count.
 - The **"Needs input" / "Next unread"** buttons above the input box jump straight to the
   session that needs you.
+- An **Overview board** (shown when no workspace is selected) lists every active session
+  with status filters (All / Running / Needs input / Unread / Idle) and a **Stop all**
+  action; click any card to jump in.
 
 ### Work area
 
@@ -90,6 +97,12 @@ A tabbed panel on top plus an interactive terminal below (resizable split):
 
 - **Slash-command autocomplete** — type `/` to see the Claude Code commands/skills
   available in that worktree.
+- **Inline shell commands** — start a message with `!` to run it as a shell command in
+  the worktree, with the output shown right in the chat.
+- **Image attachments** — paste or drop images into the input box to send them along.
+- **Status line** — branch · directory · model · effort · context usage are always
+  shown above the input box; long conversations **auto-compact** (toggleable), or run
+  `/compact` manually.
 - **Draft preservation & message queueing** — an in-progress message survives workspace
   switches, and you can queue follow-up messages while a turn is running.
 - **Shortcuts** — ↑/↓ to recall previous messages, ⌘1–9 and ⌘[ ⌘] to switch workspaces.

@@ -470,6 +470,8 @@ export const IPC = {
   terminalRunCommand: 'terminal:runCommand',
   /** 입력창의 `!명령` 을 1회 실행하고 출력을 대화 흐름(트랜스크립트)에 인라인으로 흘려보낸다. */
   terminalExec: 'terminal:exec',
+  /** 진행 중인 인라인 `!명령`(execInline)을 중단한다. 인자로 workspaceId 와 대상 아이템 id 를 받는다. */
+  terminalKillInline: 'terminal:killInline',
   // Dock 미확인 배지
   appSetBadge: 'app:setBadge',
 

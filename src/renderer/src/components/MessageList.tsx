@@ -15,7 +15,8 @@ import {
   Workflow,
   XCircle,
   MessageSquarePlus,
-  Terminal as TerminalIcon
+  Terminal as TerminalIcon,
+  Square
 } from 'lucide-react'
 import { useStore } from '../store'
 import { formatTime } from '../lib/format'
@@ -106,7 +107,13 @@ export default function MessageList({
       <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto">
         <div className="max-w-3xl mx-auto px-5 py-5 space-y-3">
           {items.map((item) => (
-            <Item key={item.id} item={item} running={running} resolved={resolved} />
+            <Item
+              key={item.id}
+              item={item}
+              running={running}
+              resolved={resolved}
+              workspaceId={workspaceId}
+            />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -127,11 +134,13 @@ export default function MessageList({
 function Item({
   item,
   running,
-  resolved
+  resolved,
+  workspaceId
 }: {
   item: ChatItem
   running: boolean
   resolved: Set<string>
+  workspaceId: string
 }): React.JSX.Element | null {
   const time = formatTime(item.ts)
   switch (item.type) {
@@ -203,6 +212,7 @@ function Item({
           output={item.output}
           exitCode={item.exitCode}
           running={item.running}
+          onStop={() => void window.api.terminal.killInline(workspaceId, item.id)}
         />
       )
     case 'task':
@@ -221,16 +231,18 @@ function BashBlock({
   command,
   output,
   exitCode,
-  running
+  running,
+  onStop
 }: {
   command: string
   output: string
   exitCode: number | null
   running: boolean
+  onStop: () => void
 }): React.JSX.Element {
   const failed = !running && exitCode != null && exitCode !== 0
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-3)] overflow-hidden font-mono text-xs">
+    <div className="group/bash rounded-lg border border-[var(--border)] bg-[var(--bg-3)] overflow-hidden font-mono text-xs">
       <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-[var(--border)] bg-[var(--surface)]">
         <TerminalIcon size={12} className="text-neutral-500 shrink-0" />
         <span className="text-[var(--success-400)] shrink-0">$</span>
@@ -239,7 +251,15 @@ function BashBlock({
         </span>
         <span className="ml-auto shrink-0">
           {running ? (
-            <Loader2 size={12} className="text-neutral-500 animate-spin" />
+            <button
+              onClick={onStop}
+              title="중단"
+              className="grid h-4 w-4 place-items-center text-neutral-500 hover:text-[var(--danger-400)]"
+            >
+              {/* 평상시 스피너, 마우스를 올리면 중단(정지) 버튼으로 바뀐다. */}
+              <Loader2 size={12} className="animate-spin group-hover/bash:hidden" />
+              <Square size={11} fill="currentColor" className="hidden group-hover/bash:block" />
+            </button>
           ) : failed ? (
             <span className="flex items-center gap-1 text-[var(--danger-400)]">
               <XCircle size={12} />

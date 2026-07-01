@@ -52,6 +52,11 @@ interface Term {
  */
 export class TerminalManager {
   private terms = new Map<string, Term>()
+  /**
+   * 진행 중인 인라인 `!명령`(execInline)의 자식 프로세스. 키는 `${workspaceId}:${itemId}`.
+   * 실행 중 사용자가 "중단"을 누르면 여기서 찾아 프로세스 그룹째 종료한다. 종료되면 제거한다.
+   */
+  private inlineProcs = new Map<string, ReturnType<typeof spawn>>()
 
   constructor(private dispatch: Dispatch) {}
 
@@ -178,6 +183,7 @@ export class TerminalManager {
     const finish = (exitCode: number | null): void => {
       if (settled) return
       settled = true
+      this.inlineProcs.delete(`${workspaceId}:${id}`)
       if (flushTimer) {
         clearTimeout(flushTimer)
         flushTimer = null
@@ -198,20 +204,56 @@ export class TerminalManager {
     const shell = process.env.SHELL || '/bin/zsh'
     let proc: ReturnType<typeof spawn>
     try {
-      proc = spawn(shell, ['-l', '-c', cmd], { cwd })
+      // detached: true → 새 프로세스 그룹으로 띄운다. 중단 시 셸뿐 아니라 셸이 낳은
+      // 자식들(빌드/watcher 등)까지 그룹째(process.kill(-pid)) 종료하기 위해서다.
+      proc = spawn(shell, ['-l', '-c', cmd], { cwd, detached: true })
     } catch (err) {
       output += (err as Error).message
       finish(null)
       return
     }
 
+    this.inlineProcs.set(`${workspaceId}:${id}`, proc)
     proc.stdout?.on('data', onChunk)
     proc.stderr?.on('data', onChunk)
     proc.on('error', (err) => {
       output += `${output && !output.endsWith('\n') ? '\n' : ''}${err.message}\n`
       finish(null)
     })
-    proc.on('close', (code) => finish(code))
+    // 신호로 종료된 경우(중단 버튼 등) code 는 null 이므로, 실패로 보이도록 exit code 를 매핑한다.
+    proc.on('close', (code, signal) => finish(code == null && signal ? 143 : code))
+  }
+
+  /**
+   * 진행 중인 인라인 `!명령`을 중단한다(대화 흐름의 "중단" 버튼). 프로세스 그룹째 SIGTERM 을
+   * 보내고, 유예 후에도 살아 있으면 SIGKILL 로 강제 종료한다. 이미 끝났으면 아무 것도 안 한다.
+   */
+  killInline(workspaceId: string, itemId: string): void {
+    const proc = this.inlineProcs.get(`${workspaceId}:${itemId}`)
+    if (proc) this.killInlineProc(proc)
+  }
+
+  /** 인라인 프로세스를 그룹째 종료한다. 그룹 종료가 안 되면 프로세스 단독 종료로 폴백한다. */
+  private killInlineProc(proc: ReturnType<typeof spawn>): void {
+    const pid = proc.pid
+    if (pid == null) return
+    try {
+      process.kill(-pid, 'SIGTERM')
+    } catch {
+      try {
+        proc.kill('SIGTERM')
+      } catch {
+        // 이미 종료됨.
+      }
+    }
+    // 유예 후에도 살아 있으면 강제 종료. 이미 죽었으면 신호 전송이 던지므로 무시한다.
+    setTimeout(() => {
+      try {
+        process.kill(-pid, 'SIGKILL')
+      } catch {
+        // 이미 종료됨.
+      }
+    }, 2000)
   }
 
   /** 다음 flush 가 예약돼 있지 않으면 하나 예약한다(청크당 하나만, 주기적으로 묶어 보냄). */
@@ -254,6 +296,13 @@ export class TerminalManager {
 
   /** workspace 의 PTY 를 종료한다(아카이브/삭제 시). */
   disposeWorkspace(workspaceId: string): void {
+    // 진행 중인 인라인 `!명령`도 함께 정리한다(그룹째 종료).
+    for (const [key, proc] of this.inlineProcs) {
+      if (key.startsWith(`${workspaceId}:`)) {
+        this.killInlineProc(proc)
+        this.inlineProcs.delete(key)
+      }
+    }
     const term = this.terms.get(workspaceId)
     if (!term) return
     if (term.flushTimer) clearTimeout(term.flushTimer)

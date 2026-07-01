@@ -16,7 +16,7 @@ import { useStore } from '../store'
 import { workspaceDisplayName } from '@shared/types'
 import { useNow } from '../lib/useNow'
 import { formatDuration } from '../lib/format'
-import type { PrState, PrStatus, Workspace } from '@shared/types'
+import type { PrState, PrStatus, Repo, Workspace } from '@shared/types'
 
 /** running 상태가 이 시간을 넘기면 사이드바에 "오래 실행 중" 힌트(멈춤일 수 있음)를 표시한다. */
 const RUNNING_STALE_MS = 5 * 60 * 1000
@@ -83,7 +83,7 @@ export default function Sidebar({
           return (
             <div key={repo.id} className="mb-3">
               <div className="group flex items-center gap-1.5 px-2 py-1.5 rounded-md">
-                <FolderGit2 size={14} className="text-neutral-500 shrink-0" />
+                <RepoIcon repo={repo} />
                 <span
                   className="flex-1 truncate text-sm font-medium text-neutral-300"
                   title={repo.path}
@@ -141,6 +141,25 @@ export default function Sidebar({
       </div>
     </aside>
   )
+}
+
+/**
+ * 리포 이름 옆 아이콘. GitHub 소유자 아바타(avatarDataUrl)가 있으면 그 이미지를,
+ * 없거나 로드에 실패하면 기본 리포 아이콘(FolderGit2)으로 폴백한다.
+ */
+function RepoIcon({ repo }: { repo: Repo }): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  if (repo.avatarDataUrl && !failed) {
+    return (
+      <img
+        src={repo.avatarDataUrl}
+        alt=""
+        className="h-4 w-4 rounded-full shrink-0 object-cover"
+        onError={() => setFailed(true)}
+      />
+    )
+  }
+  return <FolderGit2 size={14} className="text-neutral-500 shrink-0" />
 }
 
 function WorkspaceRow({

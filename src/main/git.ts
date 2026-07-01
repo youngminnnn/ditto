@@ -195,6 +195,22 @@ export function repoNameFromPath(path: string): string {
   return basename(path)
 }
 
+/**
+ * git 리모트 URL 에서 GitHub 소유자(owner) 이름을 뽑는다. GitHub 리모트가 아니면 null.
+ * SSH(git@github.com:owner/repo.git)·HTTPS(https://github.com/owner/repo(.git))·
+ * ssh://git@github.com/owner/repo 형태를 모두 받아 준다.
+ */
+export function parseGithubOwner(remoteUrl: string): string | null {
+  const m = remoteUrl.trim().match(/github\.com[/:]([^/]+)\/[^/]+?(?:\.git)?\/?$/i)
+  return m ? m[1] : null
+}
+
+/** origin 리모트가 GitHub 이면 소유자 이름을 반환한다(아니면 null). */
+export async function getGithubOwner(repoPath: string): Promise<string | null> {
+  const url = await git(repoPath, ['remote', 'get-url', 'origin']).catch(() => '')
+  return url ? parseGithubOwner(url) : null
+}
+
 // ── base 브랜치에서 업데이트(머지) ────────────────────────────────────────
 
 /**

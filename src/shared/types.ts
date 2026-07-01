@@ -43,6 +43,13 @@ export interface Repo {
   devScript: string
   /** workspace 아카이브 시 worktree 에서 실행하는 정리 명령. 비어 있으면 미실행. */
   archiveScript: string
+  /**
+   * GitHub 소유자(owner) 아바타 이미지를 담은 data: URL. origin 리모트가 GitHub 일 때만 채워진다.
+   * 원격 URL 대신 data URL 로 저장하는 이유: 렌더러 CSP(img-src 'self' data:)가 외부 이미지를
+   * 막으므로, main 이 한 번 받아 인라인해 두면 CSP 완화 없이 오프라인에서도 표시된다.
+   * 없으면(비 GitHub·미인증·네트워크 실패) 렌더러가 기본 리포 아이콘으로 폴백한다.
+   */
+  avatarDataUrl?: string
   addedAt: number
 }
 

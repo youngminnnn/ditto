@@ -52,7 +52,7 @@ export default function Sidebar({
 
   return (
     <aside className="w-72 shrink-0 flex flex-col bg-[var(--bg-2)]">
-      <div className="flex items-center justify-between px-3 h-10 shrink-0">
+      <div data-tour="repos" className="flex items-center justify-between px-3 h-10 shrink-0">
         <span className="text-xs uppercase tracking-wider text-neutral-500 font-semibold">
           Repositories
         </span>
@@ -65,7 +65,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-4">
+      <div data-tour="workspaces" className="flex-1 overflow-y-auto px-2 pb-4">
         {app.repos.length === 0 && (
           <p className="px-3 py-8 text-xs text-neutral-500 text-center leading-relaxed">
             No repositories yet.

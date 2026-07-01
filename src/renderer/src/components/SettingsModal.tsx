@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Compass } from 'lucide-react'
 import { useStore } from '../store'
 import Modal, { inputClass, labelClass, primaryBtn, ghostBtn } from './Modal'
 import IntegrationsPanel from './IntegrationsPanel'
@@ -14,7 +15,13 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'Light' }
 ]
 
-export default function SettingsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+export default function SettingsModal({
+  onClose,
+  onStartTour
+}: {
+  onClose: () => void
+  onStartTour: () => void
+}): React.JSX.Element {
   const settings = useStore((s) => s.app!.settings)
   const [mode, setMode] = useState<PermissionMode>(settings.defaultPermissionMode)
   const [manualWorkspaceSetup, setManualWorkspaceSetup] = useState(settings.manualWorkspaceSetup)
@@ -68,6 +75,22 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
       <div className="space-y-5">
         <Section title="Integrations">
           <IntegrationsPanel />
+        </Section>
+
+        <Section title="Getting started">
+          <button
+            type="button"
+            onClick={onStartTour}
+            className="flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-lg border border-[var(--border)] text-neutral-300 hover:bg-[var(--surface-2)] hover:text-neutral-100 transition-colors"
+          >
+            <Compass size={16} className="text-[var(--info-400)]" />
+            <span className="text-sm">
+              Take a tour
+              <span className="block text-xs text-neutral-600">
+                Revisit the quick intro to Ditto&rsquo;s main features.
+              </span>
+            </span>
+          </button>
         </Section>
 
         <Section title="Appearance">
@@ -159,7 +182,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               ))}
             </select>
             <p className="mt-1.5 text-xs text-neutral-600">
-              Press ⇧⇥ in a session to cycle the mode, just like Claude Code.
+              Press ⇧⇥ in a session to cycle the mode.
             </p>
           </div>
 
@@ -199,8 +222,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
               ))}
             </select>
             <p className="mt-1.5 text-xs text-neutral-600">
-              How hard Claude thinks before responding, like Claude Code&rsquo;s effort setting. Higher
-              is slower but more thorough. Each workspace can override this from its header dropdown.
+              How hard the agent thinks before responding. Higher is slower but more thorough. Each
+              workspace can override this from its header dropdown.
             </p>
           </div>
 
@@ -214,8 +237,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
             <span className="text-sm text-neutral-300">
               Auto-compact conversation when context fills
               <span className="block text-xs text-neutral-600">
-                Like Claude Code, summarizes the conversation as it approaches the context limit so
-                long sessions keep room to continue.
+                Summarizes the conversation as it approaches the context limit so long sessions keep
+                room to continue.
               </span>
             </span>
           </label>

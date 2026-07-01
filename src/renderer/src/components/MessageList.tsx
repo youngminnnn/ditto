@@ -70,7 +70,7 @@ export default function MessageList({
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-[var(--surface)] border border-[var(--border-2)]">
             <MessageSquarePlus size={20} className="text-neutral-400" />
           </div>
-          <p className="text-base text-neutral-300">Start a Claude Code session</p>
+          <p className="text-base text-neutral-300">Start an agent session</p>
           <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
             Send your first message — nothing runs until you do. Type{' '}
             <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">/</kbd>{' '}

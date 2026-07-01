@@ -548,7 +548,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               placeholder={
                 running
                   ? 'Queue a follow-up…  (Enter to send · it runs after the current turn)'
-                  : 'Message Claude Code…  (Enter to send · / for commands · ! to run a terminal command)'
+                  : 'Message your agent…  (Enter to send · / for commands · ! to run a terminal command)'
               }
               className="flex-1 bg-transparent resize-none outline-none text-base leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1"
             />

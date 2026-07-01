@@ -15,6 +15,7 @@ import SettingsModal from './components/SettingsModal'
 import NewWorkspaceModal from './components/NewWorkspaceModal'
 import RepoConfigModal from './components/RepoConfigModal'
 import OnboardingModal from './components/OnboardingModal'
+import FeatureTour from './components/FeatureTour'
 import GithubGate from './components/GithubGate'
 import Toaster from './components/Toaster'
 import ConfirmDialog from './components/ConfirmDialog'
@@ -47,6 +48,8 @@ export default function App(): React.JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   const [newWsRepoId, setNewWsRepoId] = useState<string | null>(null)
   const [configRepoId, setConfigRepoId] = useState<string | null>(null)
+  // 설정의 "Take a tour" 로 여는 기능 투어. 실제 화면 위에서 진행하도록 앱 레벨에서 렌더한다.
+  const [tourOpen, setTourOpen] = useState(false)
 
   useEffect(() => {
     void init()
@@ -74,7 +77,8 @@ export default function App(): React.JSX.Element {
     newWsRepoId !== null ||
     configRepoId !== null ||
     onboardingOpen ||
-    githubGateOpen
+    githubGateOpen ||
+    tourOpen
 
   // 키보드: ⇧⇥ 권한 모드 순환, ⌘1–9 워크스페이스 선택, ⌘[ / ⌘] 이전/다음.
   useEffect(() => {
@@ -183,7 +187,7 @@ export default function App(): React.JSX.Element {
           className="no-drag shrink-0 flex items-center justify-center gap-2 h-8 bg-[var(--warning-500)]/10 border-b border-[var(--warning-500)]/25 text-sm text-[var(--warning-300)] hover:bg-[var(--warning-500)]/15"
         >
           <AlertTriangle size={13} />
-          You&rsquo;re not signed in to Claude Code. Agents won&rsquo;t run until you connect — click to open Settings.
+          You&rsquo;re not signed in to your AI provider. Agents won&rsquo;t run until you connect — click to open Settings.
         </button>
       )}
 
@@ -192,7 +196,7 @@ export default function App(): React.JSX.Element {
         <div ref={contentRef} className="flex-1 min-w-0 border-l border-[var(--border)] flex">
           {selected ? (
             <>
-              <div className="flex-1 min-w-0">
+              <div data-tour="chat" className="flex-1 min-w-0">
                 <ChatView key={selected.id} workspace={selected} />
               </div>
               {rightPanelOpen && (
@@ -205,6 +209,7 @@ export default function App(): React.JSX.Element {
                     onDelta={(dx) => setRightWidth(Math.min(rightBase.current - dx, maxRight))}
                   />
                   <div
+                    data-tour="work-panel"
                     style={{ width: effectiveRightWidth }}
                     className="shrink-0 border-l border-[var(--border)] min-w-0"
                   >
@@ -225,7 +230,16 @@ export default function App(): React.JSX.Element {
         <OnboardingModal needsConsent={needsConsent} needsOnboarding={needsOnboarding} />
       )}
       {githubGateOpen && <GithubGate />}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onStartTour={() => {
+            setShowSettings(false)
+            setTourOpen(true)
+          }}
+        />
+      )}
+      {tourOpen && <FeatureTour onDone={() => setTourOpen(false)} />}
       {newWsRepoId && <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />}
       {configRepoId && <RepoConfigModal repoId={configRepoId} onClose={() => setConfigRepoId(null)} />}
 

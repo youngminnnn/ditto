@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import IntegrationsPanel from './IntegrationsPanel'
+import FeatureTour from './FeatureTour'
 import Logo from './Logo'
 import { primaryBtn } from './Modal'
 import { useStore } from '../store'
@@ -11,7 +12,7 @@ const TERMS_URL = 'https://github.com/ditto-app/ditto/blob/main/TERMS.md'
 
 /**
  * 최초 실행 온보딩. 첫 단계로 약관·개인정보처리방침 동의를 강제하고(미동의 시 진행 불가),
- * 동의가 끝나면 계정 연결(Claude/GitHub) 단계로 넘어간다.
+ * 동의가 끝나면 계정 연결(AI 제공자/GitHub) 단계로, 마지막으로 주요 기능 소개 투어로 이어진다.
  * 약관 버전이 올라가 재동의만 필요한 경우(이미 onboarded)에는 동의 단계만 보여준다.
  */
 export default function OnboardingModal({
@@ -21,7 +22,7 @@ export default function OnboardingModal({
   needsConsent: boolean
   needsOnboarding: boolean
 }): React.JSX.Element {
-  const [step, setStep] = useState<'consent' | 'integrations'>(
+  const [step, setStep] = useState<'consent' | 'integrations' | 'features'>(
     needsConsent ? 'consent' : 'integrations'
   )
 
@@ -31,8 +32,14 @@ export default function OnboardingModal({
     if (needsOnboarding) setStep('integrations')
   }
 
+  // 계정 연결까지 끝나면 마지막으로 기능 소개 투어를 보여준다.
   const finishOnboarding = (): void => {
     void window.api.settings.update({ onboarded: true })
+  }
+
+  // 기능 투어는 최초 실행 흐름을 마무리하는 단계 — 완료·건너뛰기 모두 onboarded 를 저장해 다시 뜨지 않게 한다.
+  if (step === 'features') {
+    return <FeatureTour firstRun onDone={finishOnboarding} />
   }
 
   return (
@@ -51,7 +58,7 @@ export default function OnboardingModal({
         {step === 'consent' ? (
           <ConsentStep onContinue={acceptConsent} />
         ) : (
-          <IntegrationsStep onDone={finishOnboarding} />
+          <IntegrationsStep onDone={() => setStep('features')} />
         )}
       </div>
     </div>
@@ -72,8 +79,9 @@ function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Elem
         <p className="text-neutral-300">Before you start, here&rsquo;s how your data is handled:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li>
-            Your prompts and code are sent to <b className="text-neutral-300">Anthropic</b> to be
-            processed by Claude.
+            Your prompts and code are sent to the{' '}
+            <b className="text-neutral-300">AI provider you connect</b> (such as Anthropic) to run
+            the coding agent.
           </li>
           <li>
             If you use the GitHub features, repository data is sent to{' '}

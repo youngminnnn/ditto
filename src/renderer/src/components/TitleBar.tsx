@@ -20,6 +20,7 @@ export default function TitleBar({
       <div className="flex items-center gap-2">
         <AttentionCluster />
         <button
+          data-tour="settings"
           onClick={onOpenSettings}
           className="no-drag h-7 w-7 grid place-items-center rounded-md text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-200"
           title="Settings"

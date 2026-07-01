@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: write # 태그 빌드 시 GitHub Release 생성/업로드에 필요
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v5
         with:

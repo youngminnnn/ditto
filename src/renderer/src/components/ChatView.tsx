@@ -41,12 +41,14 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   draft: {
     Icon: GitPullRequestDraft,
     iconClass: 'text-neutral-400',
-    badgeClass: 'border-[var(--border-2)] bg-[var(--surface)] text-neutral-300 hover:border-neutral-500'
+    badgeClass:
+      'border-[var(--border-2)] bg-[var(--surface)] text-neutral-300 hover:border-neutral-500'
   },
   review_required: {
     Icon: Clock,
     iconClass: 'text-[var(--warning-400)]',
-    badgeClass: 'border-[var(--warning-500)]/30 bg-[var(--warning-500)]/10 text-[var(--warning-200)] hover:border-[var(--warning-500)]/60'
+    badgeClass:
+      'border-[var(--warning-500)]/30 bg-[var(--warning-500)]/10 text-[var(--warning-200)] hover:border-[var(--warning-500)]/60'
   },
   changes_requested: {
     Icon: MessageSquareWarning,
@@ -56,17 +58,20 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   approved: {
     Icon: CircleCheck,
     iconClass: 'text-[var(--success-400)]',
-    badgeClass: 'border-[var(--success-500)]/30 bg-[var(--success-500)]/10 text-[var(--success-200)] hover:border-[var(--success-500)]/60'
+    badgeClass:
+      'border-[var(--success-500)]/30 bg-[var(--success-500)]/10 text-[var(--success-200)] hover:border-[var(--success-500)]/60'
   },
   conflict: {
     Icon: GitMergeConflict,
     iconClass: 'text-[var(--danger-400)]',
-    badgeClass: 'border-[var(--danger-500)]/30 bg-[var(--danger-500)]/10 text-[var(--danger-200)] hover:border-[var(--danger-500)]/60'
+    badgeClass:
+      'border-[var(--danger-500)]/30 bg-[var(--danger-500)]/10 text-[var(--danger-200)] hover:border-[var(--danger-500)]/60'
   },
   open: {
     Icon: GitPullRequest,
     iconClass: 'text-[var(--accent-400)]',
-    badgeClass: 'border-[var(--accent-500)]/30 bg-[var(--accent-500)]/10 text-[var(--accent-200)] hover:border-[var(--accent-500)]/60'
+    badgeClass:
+      'border-[var(--accent-500)]/30 bg-[var(--accent-500)]/10 text-[var(--accent-200)] hover:border-[var(--accent-500)]/60'
   },
   merged: {
     Icon: GitMerge,
@@ -76,7 +81,8 @@ const PR_STYLE: Record<PrState, { Icon: LucideIcon; iconClass: string; badgeClas
   closed: {
     Icon: GitPullRequestClosed,
     iconClass: 'text-neutral-500',
-    badgeClass: 'border-[var(--border-2)] bg-[var(--surface)] text-neutral-400 hover:border-neutral-500'
+    badgeClass:
+      'border-[var(--border-2)] bg-[var(--surface)] text-neutral-400 hover:border-neutral-500'
   }
 }
 
@@ -172,7 +178,8 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
     const res = await window.api.git.updateFromBase(workspace.id)
     setUpdating(false)
     if (res.status === 'updated') pushToast('success', `Updated from ${res.baseBranch}.`)
-    else if (res.status === 'up-to-date') pushToast('info', `Already up to date with ${res.baseBranch}.`)
+    else if (res.status === 'up-to-date')
+      pushToast('info', `Already up to date with ${res.baseBranch}.`)
     else if (res.status === 'conflict')
       pushToast(
         'error',
@@ -255,7 +262,10 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
             {/* base 가 앞서 있으면(behind) 머지로 끌어오기. 충돌 중에는 해결/Abort 안내로 대체. */}
             {git?.conflicted ? (
               <span className="flex items-center gap-1.5">
-                <span className="flex items-center gap-1 text-[var(--danger-400)]" title="Unresolved merge conflicts in the working tree">
+                <span
+                  className="flex items-center gap-1 text-[var(--danger-400)]"
+                  title="Unresolved merge conflicts in the working tree"
+                >
                   <GitMergeConflict size={11} />
                   conflicts
                 </span>
@@ -291,13 +301,23 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
 
         <div className="flex-1" />
 
-        <HeaderButton title="Scripts" onClick={() => setShowScripts(workspace.id, !showScripts)} active={showScripts}>
+        <HeaderButton
+          title="Scripts"
+          onClick={() => setShowScripts(workspace.id, !showScripts)}
+          active={showScripts}
+        >
           <Terminal size={15} />
         </HeaderButton>
-        <HeaderButton title="Open in editor" onClick={() => void window.api.workspace.openInEditor(workspace.id)}>
+        <HeaderButton
+          title="Open in editor"
+          onClick={() => void window.api.workspace.openInEditor(workspace.id)}
+        >
           <Code2 size={15} />
         </HeaderButton>
-        <HeaderButton title="Reveal in Finder" onClick={() => void window.api.workspace.revealInFinder(workspace.id)}>
+        <HeaderButton
+          title="Reveal in Finder"
+          onClick={() => void window.api.workspace.revealInFinder(workspace.id)}
+        >
           <FolderOpen size={15} />
         </HeaderButton>
         <HeaderButton title="Archive workspace" onClick={archiveWorkspace} danger>
@@ -405,10 +425,19 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
       <Composer workspace={workspace} />
 
       {/* 스크립트 패널 */}
-      {showScripts && <ScriptPanel workspaceId={workspace.id} onClose={() => setShowScripts(workspace.id, false)} />}
+      {showScripts && (
+        <ScriptPanel
+          workspaceId={workspace.id}
+          onClose={() => setShowScripts(workspace.id, false)}
+        />
+      )}
 
       {showDiff && (
-        <DiffModal workspaceId={workspace.id} baseBranch={workspace.baseBranch} onClose={() => setShowDiff(false)} />
+        <DiffModal
+          workspaceId={workspace.id}
+          baseBranch={workspace.baseBranch}
+          onClose={() => setShowDiff(false)}
+        />
       )}
     </div>
   )

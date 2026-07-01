@@ -68,10 +68,12 @@ export default function OnboardingModal({
 function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Element {
   const [agreed, setAgreed] = useState(false)
 
-  const openDoc = (url: string) => (e: React.MouseEvent): void => {
-    e.preventDefault()
-    void window.api.openExternal(url)
-  }
+  const openDoc =
+    (url: string) =>
+    (e: React.MouseEvent): void => {
+      e.preventDefault()
+      void window.api.openExternal(url)
+    }
 
   return (
     <>
@@ -104,11 +106,19 @@ function ConsentStep({ onContinue }: { onContinue: () => void }): React.JSX.Elem
           />
           <span>
             I have read and agree to the{' '}
-            <a href={PRIVACY_URL} onClick={openDoc(PRIVACY_URL)} className="text-[var(--info-400)] hover:underline">
+            <a
+              href={PRIVACY_URL}
+              onClick={openDoc(PRIVACY_URL)}
+              className="text-[var(--info-400)] hover:underline"
+            >
               Privacy Policy
             </a>{' '}
             and{' '}
-            <a href={TERMS_URL} onClick={openDoc(TERMS_URL)} className="text-[var(--info-400)] hover:underline">
+            <a
+              href={TERMS_URL}
+              onClick={openDoc(TERMS_URL)}
+              className="text-[var(--info-400)] hover:underline"
+            >
               Terms of Use
             </a>
             .

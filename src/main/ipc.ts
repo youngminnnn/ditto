@@ -228,7 +228,10 @@ export function registerIpc(ctx: IpcContext): void {
       let rawName = (args.name ?? '').trim()
       if (!rawName) {
         const existing = new Set(
-          store.getState().workspaces.filter((w) => w.repoId === repo.id).map((w) => w.branch)
+          store
+            .getState()
+            .workspaces.filter((w) => w.repoId === repo.id)
+            .map((w) => w.branch)
         )
         rawName = generateWorkspaceName(existing)
       }
@@ -322,56 +325,56 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   // 언아카이브: 브랜치로부터 worktree 를 복원한다.
-  ipcMain.handle(IPC.workspaceUnarchive, async (_e, workspaceId: string): Promise<{ error?: string }> => {
-    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
-    if (!ws) return { error: 'Workspace not found.' }
-    const repo = repoFor(ws.repoId)
-    if (!repo) return { error: 'Repository not found.' }
-
-    try {
-      await addWorktree(repo.path, ws.branch, ws.baseBranch, ws.worktreePath)
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) }
-    }
-    // worktree 가 복원됐으니 PR 조회가 다시 가능하다. 보존했던 표시 이름이 현재 PR 제목과
-    // 같다면(= 아카이브 시 자동 스냅샷한 값) override 를 지워 기본 규칙을 되살린다.
-    // 사용자가 직접 지정한 이름은 PR 제목과 다르므로 그대로 유지된다.
-    if (ws.displayName?.trim()) {
-      const pr = await getPrStatus(ws.worktreePath).catch(() => null)
-      if (pr?.title?.trim() === ws.displayName.trim()) {
-        store.update((st) => {
-          const w = st.workspaces.find((x) => x.id === workspaceId)
-          if (w) w.displayName = null
-        })
-      }
-    }
-    store.update((st) => {
-      const w = st.workspaces.find((x) => x.id === workspaceId)
-      if (w) w.archived = false
-    })
-    broadcastState()
-    return {}
-  })
-
   ipcMain.handle(
-    IPC.workspaceRemove,
-    async (_e, workspaceId: string, deleteBranch: boolean) => {
+    IPC.workspaceUnarchive,
+    async (_e, workspaceId: string): Promise<{ error?: string }> => {
       const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
-      if (!ws) return
+      if (!ws) return { error: 'Workspace not found.' }
       const repo = repoFor(ws.repoId)
+      if (!repo) return { error: 'Repository not found.' }
 
-      ctx.sessions.dispose(workspaceId)
-      ctx.scripts.disposeWorkspace(workspaceId)
-      ctx.terminals.disposeWorkspace(workspaceId)
-      getTranscripts().remove(workspaceId)
-      if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, deleteBranch)
-
+      try {
+        await addWorktree(repo.path, ws.branch, ws.baseBranch, ws.worktreePath)
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) }
+      }
+      // worktree 가 복원됐으니 PR 조회가 다시 가능하다. 보존했던 표시 이름이 현재 PR 제목과
+      // 같다면(= 아카이브 시 자동 스냅샷한 값) override 를 지워 기본 규칙을 되살린다.
+      // 사용자가 직접 지정한 이름은 PR 제목과 다르므로 그대로 유지된다.
+      if (ws.displayName?.trim()) {
+        const pr = await getPrStatus(ws.worktreePath).catch(() => null)
+        if (pr?.title?.trim() === ws.displayName.trim()) {
+          store.update((st) => {
+            const w = st.workspaces.find((x) => x.id === workspaceId)
+            if (w) w.displayName = null
+          })
+        }
+      }
       store.update((st) => {
-        st.workspaces = st.workspaces.filter((w) => w.id !== workspaceId)
+        const w = st.workspaces.find((x) => x.id === workspaceId)
+        if (w) w.archived = false
       })
       broadcastState()
+      return {}
     }
   )
+
+  ipcMain.handle(IPC.workspaceRemove, async (_e, workspaceId: string, deleteBranch: boolean) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return
+    const repo = repoFor(ws.repoId)
+
+    ctx.sessions.dispose(workspaceId)
+    ctx.scripts.disposeWorkspace(workspaceId)
+    ctx.terminals.disposeWorkspace(workspaceId)
+    getTranscripts().remove(workspaceId)
+    if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, deleteBranch)
+
+    store.update((st) => {
+      st.workspaces = st.workspaces.filter((w) => w.id !== workspaceId)
+    })
+    broadcastState()
+  })
 
   // 일괄 삭제: 한 레포의 아카이브된 워크스페이스를 모두 영구 제거한다.
   // 단건 remove 와 동일한 정리 절차(세션·스크립트·터미널·기록·worktree·브랜치)를 각 항목에
@@ -501,12 +504,9 @@ export function registerIpc(ctx: IpcContext): void {
     return getTranscripts().load(workspaceId)
   })
 
-  ipcMain.handle(
-    IPC.permissionRespond,
-    (_e, requestId: string, decision: PermissionDecision) => {
-      ctx.sessions.respondPermission(requestId, decision)
-    }
-  )
+  ipcMain.handle(IPC.permissionRespond, (_e, requestId: string, decision: PermissionDecision) => {
+    ctx.sessions.respondPermission(requestId, decision)
+  })
 
   // ── 스크립트 ───────────────────────────────────────────────────────────
 
@@ -696,14 +696,11 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ── 인터랙티브 터미널 (worktree PTY) ─────────────────────────────────────
 
-  ipcMain.handle(
-    IPC.terminalStart,
-    (_e, workspaceId: string, cols: number, rows: number) => {
-      const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
-      if (!ws || ws.archived) return
-      ctx.terminals.start(workspaceId, ws.worktreePath, cols, rows)
-    }
-  )
+  ipcMain.handle(IPC.terminalStart, (_e, workspaceId: string, cols: number, rows: number) => {
+    const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+    if (!ws || ws.archived) return
+    ctx.terminals.start(workspaceId, ws.worktreePath, cols, rows)
+  })
 
   ipcMain.handle(IPC.terminalInput, (_e, workspaceId: string, data: string) => {
     ctx.terminals.write(workspaceId, data)

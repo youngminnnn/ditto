@@ -70,7 +70,10 @@ export class TerminalManager {
       cols: Math.max(cols, 1),
       rows: Math.max(rows, 1),
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
+      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<
+        string,
+        string
+      >
     })
     term = { proc, buffer: '', pending: '', flushTimer: null }
     this.terms.set(workspaceId, term)
@@ -179,7 +182,15 @@ export class TerminalManager {
         clearTimeout(flushTimer)
         flushTimer = null
       }
-      const item: ChatItem = { id, type: 'bash', command: cmd, output, exitCode, running: false, ts }
+      const item: ChatItem = {
+        id,
+        type: 'bash',
+        command: cmd,
+        output,
+        exitCode,
+        running: false,
+        ts
+      }
       getTranscripts().upsert(workspaceId, item)
       this.dispatch(IPC.evtChat, { workspaceId, event: { type: 'item', item } })
     }

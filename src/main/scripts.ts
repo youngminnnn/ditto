@@ -78,21 +78,29 @@ export class ScriptRunner {
       ...(env ? { env: { ...process.env, ...env } } : {})
     })
     const key = this.key(workspaceId, kind)
-    this.running.set(key, { proc, exitCode: null, pendingOut: '', pendingErr: '', flushTimer: null })
+    this.running.set(key, {
+      proc,
+      exitCode: null,
+      pendingOut: '',
+      pendingErr: '',
+      flushTimer: null
+    })
 
     // 즉시 보내지 않고 모아 둔다 — 폭주 시 IPC 메시지 홍수로 메인 힙이 OOM 되는 것을 막는다.
     proc.stdout?.on('data', (data: Buffer) => {
       const entry = this.running.get(key)
       if (!entry) return
       entry.pendingOut += data.toString()
-      if (entry.pendingOut.length > PENDING_LIMIT) entry.pendingOut = entry.pendingOut.slice(-PENDING_LIMIT)
+      if (entry.pendingOut.length > PENDING_LIMIT)
+        entry.pendingOut = entry.pendingOut.slice(-PENDING_LIMIT)
       this.scheduleFlush(workspaceId, kind)
     })
     proc.stderr?.on('data', (data: Buffer) => {
       const entry = this.running.get(key)
       if (!entry) return
       entry.pendingErr += data.toString()
-      if (entry.pendingErr.length > PENDING_LIMIT) entry.pendingErr = entry.pendingErr.slice(-PENDING_LIMIT)
+      if (entry.pendingErr.length > PENDING_LIMIT)
+        entry.pendingErr = entry.pendingErr.slice(-PENDING_LIMIT)
       this.scheduleFlush(workspaceId, kind)
     })
     proc.on('error', (err) => {

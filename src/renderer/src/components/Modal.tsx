@@ -25,10 +25,7 @@ export default function Modal({
   }, [onClose])
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50"
-      onMouseDown={onClose}
-    >
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onMouseDown={onClose}>
       <div
         className="no-drag bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl max-w-[92vw] max-h-[88vh] flex flex-col"
         style={{ width }}

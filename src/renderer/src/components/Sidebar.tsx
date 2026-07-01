@@ -132,9 +132,7 @@ export default function Sidebar({
                 ))}
               </div>
 
-              {archived.length > 0 && (
-                <ArchivedSection repoId={repo.id} workspaces={archived} />
-              )}
+              {archived.length > 0 && <ArchivedSection repoId={repo.id} workspaces={archived} />}
             </div>
           )
         })}
@@ -261,8 +259,7 @@ function WorkspaceRow({
           <div className="flex items-center gap-1 min-w-0">
             <div
               className={
-                'truncate text-sm cursor-text ' +
-                (active ? 'text-neutral-100' : 'text-neutral-300')
+                'truncate text-sm cursor-text ' + (active ? 'text-neutral-100' : 'text-neutral-300')
               }
               title={`${displayName}\n(double-click to rename · clear to reset)`}
               onDoubleClick={(e) => {
@@ -482,7 +479,11 @@ function StatusDot({
   }
   if (status === 'running') {
     // 압축 중(보라) · 오래 실행(앰버, 멈춤일 수 있음) · 일반 실행(파랑) 을 색으로 구분한다.
-    const color = compacting ? 'text-purple-400' : stale ? 'text-[var(--warning-400)]' : 'text-[var(--info-400)]'
+    const color = compacting
+      ? 'text-purple-400'
+      : stale
+        ? 'text-[var(--warning-400)]'
+        : 'text-[var(--info-400)]'
     const title = compacting
       ? 'Compacting conversation…'
       : stale

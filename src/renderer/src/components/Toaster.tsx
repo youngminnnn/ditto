@@ -30,7 +30,9 @@ export default function Toaster(): React.JSX.Element {
 }
 
 function Icon({ kind }: { kind: ToastKind }): React.JSX.Element {
-  if (kind === 'success') return <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--success-400)]" />
-  if (kind === 'error') return <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[var(--danger-400)]" />
+  if (kind === 'success')
+    return <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--success-400)]" />
+  if (kind === 'error')
+    return <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[var(--danger-400)]" />
   return <Info size={15} className="mt-0.5 shrink-0 text-[var(--info-400)]" />
 }

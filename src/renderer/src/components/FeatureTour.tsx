@@ -27,9 +27,9 @@ const STEPS: Step[] = [
     title: 'Welcome to Ditto',
     body: (
       <>
-        Ditto runs multiple AI coding agents at once — each in its own isolated git worktree.
-        This quick tour points out where everything lives. Use{' '}
-        <b className="text-neutral-200">Next</b> (or the arrow keys) to move through it.
+        Ditto runs multiple AI coding agents at once — each in its own isolated git worktree. This
+        quick tour points out where everything lives. Use <b className="text-neutral-200">Next</b>{' '}
+        (or the arrow keys) to move through it.
       </>
     )
   },
@@ -39,8 +39,8 @@ const STEPS: Step[] = [
     title: 'Add a repository',
     body: (
       <>
-        Start here — add a git repository with the <b className="text-neutral-200">+</b> button. Each
-        repo can define setup / dev / archive scripts from its settings icon.
+        Start here — add a git repository with the <b className="text-neutral-200">+</b> button.
+        Each repo can define setup / dev / archive scripts from its settings icon.
       </>
     )
   },

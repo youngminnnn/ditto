@@ -75,7 +75,9 @@ export default function Overview(): React.JSX.Element {
           <h2 className="text-lg font-semibold text-neutral-100">Overview</h2>
           <span className="text-sm text-neutral-500">
             {counts.all} workspace{counts.all === 1 ? '' : 's'}
-            {counts.running > 0 && <span className="text-[var(--info-400)]"> · {counts.running} running</span>}
+            {counts.running > 0 && (
+              <span className="text-[var(--info-400)]"> · {counts.running} running</span>
+            )}
           </span>
           {counts.running > 0 && (
             <button
@@ -172,9 +174,14 @@ function OverviewCard({
         <span className="flex-1 min-w-0 truncate text-sm text-neutral-100" title={displayName}>
           {displayName}
         </span>
-        {flags.attention && <ShieldQuestion size={13} className="text-[var(--warning-400)] shrink-0" />}
+        {flags.attention && (
+          <ShieldQuestion size={13} className="text-[var(--warning-400)] shrink-0" />
+        )}
         {flags.unread && !flags.attention && (
-          <span className="h-2 w-2 rounded-full bg-[var(--info-500)] shrink-0" title="Unread response" />
+          <span
+            className="h-2 w-2 rounded-full bg-[var(--info-500)] shrink-0"
+            title="Unread response"
+          />
         )}
       </div>
 
@@ -199,7 +206,10 @@ function OverviewCard({
           </span>
         )}
         {pr && (
-          <span className="flex items-center gap-1 text-[var(--accent-300)]/80 ml-auto truncate" title={pr.label}>
+          <span
+            className="flex items-center gap-1 text-[var(--accent-300)]/80 ml-auto truncate"
+            title={pr.label}
+          >
             <GitPullRequest size={10} className="shrink-0" />
             <span className="truncate">{pr.label}</span>
           </span>

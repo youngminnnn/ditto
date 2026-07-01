@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { utilityProcess, Notification, app, type BrowserWindow, type UtilityProcess } from 'electron'
+import {
+  utilityProcess,
+  Notification,
+  app,
+  type BrowserWindow,
+  type UtilityProcess
+} from 'electron'
 import { getStore } from '../store'
 import { getTranscripts } from '../transcripts'
 import { log } from '../logger'
@@ -171,11 +177,17 @@ export class SessionManager implements AgentBackend {
   // ── 설정 ─────────────────────────────────────────────────────────────────
 
   private getWorkspace(id: string): Workspace | undefined {
-    return getStore().getState().workspaces.find((w) => w.id === id)
+    return getStore()
+      .getState()
+      .workspaces.find((w) => w.id === id)
   }
 
   private getRepoPath(repoId: string): string | null {
-    return getStore().getState().repos.find((r) => r.id === repoId)?.path ?? null
+    return (
+      getStore()
+        .getState()
+        .repos.find((r) => r.id === repoId)?.path ?? null
+    )
   }
 
   /** store 에서 세션 생성에 필요한 설정을 계산한다(예전 ensure() 의 역할). */
@@ -379,7 +391,11 @@ export class SessionManager implements AgentBackend {
   private onPermissionRequest(request: PermissionRequest): void {
     this.pendingPermissions.set(request.requestId, request.workspaceId)
     // 백그라운드 세션이 권한 대기로 멈춘 것을 놓치지 않도록 비활성 창에서는 알린다.
-    this.notify(request.workspaceId, `Needs permission: ${request.displayName ?? request.toolName}`, false)
+    this.notify(
+      request.workspaceId,
+      `Needs permission: ${request.displayName ?? request.toolName}`,
+      false
+    )
     this.dispatch(IPC.evtPermission, request)
   }
 

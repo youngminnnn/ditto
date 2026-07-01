@@ -171,7 +171,11 @@ function mapStatusContext(state: string | undefined): PrCheckState {
 function toCheck(item: RollupItem): PrCheck | null {
   if (item.__typename === 'StatusContext') {
     if (!item.context) return null
-    return { name: item.context, state: mapStatusContext(item.state), url: item.targetUrl || undefined }
+    return {
+      name: item.context,
+      state: mapStatusContext(item.state),
+      url: item.targetUrl || undefined
+    }
   }
   // CheckRun (기본). name 앞에 워크플로명을 붙여 동명 잡(job)을 구분한다.
   if (!item.name) return null
@@ -195,9 +199,7 @@ export async function getPrChecks(worktreePath: string): Promise<PrChecks | null
       url: string
       statusCheckRollup?: RollupItem[]
     }
-    const checks = (pr.statusCheckRollup ?? [])
-      .map(toCheck)
-      .filter((c): c is PrCheck => c !== null)
+    const checks = (pr.statusCheckRollup ?? []).map(toCheck).filter((c): c is PrCheck => c !== null)
     return { prNumber: pr.number, prUrl: pr.url, checks }
   } catch {
     return null

@@ -115,7 +115,10 @@ function DirNode({
           style={pad}
           className="w-full flex items-center gap-1.5 pr-2 py-1 text-left text-sm text-neutral-300 hover:bg-[var(--surface)]"
         >
-          <ChevronRight size={11} className={(open ? 'rotate-90 ' : '') + 'shrink-0 transition text-neutral-500'} />
+          <ChevronRight
+            size={11}
+            className={(open ? 'rotate-90 ' : '') + 'shrink-0 transition text-neutral-500'}
+          />
           {open ? (
             <FolderOpen size={13} className="shrink-0 text-[var(--brand-400)]/80" />
           ) : (
@@ -128,7 +131,10 @@ function DirNode({
       {open && (
         <div>
           {loading && (
-            <div style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }} className="py-1 text-neutral-600">
+            <div
+              style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
+              className="py-1 text-neutral-600"
+            >
               <Loader2 size={11} className="animate-spin" />
             </div>
           )}
@@ -218,10 +224,18 @@ function FileViewer({
     )
   }
   if (!content) {
-    return <div className="flex-1 grid place-items-center text-sm text-neutral-600">Couldn’t read file.</div>
+    return (
+      <div className="flex-1 grid place-items-center text-sm text-neutral-600">
+        Couldn’t read file.
+      </div>
+    )
   }
   if (content.binary) {
-    return <div className="flex-1 grid place-items-center text-sm text-neutral-600">Binary file — not shown.</div>
+    return (
+      <div className="flex-1 grid place-items-center text-sm text-neutral-600">
+        Binary file — not shown.
+      </div>
+    )
   }
 
   return (
@@ -230,7 +244,9 @@ function FileViewer({
         {html ? <code dangerouslySetInnerHTML={{ __html: html }} /> : <code>{content.text}</code>}
       </pre>
       {content.truncated && (
-        <div className="px-3 py-1 text-xs text-[var(--warning-500)]/80">File truncated (too large to show fully).</div>
+        <div className="px-3 py-1 text-xs text-[var(--warning-500)]/80">
+          File truncated (too large to show fully).
+        </div>
       )}
     </div>
   )

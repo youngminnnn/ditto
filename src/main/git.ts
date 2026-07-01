@@ -68,7 +68,10 @@ export async function detectDefaultBranch(repoPath: string): Promise<string> {
 /** 로컬 브랜치 목록 (기본 브랜치를 맨 앞에 둔다). */
 export async function listBranches(repoPath: string): Promise<string[]> {
   const out = await git(repoPath, ['branch', '--format=%(refname:short)'])
-  const branches = out.split('\n').map((b) => b.trim()).filter(Boolean)
+  const branches = out
+    .split('\n')
+    .map((b) => b.trim())
+    .filter(Boolean)
   const def = await detectDefaultBranch(repoPath)
   return [def, ...branches.filter((b) => b !== def)]
 }
@@ -251,7 +254,10 @@ export async function updateFromBase(
   const conflicts = await git(worktreePath, ['diff', '--name-only', '--diff-filter=U']).catch(
     () => ''
   )
-  const conflictedFiles = conflicts.split('\n').map((s) => s.trim()).filter(Boolean)
+  const conflictedFiles = conflicts
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
   if (conflictedFiles.length) return { status: 'conflict', baseBranch, conflictedFiles }
 
   // 충돌이 아닌 다른 실패(예: 머지 진행 중 중단) — 머지를 깔끔히 되돌리고 메시지를 전달한다.
@@ -289,7 +295,10 @@ export async function getDiff(worktreePath: string, baseBranch: string): Promise
   // untracked(신규) 파일은 git diff 에 나오지 않으므로 직접 추가 패치를 만든다.
   try {
     const out = await git(worktreePath, ['ls-files', '--others', '--exclude-standard'])
-    for (const rel of out.split('\n').map((p) => p.trim()).filter(Boolean)) {
+    for (const rel of out
+      .split('\n')
+      .map((p) => p.trim())
+      .filter(Boolean)) {
       files.push(untrackedFileDiff(join(worktreePath, rel), rel))
     }
   } catch {
@@ -362,14 +371,28 @@ function untrackedFileDiff(absPath: string, rel: string): FileDiff {
     }
     const text = buf.toString('utf-8')
     if (text === '') {
-      return { path: rel, status: 'added', additions: 0, deletions: 0, patch: header, binary: false }
+      return {
+        path: rel,
+        status: 'added',
+        additions: 0,
+        deletions: 0,
+        patch: header,
+        binary: false
+      }
     }
     // split('\n') 은 끝 개행 때문에 빈 마지막 항목을 만든다 — 실제 내용 줄만 남긴다.
     const all = text.split('\n')
     const contentLines = text.endsWith('\n') ? all.slice(0, -1) : all
     const n = contentLines.length
     const hunk = `@@ -0,0 +1,${n} @@\n` + contentLines.map((l) => `+${l}`).join('\n')
-    return { path: rel, status: 'added', additions: n, deletions: 0, patch: header + hunk, binary: false }
+    return {
+      path: rel,
+      status: 'added',
+      additions: n,
+      deletions: 0,
+      patch: header + hunk,
+      binary: false
+    }
   } catch {
     return { path: rel, status: 'added', additions: 0, deletions: 0, patch: '', binary: true }
   }

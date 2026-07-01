@@ -39,7 +39,8 @@ export default function EmptyState(): React.JSX.Element {
           ) : (
             <>
               <FolderGit2 size={13} className="text-neutral-400" />
-              Use the <span className="font-medium text-neutral-100">+</span> in the top-left to add a repo
+              Use the <span className="font-medium text-neutral-100">+</span> in the top-left to add
+              a repo
             </>
           )}
         </div>

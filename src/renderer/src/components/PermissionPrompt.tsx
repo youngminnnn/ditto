@@ -15,7 +15,9 @@ export default function PermissionPrompt({
   const respond = (behavior: 'allow' | 'deny', remember = false): void => {
     void window.api.permission.respond(
       request.requestId,
-      behavior === 'allow' ? { behavior: 'allow', rememberForSession: remember } : { behavior: 'deny' }
+      behavior === 'allow'
+        ? { behavior: 'allow', rememberForSession: remember }
+        : { behavior: 'deny' }
     )
     dismiss(request.requestId)
   }

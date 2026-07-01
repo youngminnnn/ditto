@@ -90,8 +90,8 @@ export default function TourDemo(): React.JSX.Element {
             <div className="flex-1 overflow-hidden p-4 space-y-3">
               <DemoBubble role="user">Add a dark mode toggle to the settings page.</DemoBubble>
               <DemoBubble role="assistant">
-                I&rsquo;ll add a theme toggle. Reading <code>Settings.tsx</code> and wiring it to the
-                existing theme store…
+                I&rsquo;ll add a theme toggle. Reading <code>Settings.tsx</code> and wiring it to
+                the existing theme store…
               </DemoBubble>
               <div className="flex items-center gap-2 text-xs text-neutral-500">
                 <Loader2 size={12} className="animate-spin text-[var(--info-400)]" />
@@ -127,8 +127,12 @@ export default function TourDemo(): React.JSX.Element {
             <div className="flex-1 p-3 font-mono text-xs leading-relaxed overflow-hidden">
               <div className="text-neutral-500 mb-1.5">ThemeToggle.tsx</div>
               <div className="text-[var(--success-400)]">+ export function ThemeToggle() {'{'}</div>
-              <div className="text-[var(--success-400)]">+&nbsp;&nbsp;const [dark, setDark] = …</div>
-              <div className="text-[var(--success-400)]">+&nbsp;&nbsp;return &lt;Switch … /&gt;</div>
+              <div className="text-[var(--success-400)]">
+                +&nbsp;&nbsp;const [dark, setDark] = …
+              </div>
+              <div className="text-[var(--success-400)]">
+                +&nbsp;&nbsp;return &lt;Switch … /&gt;
+              </div>
               <div className="text-[var(--success-400)]">+ {'}'}</div>
               <div className="text-neutral-600 mt-2">- // TODO: theme toggle</div>
             </div>
@@ -200,9 +204,7 @@ function DemoBubble({
       </div>
     )
   }
-  return (
-    <div className="max-w-[85%] text-sm text-neutral-300 leading-relaxed">{children}</div>
-  )
+  return <div className="max-w-[85%] text-sm text-neutral-300 leading-relaxed">{children}</div>
 }
 
 function Tab({
@@ -225,9 +227,7 @@ function Tab({
     >
       {icon}
       {label}
-      {badge && (
-        <span className="ml-0.5 text-[10px] text-[var(--warning-500)]/90">{badge}</span>
-      )}
+      {badge && <span className="ml-0.5 text-[10px] text-[var(--warning-500)]/90">{badge}</span>}
     </div>
   )
 }

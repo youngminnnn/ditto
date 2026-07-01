@@ -188,19 +188,13 @@ export default function SettingsModal({
 
           <div>
             <label className={labelClass}>Model</label>
-            <select
-              className={inputClass}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-            >
+            <select className={inputClass} value={model} onChange={(e) => setModel(e.target.value)}>
               {MODEL_OPTIONS.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>
               ))}
-              {!MODEL_OPTIONS.some((m) => m.id === model) && (
-                <option value={model}>{model}</option>
-              )}
+              {!MODEL_OPTIONS.some((m) => m.id === model) && <option value={model}>{model}</option>}
             </select>
             <p className="mt-1.5 text-xs text-neutral-600">
               Default for new workspaces. Each workspace can override this from its header dropdown.
@@ -257,9 +251,7 @@ function Section({
 }): React.JSX.Element {
   return (
     <div className="space-y-3">
-      <h4 className="text-xs uppercase tracking-wider text-neutral-500 font-semibold">
-        {title}
-      </h4>
+      <h4 className="text-xs uppercase tracking-wider text-neutral-500 font-semibold">{title}</h4>
       {children}
     </div>
   )

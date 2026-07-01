@@ -137,7 +137,8 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     for (const { mediaType, file } of files) {
       const id = `img:${imgSeq.current++}`
       const ext = mediaType.split('/')[1]
-      const name = file.name && file.name !== 'image.png' ? file.name : `image-${imgSeq.current}.${ext}`
+      const name =
+        file.name && file.name !== 'image.png' ? file.name : `image-${imgSeq.current}.${ext}`
       void readImage(file).then(({ dataBase64, dataUrl }) => {
         setImages((prev) => [...prev, { id, name, mediaType, dataBase64, previewUrl: dataUrl }])
       })
@@ -149,7 +150,8 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     return window.api.onSideQuestion((e) => {
       if (e.workspaceId !== workspace.id) return
       setSideAnswer((prev) => {
-        if (e.phase === 'start') return { id: e.id, question: e.question, text: '', status: 'streaming' }
+        if (e.phase === 'start')
+          return { id: e.id, question: e.question, text: '', status: 'streaming' }
         if (!prev || prev.id !== e.id) return prev
         if (e.phase === 'delta') return { ...prev, text: prev.text + e.text }
         if (e.phase === 'done') return { ...prev, status: 'done' }
@@ -321,7 +323,8 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
       if (cmdSeq.current !== seq) return
       setCommandCard((prev) => {
         if (!prev || prev.kind !== cmd.kind) return prev
-        if (error || !result) return { ...prev, status: 'error', error: error || 'No data returned.' }
+        if (error || !result)
+          return { ...prev, status: 'error', error: error || 'No data returned.' }
         return { ...prev, status: 'done', result }
       })
     })
@@ -399,7 +402,9 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
   }
 
   const userMessages = (): string[] =>
-    items.filter((i): i is Extract<ChatItem, { type: 'user' }> => i.type === 'user').map((i) => i.text)
+    items
+      .filter((i): i is Extract<ChatItem, { type: 'user' }> => i.type === 'user')
+      .map((i) => i.text)
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     // 슬래시 메뉴가 열려 있으면 방향키/Enter/Tab 을 메뉴 조작에 먼저 쓴다.
@@ -475,9 +480,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           <CommandCard
             card={commandCard}
             workspaceId={workspace.id}
-            onResult={(result) =>
-              setCommandCard((prev) => (prev ? { ...prev, result } : prev))
-            }
+            onResult={(result) => setCommandCard((prev) => (prev ? { ...prev, result } : prev))}
             onClose={() => setCommandCard(null)}
           />
         )}
@@ -505,10 +508,7 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
                 className="flex items-center gap-2 bg-[var(--warning-500)]/5 border border-[var(--warning-500)]/20 rounded-lg pl-2.5 pr-1.5 py-1.5"
               >
                 <Clock size={12} className="text-[var(--warning-400)]/80 shrink-0" />
-                <span
-                  className="flex-1 min-w-0 truncate text-sm text-neutral-300"
-                  title={m.text}
-                >
+                <span className="flex-1 min-w-0 truncate text-sm text-neutral-300" title={m.text}>
                   {m.text || (m.images?.length ? `${m.images.length} image(s)` : '')}
                 </span>
                 {m.images && m.images.length > 0 && (
@@ -567,7 +567,9 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               title={bashMode ? 'Run in terminal' : running ? 'Queue message' : 'Send'}
               className={
                 'h-8 w-8 grid place-items-center rounded-lg text-white shadow-sm active:scale-95 disabled:bg-[var(--border)] disabled:text-neutral-600 disabled:shadow-none disabled:cursor-not-allowed ' +
-                (bashMode ? 'bg-[var(--success-600)] hover:bg-[var(--success-500)]' : 'bg-[var(--info-600)] hover:bg-[var(--info-500)]')
+                (bashMode
+                  ? 'bg-[var(--success-600)] hover:bg-[var(--success-500)]'
+                  : 'bg-[var(--info-600)] hover:bg-[var(--info-500)]')
               }
             >
               {bashMode ? <TerminalIcon size={15} /> : <Send size={15} />}
@@ -580,20 +582,26 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
           {bashMode ? (
             <span className="text-[var(--success-400)] inline-flex items-center gap-1">
               <TerminalIcon size={11} />
-              Run command <span className="text-neutral-600">(Enter to run · output shows here in the chat)</span>
-            </span>
-          ) : (() => {
-            const footer = PERMISSION_FOOTER[workspace.permissionMode]
-            const accent = workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-[var(--warning-400)]'
-            return footer ? (
-              <span className={accent}>
-                {footer.symbol} {footer.text}{' '}
-                <span className="text-neutral-600">(shift+tab to cycle)</span>
+              Run command{' '}
+              <span className="text-neutral-600">
+                (Enter to run · output shows here in the chat)
               </span>
-            ) : (
-              <span className="text-neutral-600">shift+tab to cycle permission modes</span>
-            )
-          })()}
+            </span>
+          ) : (
+            (() => {
+              const footer = PERMISSION_FOOTER[workspace.permissionMode]
+              const accent =
+                workspace.permissionMode === 'plan' ? 'text-cyan-400' : 'text-[var(--warning-400)]'
+              return footer ? (
+                <span className={accent}>
+                  {footer.symbol} {footer.text}{' '}
+                  <span className="text-neutral-600">(shift+tab to cycle)</span>
+                </span>
+              ) : (
+                <span className="text-neutral-600">shift+tab to cycle permission modes</span>
+              )
+            })()
+          )}
         </div>
       </div>
     </div>
@@ -666,7 +674,10 @@ function SlashMenu({
                 (active ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface)]')
               }
             >
-              <TerminalIcon size={12} className="text-[var(--accent-400)] shrink-0 translate-y-0.5" />
+              <TerminalIcon
+                size={12}
+                className="text-[var(--accent-400)] shrink-0 translate-y-0.5"
+              />
               <span className="text-sm font-medium text-neutral-100 shrink-0">/{cmd.name}</span>
               {cmd.argumentHint && (
                 <span className="text-xs text-neutral-500 shrink-0">{cmd.argumentHint}</span>
@@ -708,9 +719,7 @@ function SideAnswerCard({
         <MessageCircleQuestion size={13} className="text-[var(--accent-400)] shrink-0" />
         <span className="text-xs font-medium text-[var(--accent-300)] shrink-0">Side question</span>
         <span className="text-xs text-neutral-500 truncate">{answer.question}</span>
-        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">
-          Esc to close
-        </span>
+        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">Esc to close</span>
         <button
           onClick={onClose}
           title="Dismiss (Esc)"
@@ -721,7 +730,9 @@ function SideAnswerCard({
       </div>
       <div className="px-3 py-2 text-sm leading-relaxed text-neutral-200 whitespace-pre-wrap">
         {answer.status === 'error' ? (
-          <span className="text-[var(--danger-400)]">{answer.error || 'Side question failed.'}</span>
+          <span className="text-[var(--danger-400)]">
+            {answer.error || 'Side question failed.'}
+          </span>
         ) : (
           <>
             {answer.text}
@@ -847,7 +858,7 @@ function McpPanel({
   // 키보드 커서가 가리키는 항목(스크롤 추적용).
   const activeRef = useRef<HTMLElement | null>(null)
 
-  const current = selected ? servers.find((s) => s.name === selected) ?? null : null
+  const current = selected ? (servers.find((s) => s.name === selected) ?? null) : null
 
   const open = (name: string): void => {
     setSelected(name)
@@ -966,9 +977,7 @@ function McpPanel({
                 <span className="text-xs text-neutral-500 shrink-0">
                   {MCP_STATUS_LABEL[s.status]}
                 </span>
-                {s.scope && (
-                  <span className="text-xs text-neutral-600 shrink-0">· {s.scope}</span>
-                )}
+                {s.scope && <span className="text-xs text-neutral-600 shrink-0">· {s.scope}</span>}
                 {typeof s.toolCount === 'number' && (
                   <span className="text-xs text-neutral-500 ml-auto shrink-0">
                     {s.toolCount} {s.toolCount === 1 ? 'tool' : 'tools'}
@@ -1069,7 +1078,11 @@ function McpServerDetail({
               disabled={busy !== null}
               className={`w-full flex items-center gap-1.5 text-left rounded-md px-2 py-1 text-xs transition-colors disabled:opacity-50 disabled:cursor-default ${active ? 'bg-[var(--surface-3)] text-neutral-100' : 'text-neutral-300 hover:bg-[var(--surface-3)]'}`}
             >
-              {loading ? <Loader2 size={12} className="animate-spin" /> : MCP_ACTION_META[action].icon}
+              {loading ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                MCP_ACTION_META[action].icon
+              )}
               {MCP_ACTION_META[action].label}
             </button>
           )
@@ -1138,9 +1151,7 @@ function CommandCard({
         {card.status === 'loading' && (
           <Loader2 size={12} className="text-neutral-500 animate-spin" />
         )}
-        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">
-          Esc to close
-        </span>
+        <span className="ml-auto shrink-0 text-xs text-neutral-600 select-none">Esc to close</span>
         <button
           onClick={onClose}
           title="Dismiss (Esc)"
@@ -1156,11 +1167,7 @@ function CommandCard({
           <span className="text-[var(--danger-400)]">{card.error || 'Command failed.'}</span>
         ) : (
           card.result && (
-            <CommandResultView
-              result={card.result}
-              workspaceId={workspaceId}
-              onResult={onResult}
-            />
+            <CommandResultView result={card.result} workspaceId={workspaceId} onResult={onResult} />
           )
         )}
       </div>
@@ -1180,9 +1187,7 @@ function CommandResultView({
 }): React.JSX.Element {
   switch (result.kind) {
     case 'mcp':
-      return (
-        <McpPanel servers={result.servers} workspaceId={workspaceId} onResult={onResult} />
-      )
+      return <McpPanel servers={result.servers} workspaceId={workspaceId} onResult={onResult} />
 
     case 'agents':
       return result.agents.length === 0 ? (
@@ -1288,13 +1293,19 @@ function CommandResultView({
       return (
         <div className="space-y-1">
           <div className="text-[var(--success-400)]">Reloaded {parts.join(' · ')}.</div>
-          {!!r.errorCount && <div className="text-[var(--warning-500)]">{r.errorCount} error(s) during reload.</div>}
+          {!!r.errorCount && (
+            <div className="text-[var(--warning-500)]">{r.errorCount} error(s) during reload.</div>
+          )}
         </div>
       )
     }
 
     case 'reloadSkills':
-      return <div className="text-[var(--success-400)]">Reloaded {result.reload.skillCount ?? 0} skills.</div>
+      return (
+        <div className="text-[var(--success-400)]">
+          Reloaded {result.reload.skillCount ?? 0} skills.
+        </div>
+      )
 
     case 'rewind':
       return <RewindPanel checkpoints={result.checkpoints} workspaceId={workspaceId} />
@@ -1317,7 +1328,15 @@ const PERMISSION_MODE_LABEL: Record<string, string> = {
  * 모드 변경은 Claude Code 처럼 Shift+Tab 으로 순환한다(이 카드는 현황 표시 전용).
  */
 function PermissionsPanel({ info }: { info: PermissionsInfo }): React.JSX.Element {
-  const Section = ({ title, rules, tone }: { title: string; rules: string[]; tone: string }): React.JSX.Element => (
+  const Section = ({
+    title,
+    rules,
+    tone
+  }: {
+    title: string
+    rules: string[]
+    tone: string
+  }): React.JSX.Element => (
     <div className="space-y-1">
       <div className="text-xs text-neutral-500">
         {title} <span className="text-neutral-600">({rules.length})</span>
@@ -1338,9 +1357,7 @@ function PermissionsPanel({ info }: { info: PermissionsInfo }): React.JSX.Elemen
   return (
     <div className="space-y-2.5">
       <div className="space-y-0.5">
-        <div className="text-neutral-200">
-          {PERMISSION_MODE_LABEL[info.mode] ?? info.mode}
-        </div>
+        <div className="text-neutral-200">{PERMISSION_MODE_LABEL[info.mode] ?? info.mode}</div>
         <div className="text-xs text-neutral-600">shift+tab to cycle the permission mode</div>
       </div>
       <div className="space-y-2 pt-1 border-t border-[var(--border)]">
@@ -1389,25 +1406,27 @@ function RewindPanel({
   const restore = (cp: RewindPoint): void => {
     setBusyId(cp.userMessageId)
     setDone(null)
-    void window.api.commands.rewindAction(workspaceId, cp.userMessageId).then(({ result, error }) => {
-      setBusyId(null)
-      if (error || !result) {
-        setDone({ id: cp.userMessageId, text: error || 'Rewind failed.', ok: false })
-        return
-      }
-      if (!result.canRewind) {
-        setDone({ id: cp.userMessageId, text: result.error || 'Nothing to restore.', ok: false })
-        return
-      }
-      const n = result.filesChanged?.length ?? 0
-      const detail =
-        typeof result.insertions === 'number' || typeof result.deletions === 'number'
-          ? ` (+${result.insertions ?? 0} −${result.deletions ?? 0})`
-          : ''
-      const summary = `Restored ${n} file${n === 1 ? '' : 's'}${detail}.`
-      setDone({ id: cp.userMessageId, text: summary, ok: true })
-      pushToast('success', summary)
-    })
+    void window.api.commands
+      .rewindAction(workspaceId, cp.userMessageId)
+      .then(({ result, error }) => {
+        setBusyId(null)
+        if (error || !result) {
+          setDone({ id: cp.userMessageId, text: error || 'Rewind failed.', ok: false })
+          return
+        }
+        if (!result.canRewind) {
+          setDone({ id: cp.userMessageId, text: result.error || 'Nothing to restore.', ok: false })
+          return
+        }
+        const n = result.filesChanged?.length ?? 0
+        const detail =
+          typeof result.insertions === 'number' || typeof result.deletions === 'number'
+            ? ` (+${result.insertions ?? 0} −${result.deletions ?? 0})`
+            : ''
+        const summary = `Restored ${n} file${n === 1 ? '' : 's'}${detail}.`
+        setDone({ id: cp.userMessageId, text: summary, ok: true })
+        pushToast('success', summary)
+      })
   }
 
   return (
@@ -1490,7 +1509,10 @@ function StatusLine({
         <GitBranch size={11} className="shrink-0 text-neutral-600" />
         <span className="truncate">{branch}</span>
       </span>
-      <span className="flex items-center gap-1 min-w-0 shrink" title={`Directory: ${workspace.worktreePath}`}>
+      <span
+        className="flex items-center gap-1 min-w-0 shrink"
+        title={`Directory: ${workspace.worktreePath}`}
+      >
         <Folder size={11} className="shrink-0 text-neutral-600" />
         <span className="truncate">{dirName}</span>
       </span>
@@ -1557,8 +1579,11 @@ function PickerCard({
     ]
   }, [kind, settingsModel, settingsEffort, workspace.model])
 
-  const current = kind === 'model' ? workspace.model ?? '' : workspace.effort ?? ''
-  const currentIdx = Math.max(0, options.findIndex((o) => o.value === current))
+  const current = kind === 'model' ? (workspace.model ?? '') : (workspace.effort ?? '')
+  const currentIdx = Math.max(
+    0,
+    options.findIndex((o) => o.value === current)
+  )
   const [cursor, setCursor] = useState(currentIdx)
   const activeRef = useRef<HTMLButtonElement | null>(null)
 
@@ -1566,7 +1591,8 @@ function PickerCard({
     if (running) return // 턴 진행 중에는 세션 재시작을 막는다(안내만).
     if (value !== current) {
       if (kind === 'model') void window.api.workspace.setModel(workspace.id, value || null)
-      else void window.api.workspace.setEffort(workspace.id, (value || null) as EffortSetting | null)
+      else
+        void window.api.workspace.setEffort(workspace.id, (value || null) as EffortSetting | null)
     }
     onClose()
   }
@@ -1640,7 +1666,10 @@ function PickerCard({
             >
               <Check
                 size={12}
-                className={'shrink-0 translate-y-0.5 ' + (selected ? 'text-[var(--accent-400)]' : 'text-transparent')}
+                className={
+                  'shrink-0 translate-y-0.5 ' +
+                  (selected ? 'text-[var(--accent-400)]' : 'text-transparent')
+                }
               />
               <span className="text-sm font-medium text-neutral-100 shrink-0">{opt.label}</span>
               {opt.hint && <span className="text-xs text-neutral-500 truncate">{opt.hint}</span>}
@@ -1687,8 +1716,14 @@ function ContextStatus({
 
   const pct = Math.min(100, Math.round(usage.percentage * 100))
   // 70% 미만 중립, 70~89% 주의(amber), 90%+ 위험(red).
-  const tone = pct >= 90 ? 'text-[var(--danger-400)]' : pct >= 70 ? 'text-[var(--warning-400)]' : 'text-neutral-500'
-  const barTone = pct >= 90 ? 'bg-[var(--danger-400)]' : pct >= 70 ? 'bg-[var(--warning-400)]' : 'bg-neutral-500'
+  const tone =
+    pct >= 90
+      ? 'text-[var(--danger-400)]'
+      : pct >= 70
+        ? 'text-[var(--warning-400)]'
+        : 'text-neutral-500'
+  const barTone =
+    pct >= 90 ? 'bg-[var(--danger-400)]' : pct >= 70 ? 'bg-[var(--warning-400)]' : 'bg-neutral-500'
 
   return (
     <span

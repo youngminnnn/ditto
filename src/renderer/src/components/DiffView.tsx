@@ -102,8 +102,11 @@ function DiffLine({ line }: { line: string }): React.JSX.Element {
 
 function StatusIcon({ status }: { status: FileDiff['status'] }): React.JSX.Element {
   const common = 'shrink-0'
-  if (status === 'added') return <FilePlus2 size={13} className={`${common} text-[var(--success-400)]`} />
-  if (status === 'deleted') return <FileMinus2 size={13} className={`${common} text-[var(--danger-400)]`} />
-  if (status === 'renamed') return <FileCode size={13} className={`${common} text-[var(--accent-400)]`} />
+  if (status === 'added')
+    return <FilePlus2 size={13} className={`${common} text-[var(--success-400)]`} />
+  if (status === 'deleted')
+    return <FileMinus2 size={13} className={`${common} text-[var(--danger-400)]`} />
+  if (status === 'renamed')
+    return <FileCode size={13} className={`${common} text-[var(--accent-400)]`} />
   return <FilePen size={13} className={`${common} text-[var(--warning-400)]`} />
 }

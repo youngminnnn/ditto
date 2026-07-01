@@ -122,6 +122,11 @@ export class ClaudeSession {
    */
   private active = false
   /**
+   * 마지막으로 방출한 상태가 'running'(true) 인지 'idle'(false) 인지. running/idle 전환을 이 한
+   * 곳(syncStatus)으로 모아, 실제 상태 변화가 있을 때만 방출하고 중복/역행 방출을 막는다.
+   */
+  private busy = false
+  /**
    * 진행 중인 동적 워크플로우 실행의 누적 상태(task_id 기준).
    * task_progress·task_updated·task_notification 은 부분 정보만 실어 오므로, task_started 에서
    * 워크플로우로 등록한 실행만 여기 모아 두고 갱신을 병합한다(서브에이전트 등 비워크플로우 task 는 무시).
@@ -225,8 +230,8 @@ export class ClaudeSession {
     }
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
-    this.deps.emit({ type: 'status', status: 'running' })
     this.active = true
+    this.syncStatus()
 
     // /rewind 체크포인트 라벨용으로 이 메시지의 첫 줄을 큐에 둔다 — SDK 가 이 사용자 메시지를
     // echo 하며 부여하는 uuid 와 handleUser 에서 짝지어 체크포인트로 확정한다.
@@ -410,17 +415,24 @@ export class ClaudeSession {
           text: clampText(err instanceof Error ? err.message : String(err)),
           ts: Date.now()
         })
-        this.deps.emit({ type: 'status', status: 'error' })
+        // 에러로 턴이 죽었다 — 딸린 백그라운드 워크플로우도 이 query 와 함께 사라지므로 정리하고,
+        // busy 플래그도 내려 다음 턴에서 running 이 정상적으로 다시 방출되게 한다.
         this.active = false
+        this.busy = false
+        this.workflowTasks.clear()
+        this.deps.emit({ type: 'status', status: 'error' })
       }
     } finally {
       this.q = null
-      // 루프가 (예외도, 정상 result 도 없이) 끝났는데 턴이 진행 중으로 남아 있으면 —
-      // 예: CLI 프로세스가 턴 도중 죽어 스트림이 result 없이 닫힌 경우 — 'running' 에
+      // 루프가 (예외도, 정상 result 도 없이) 끝났는데 턴이나 백그라운드 워크플로우가 진행 중으로
+      // 남아 있으면 — 예: CLI 프로세스가 턴 도중 죽어 스트림이 result 없이 닫힌 경우 — 'running' 에
       // 갇히므로 idle 로 확정한다. 앱은 살아 있어 부팅 시 store 정규화가 닿지 못하는 케이스다.
+      // query 가 사라지면 딸린 워크플로우도 더 진행될 수 없으므로 추적 상태를 비운다.
       // 단, resume 폴백으로 재시도하는 경우는 턴이 새 세션에서 계속되므로 idle 로 풀지 않는다.
-      if (this.active && !retrying) {
+      if (!retrying && (this.active || this.workflowTasks.size > 0)) {
         this.active = false
+        this.busy = false
+        this.workflowTasks.clear()
         this.deps.settleIdle()
       }
     }
@@ -428,6 +440,21 @@ export class ClaudeSession {
     // 폴백 재시도는 finally 가 this.q 를 비운 뒤에 시작해, 새 query 핸들이 덮어써지지 않게 한다.
     // input 큐는 그대로라 폴백 세션이 같은(아직 처리되지 않은) 사용자 메시지를 이어 처리한다.
     if (retrying) this.run()
+  }
+
+  /**
+   * running/idle 상태를 실제 활동에 맞춰 재계산해 방출한다(변화가 있을 때만).
+   *
+   * "진행 중" = 사용자/압축 턴이 도는 중(this.active)이거나, **백그라운드 동적 워크플로우가 살아
+   * 있는 중**(this.workflowTasks 에 종료되지 않은 실행이 남아 있음)이다. Workflow 도구는 즉시
+   * 반환하고 백그라운드로 도므로, 메인 턴이 result 로 끝나 idle 로 가더라도 워크플로우가 계속
+   * 돌 수 있다 — 이때 사이드바가 idle 로 보이지 않도록 워크플로우 활동을 상태에 반영한다.
+   */
+  private syncStatus(): void {
+    const shouldRun = this.active || this.workflowTasks.size > 0
+    if (shouldRun === this.busy) return
+    this.busy = shouldRun
+    this.deps.emit({ type: 'status', status: shouldRun ? 'running' : 'idle' })
   }
 
   // ── 권한 콜백 ──────────────────────────────────────────────────────────
@@ -492,6 +519,16 @@ export class ClaudeSession {
   // ── 메시지 → ChatEvent 변환 ────────────────────────────────────────────
 
   private handleMessage(msg: SDKMessage): void {
+    // SDK 가 우리의 send() 없이 새 턴을 시작하는 경우가 있다 — 예: 백그라운드 워크플로우의
+    // task_notification 이 모델을 깨워 후속 작업을 돌릴 때. 이때 assistant/stream 출력이 흐르는데도
+    // this.active 가 false 라 사이드바가 idle 로 보인다. 모델이 산출(assistant/stream)을 시작했는데
+    // 진행 중인 턴으로 표시돼 있지 않으면, 턴이 시작된 것으로 보고 running 을 켠다(뒤이을 result 가
+    // this.active 를 내려 idle 로 되돌린다).
+    if (!this.active && (msg.type === 'assistant' || msg.type === 'stream_event')) {
+      this.active = true
+      this.syncStatus()
+    }
+
     switch (msg.type) {
       case 'system':
         this.handleSystem(msg)
@@ -579,6 +616,9 @@ export class ClaudeSession {
     }
     this.workflowTasks.set(msg.task_id, state)
     this.upsertTask(state, true)
+    // 백그라운드 워크플로우가 시작됐다 — 메인 턴이 이미 끝나(idle) 있더라도 사이드바에 진행 중으로
+    // 보이도록 running 을 방출한다.
+    this.syncStatus()
   }
 
   private handleTaskProgress(
@@ -609,7 +649,11 @@ export class ClaudeSession {
     }
     const terminal = state.status !== 'running' && state.status !== 'paused'
     this.upsertTask(state, terminal)
-    if (terminal) this.workflowTasks.delete(msg.task_id)
+    if (terminal) {
+      this.workflowTasks.delete(msg.task_id)
+      // 마지막 백그라운드 워크플로우가 끝났고 메인 턴도 진행 중이 아니면 idle 로 확정한다.
+      this.syncStatus()
+    }
   }
 
   private handleTaskNotification(
@@ -626,6 +670,8 @@ export class ClaudeSession {
     }
     this.upsertTask(state, true)
     this.workflowTasks.delete(msg.task_id)
+    // 워크플로우 종료 알림 — 남은 백그라운드 작업이 없고 메인 턴도 끝났으면 idle 로 확정한다.
+    this.syncStatus()
   }
 
   /** 워크플로우 진행 상태를 ChatItem 으로 만들어 (선택적으로) 영속화하고 renderer 로 보낸다. */
@@ -788,8 +834,11 @@ export class ClaudeSession {
       return
     }
 
-    this.deps.emit({ type: 'status', status: 'idle' })
+    // 메인 턴은 끝났지만, Workflow 도구로 띄운 백그라운드 워크플로우가 아직 돌고 있으면 idle 로
+    // 가지 않고 running 을 유지한다(syncStatus 가 판단). 마지막 워크플로우가 끝나는 시점에 idle 로
+    // 확정된다. 백그라운드 작업이 없으면 평소처럼 곧바로 idle.
     this.active = false
+    this.syncStatus()
 
     // 컨텍스트 미터를 갱신한다. 압축 턴 직후가 아니면 임계치 초과 시 자동 압축도 트리거한다.
     // (성공 턴에만 사용량이 의미 있다.)
@@ -855,8 +904,8 @@ export class ClaudeSession {
       ts: Date.now()
     })
     this.deps.emit({ type: 'compacting', active: true, trigger: 'auto' })
-    this.deps.emit({ type: 'status', status: 'running' })
     this.active = true
+    this.syncStatus()
 
     this.input.push({
       type: 'user',

@@ -218,3 +218,25 @@ export async function createPrWeb(worktreePath: string): Promise<{ error?: strin
   }
   return {}
 }
+
+// ── GitHub 소유자 아바타 ────────────────────────────────────────────────────
+
+/**
+ * GitHub 소유자(owner)의 아바타 이미지를 받아 data: URL 로 돌려준다(실패 시 null).
+ * `https://github.com/<owner>.png` 는 인증 없이 접근 가능한 공개 엔드포인트로,
+ * 실제 아바타(avatars.githubusercontent.com)로 리다이렉트된다(fetch 가 자동 추적).
+ * 렌더러 CSP(img-src 'self' data:)를 그대로 두기 위해 원격 URL 이 아니라 인라인 data URL 로 저장한다.
+ */
+export async function fetchOwnerAvatarDataUrl(owner: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://github.com/${encodeURIComponent(owner)}.png?size=64`)
+    if (!res.ok) return null
+    const type = res.headers.get('content-type') || 'image/png'
+    if (!type.startsWith('image/')) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length === 0) return null
+    return `data:${type};base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
+}

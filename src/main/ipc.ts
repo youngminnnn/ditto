@@ -12,6 +12,7 @@ import {
   addWorktree,
   detectDefaultBranch,
   getDiff,
+  getGithubOwner,
   getStatus,
   isGitRepo,
   listBranches,
@@ -23,7 +24,7 @@ import {
 } from './git'
 import { generateWorkspaceName } from './names'
 import { findFreePort, waitForPortFree } from './net'
-import { getPrStatus, getPrChecks, createPrWeb } from './github'
+import { getPrStatus, getPrChecks, createPrWeb, fetchOwnerAvatarDataUrl } from './github'
 import {
   getAuthStatus,
   claudeLoginStart,
@@ -87,6 +88,30 @@ export function registerIpc(ctx: IpcContext): void {
   const repoFor = (repoId: string): Repo | undefined =>
     store.getState().repos.find((r) => r.id === repoId)
 
+  /**
+   * 리포의 origin 리모트가 GitHub 이면 소유자 아바타를 받아 data URL 로 저장한다(best-effort).
+   * 네트워크·비 GitHub 리모트 등으로 실패하면 조용히 넘어가 기본 아이콘을 유지한다.
+   * repo 추가 직후·앱 시작 시 백그라운드로 호출해, 아바타 조회가 UI 흐름을 막지 않게 한다.
+   */
+  const backfillRepoAvatar = async (repoId: string): Promise<void> => {
+    const repo = repoFor(repoId)
+    if (!repo) return
+    const owner = await getGithubOwner(repo.path).catch(() => null)
+    if (!owner) return
+    const dataUrl = await fetchOwnerAvatarDataUrl(owner)
+    if (!dataUrl) return
+    store.update((st) => {
+      const r = st.repos.find((x) => x.id === repoId)
+      if (r) r.avatarDataUrl = dataUrl
+    })
+    broadcastState()
+  }
+
+  // 앱 시작 시, 아바타가 아직 없는 기존 리포들에 대해 한 번씩 백필을 시도한다.
+  for (const repo of store.getState().repos) {
+    if (!repo.avatarDataUrl) void backfillRepoAvatar(repo.id)
+  }
+
   /** workspace 별 스크립트에 주입할 환경변수. dev 서버가 충돌 없이 고유 포트를 쓰게 한다. */
   const scriptEnvFor = (port: number): Record<string, string> => ({
     PORT: String(port),
@@ -145,6 +170,8 @@ export function registerIpc(ctx: IpcContext): void {
     }
     store.update((st) => st.repos.push(repo))
     broadcastState()
+    // GitHub 소유자 아바타는 네트워크 조회가 필요하므로 추가를 막지 않도록 백그라운드로 채운다.
+    void backfillRepoAvatar(repo.id)
     return { repo }
   })
 

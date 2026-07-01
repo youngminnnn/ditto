@@ -189,7 +189,9 @@ export function invalidateAfterReload(kind: CommandPanelKind, cwd: string): void
 
 type SdkServer = Awaited<ReturnType<Query['mcpServerStatus']>>[number]
 type SdkContext = Awaited<ReturnType<Query['getContextUsage']>>
-type SdkUsage = Awaited<ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>>
+type SdkUsage = Awaited<
+  ReturnType<Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET']>
+>
 
 function mapServer(s: SdkServer): McpServerInfo {
   const { transport, endpoint } = describeTransport(s.config)
@@ -207,9 +209,7 @@ function mapServer(s: SdkServer): McpServerInfo {
 }
 
 /** 서버 config 에서 전송 방식과 사람이 읽을 엔드포인트(URL 또는 실행 명령)를 추린다. */
-function describeTransport(
-  config: SdkServer['config']
-): { transport?: string; endpoint?: string } {
+function describeTransport(config: SdkServer['config']): { transport?: string; endpoint?: string } {
   if (!config) return {}
   const c = config as { type?: string; url?: string; command?: string; args?: string[] }
   if (typeof c.url === 'string') {
@@ -240,7 +240,10 @@ function mapUsage(u: SdkUsage): UsageInfo {
   const limits: UsageInfo['rateLimits'] = []
   const rl = u.rate_limits
   if (rl) {
-    const push = (label: string, w?: { utilization: number | null; resets_at: string | null } | null): void => {
+    const push = (
+      label: string,
+      w?: { utilization: number | null; resets_at: string | null } | null
+    ): void => {
       if (w) limits.push({ label, utilization: w.utilization, resetsAt: w.resets_at })
     }
     push('5-hour', rl.five_hour)

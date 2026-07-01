@@ -46,7 +46,9 @@ export class AgentOrchestrator {
 
   /** 워크스페이스가 지정한 백엔드(없으면 기본)로 해석한다. */
   private backendFor(workspaceId: string): AgentBackend {
-    const ws = getStore().getState().workspaces.find((w) => w.id === workspaceId)
+    const ws = getStore()
+      .getState()
+      .workspaces.find((w) => w.id === workspaceId)
     return this.get(ws?.agentBackend ?? DEFAULT_AGENT_BACKEND)
   }
 
@@ -115,11 +117,7 @@ export class AgentOrchestrator {
     return backend.runCommand(workspaceId, kind)
   }
 
-  mcpAction(
-    workspaceId: string,
-    serverName: string,
-    action: McpAction
-  ): Promise<McpServerInfo[]> {
+  mcpAction(workspaceId: string, serverName: string, action: McpAction): Promise<McpServerInfo[]> {
     const backend = this.backendFor(workspaceId)
     if (!backend.meta.capabilities.mcp) {
       throw new Error(`${backend.meta.label} does not support MCP.`)

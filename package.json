@@ -18,6 +18,11 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dist": "electron-vite build && electron-builder --mac --publish never",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
@@ -43,6 +48,7 @@
     }
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.16",
@@ -51,9 +57,17 @@
     "electron": "^42.3.2",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "vite": "^7.3.5"
+    "typescript-eslint": "^8.62.1",
+    "vite": "^7.3.5",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.177",

@@ -114,7 +114,10 @@ export default function TerminalPane({ workspaceId }: { workspaceId: string }): 
     const themeObs = new MutationObserver(() => {
       term.options.theme = terminalTheme()
     })
-    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    themeObs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
 
     return () => {
       cancelAnimationFrame(raf)

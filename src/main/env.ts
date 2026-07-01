@@ -74,7 +74,9 @@ function hydratePath(captured: string[] | null): void {
   }
 
   process.env.PATH = merged.join(':')
-  log.info(`env: PATH hydrated (${captured ? 'from login shell' : 'fallbacks only'}, ${merged.length} entries)`)
+  log.info(
+    `env: PATH hydrated (${captured ? 'from login shell' : 'fallbacks only'}, ${merged.length} entries)`
+  )
 }
 
 /** 로그인+인터랙티브 셸에서 export 된 환경 전체를 캡처한다. 실패 시 null. */
@@ -84,12 +86,16 @@ function resolveShellEnv(): Record<string, string> | null {
   const end = '__DITTO_ENV_END__'
   try {
     // 인터랙티브(-i)여야 .zshrc 가 소스된다. env 출력을 sentinel 로 감싸 rc 잡음과 분리.
-    const out = execFileSync(shell, ['-ilc', `printf '%s\\n' '${start}'; env; printf '%s\\n' '${end}'`], {
-      encoding: 'utf8',
-      timeout: 5000,
-      maxBuffer: 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore']
-    })
+    const out = execFileSync(
+      shell,
+      ['-ilc', `printf '%s\\n' '${start}'; env; printf '%s\\n' '${end}'`],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        maxBuffer: 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore']
+      }
+    )
     const startIdx = out.indexOf(start)
     const endIdx = out.lastIndexOf(end)
     if (startIdx < 0 || endIdx < 0 || endIdx <= startIdx) return null

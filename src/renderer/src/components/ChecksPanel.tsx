@@ -89,7 +89,10 @@ function CheckRow({ check }: { check: PrCheck }): React.JSX.Element {
       <span className="flex-1 truncate text-sm text-neutral-200">{check.name}</span>
       <span className={'text-xs ' + stateColor(check.state)}>{check.state}</span>
       {check.url && (
-        <ExternalLink size={11} className="text-neutral-600 opacity-0 group-hover:opacity-100 shrink-0" />
+        <ExternalLink
+          size={11}
+          className="text-neutral-600 opacity-0 group-hover:opacity-100 shrink-0"
+        />
       )}
     </button>
   )

@@ -793,8 +793,7 @@ export interface TerminalExitEvent {
  * - done: 로그인 프로세스가 종료됨. success 면 로그인 성공.
  */
 export type ClaudeLoginEvent =
-  | { phase: 'awaiting-code'; url?: string; reprompt?: boolean }
-  | { phase: 'done'; success: boolean }
+  { phase: 'awaiting-code'; url?: string; reprompt?: boolean } | { phase: 'done'; success: boolean }
 
 export interface ChatEnvelope {
   workspaceId: string

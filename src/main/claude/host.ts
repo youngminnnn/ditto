@@ -76,7 +76,12 @@ async function respond(reqId: string, fn: () => Promise<unknown> | unknown): Pro
     const data = await fn()
     post({ type: 'response', reqId, ok: true, data })
   } catch (err) {
-    post({ type: 'response', reqId, ok: false, error: err instanceof Error ? err.message : String(err) })
+    post({
+      type: 'response',
+      reqId,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    })
   }
 }
 
@@ -118,7 +123,10 @@ async function handle(msg: HostCommand): Promise<void> {
       await respond(msg.reqId, async () => {
         // /rewind 는 살아 있는 세션의 체크포인트 목록(라이브 Query 가 아님)을 읽는다.
         if (msg.kind === 'rewind') {
-          return { kind: 'rewind', checkpoints: sessions.get(msg.workspaceId)?.getCheckpoints() ?? [] }
+          return {
+            kind: 'rewind',
+            checkpoints: sessions.get(msg.workspaceId)?.getCheckpoints() ?? []
+          }
         }
         // /permissions 는 설정 파일을 읽어 현재 모드와 함께 돌려준다(Query 불필요).
         if (msg.kind === 'permissions') {
@@ -139,7 +147,8 @@ async function handle(msg: HostCommand): Promise<void> {
         if (!session) {
           return {
             canRewind: false,
-            error: 'No live session to rewind. Send a message first, then rewind within the same session.'
+            error:
+              'No live session to rewind. Send a message first, then rewind within the same session.'
           }
         }
         return session.rewind(msg.userMessageId)
@@ -168,10 +177,18 @@ async function handle(msg: HostCommand): Promise<void> {
           onDelta: (text) =>
             post({
               type: 'sideQuestion',
-              update: { workspaceId: msg.workspaceId, id: msg.id, phase: 'delta', text: clampText(text) }
+              update: {
+                workspaceId: msg.workspaceId,
+                id: msg.id,
+                phase: 'delta',
+                text: clampText(text)
+              }
             })
         })
-        post({ type: 'sideQuestion', update: { workspaceId: msg.workspaceId, id: msg.id, phase: 'done' } })
+        post({
+          type: 'sideQuestion',
+          update: { workspaceId: msg.workspaceId, id: msg.id, phase: 'done' }
+        })
       } catch (err) {
         post({
           type: 'sideQuestion',

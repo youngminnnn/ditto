@@ -7,7 +7,11 @@ import type { Workspace } from '@shared/types'
 
 type Tab = 'files' | 'changes' | 'check'
 
-const TABS: { id: Tab; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+const TABS: {
+  id: Tab
+  label: string
+  icon: React.ComponentType<{ size?: number; className?: string }>
+}[] = [
   { id: 'files', label: 'All files', icon: Files },
   { id: 'changes', label: 'Changes', icon: GitCompare },
   { id: 'check', label: 'Check', icon: CheckCheck }
@@ -28,7 +32,9 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
               onClick={() => setTab(id)}
               className={
                 'flex items-center gap-1.5 text-sm px-2.5 py-1 rounded-md ' +
-                (active ? 'bg-[var(--surface-2)] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
+                (active
+                  ? 'bg-[var(--surface-2)] text-neutral-100'
+                  : 'text-neutral-400 hover:text-neutral-200')
               }
             >
               <Icon size={13} />

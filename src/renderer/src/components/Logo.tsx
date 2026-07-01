@@ -24,8 +24,24 @@ export default function Logo({ size = 18 }: { size?: number }): React.JSX.Elemen
         </linearGradient>
       </defs>
       {/* 뒤 카드 → 앞 카드 순으로 계단식 배치. 뒤로 갈수록 흐려진다. */}
-      <rect x="5" y="4" width="15" height="15" rx="4.5" fill="url(#ditto-logo-grad)" opacity="0.3" />
-      <rect x="8.5" y="7.5" width="15" height="15" rx="4.5" fill="url(#ditto-logo-grad)" opacity="0.55" />
+      <rect
+        x="5"
+        y="4"
+        width="15"
+        height="15"
+        rx="4.5"
+        fill="url(#ditto-logo-grad)"
+        opacity="0.3"
+      />
+      <rect
+        x="8.5"
+        y="7.5"
+        width="15"
+        height="15"
+        rx="4.5"
+        fill="url(#ditto-logo-grad)"
+        opacity="0.55"
+      />
       <rect x="12" y="11" width="15" height="15" rx="4.5" fill="url(#ditto-logo-grad)" />
       <rect x="12" y="11" width="15" height="15" rx="4.5" fill="url(#ditto-logo-gloss)" />
     </svg>

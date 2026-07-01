@@ -331,12 +331,21 @@ export const useStore = create<UIState>((set, get) => ({
         if (idx === -1) {
           next = [
             ...items,
-            { id: event.id, type: event.itemType, text: event.text, ts: Date.now(), streaming: true }
+            {
+              id: event.id,
+              type: event.itemType,
+              text: event.text,
+              ts: Date.now(),
+              streaming: true
+            }
           ]
         } else {
           const target = items[idx]
           next = items.slice()
-          next[idx] = { ...target, text: (target as { text: string }).text + event.text } as ChatItem
+          next[idx] = {
+            ...target,
+            text: (target as { text: string }).text + event.text
+          } as ChatItem
         }
         set({ transcripts: { ...transcripts, [workspaceId]: next } })
       } else if (event.type === 'status' || event.type === 'session') {
@@ -429,7 +438,9 @@ export const useStore = create<UIState>((set, get) => ({
     // worktree 체크아웃(git)은 큰 리포에서 수 초가 걸리므로, 먼저 자리표시 행을 띄워
     // 즉각적인 피드백을 주고 git 은 그동안 백그라운드로 진행한다. 완료 시 실제 행으로 교체된다.
     const placeholderId = `pending:${++pendingSeq}`
-    set((s) => ({ pending: [...s.pending, { id: placeholderId, repoId, name: displayName ?? '' }] }))
+    set((s) => ({
+      pending: [...s.pending, { id: placeholderId, repoId, name: displayName ?? '' }]
+    }))
 
     let res: { workspaceId?: string; name?: string; branch?: string; error?: string }
     try {

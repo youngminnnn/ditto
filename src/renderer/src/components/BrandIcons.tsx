@@ -4,10 +4,7 @@ export function ClaudeMark({ size = 18 }: { size?: number }): React.JSX.Element 
   // Claude/AI 를 연상시키는 4각 스파클.
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-label="Claude">
-      <path
-        d="M8 0 L9.7 6.3 L16 8 L9.7 9.7 L8 16 L6.3 9.7 L0 8 L6.3 6.3 Z"
-        fill="#d97757"
-      />
+      <path d="M8 0 L9.7 6.3 L16 8 L9.7 9.7 L8 16 L6.3 9.7 L0 8 L6.3 6.3 Z" fill="#d97757" />
     </svg>
   )
 }

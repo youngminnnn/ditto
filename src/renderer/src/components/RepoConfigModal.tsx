@@ -62,7 +62,12 @@ export default function RepoConfigModal({
       width={520}
       footer={
         <>
-          <button className={ghostBtn + ' mr-auto text-[var(--danger-400)] hover:bg-[var(--danger-500)]/15'} onClick={removeRepo}>
+          <button
+            className={
+              ghostBtn + ' mr-auto text-[var(--danger-400)] hover:bg-[var(--danger-500)]/15'
+            }
+            onClick={removeRepo}
+          >
             Remove repo
           </button>
           <button className={ghostBtn} onClick={onClose}>
@@ -106,9 +111,9 @@ export default function RepoConfigModal({
           />
           <p className="mt-1.5 text-xs text-neutral-600">
             Dev server command you start/stop from the scripts panel. Each workspace gets a unique{' '}
-            <span className="font-mono">$PORT</span> (also <span className="font-mono">$DITTO_DEV_PORT</span>) —
-            use it so parallel dev servers don&rsquo;t collide, e.g.{' '}
-            <span className="font-mono">vite --port $PORT</span>.
+            <span className="font-mono">$PORT</span> (also{' '}
+            <span className="font-mono">$DITTO_DEV_PORT</span>) — use it so parallel dev servers
+            don&rsquo;t collide, e.g. <span className="font-mono">vite --port $PORT</span>.
           </p>
         </div>
 

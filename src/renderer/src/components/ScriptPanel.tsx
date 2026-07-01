@@ -47,7 +47,9 @@ export default function ScriptPanel({
               onClick={() => setTab(kind)}
               className={
                 'flex items-center gap-1.5 text-sm px-2.5 py-1 rounded-md ' +
-                (active ? 'bg-[var(--surface-2)] text-neutral-100' : 'text-neutral-400 hover:text-neutral-200')
+                (active
+                  ? 'bg-[var(--surface-2)] text-neutral-100'
+                  : 'text-neutral-400 hover:text-neutral-200')
               }
             >
               {kind === 'dev' ? 'Dev server' : 'Setup'}
@@ -91,7 +93,10 @@ export default function ScriptPanel({
           <span className="truncate">$ {command}</span>
           {tab === 'dev' && port != null && (
             <span className="ml-auto shrink-0 flex items-center gap-2 not-italic">
-              <span className="text-neutral-500" title="Unique port for this workspace, injected as $PORT / $DITTO_DEV_PORT">
+              <span
+                className="text-neutral-500"
+                title="Unique port for this workspace, injected as $PORT / $DITTO_DEV_PORT"
+              >
                 PORT={port}
               </span>
               <button

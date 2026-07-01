@@ -126,7 +126,9 @@ export default function QuestionPrompt({
               <div key={qi} className={qi > 0 ? 'mt-3.5' : ''}>
                 <div className="text-sm text-neutral-100 font-medium">{q.question}</div>
                 {multi && (
-                  <div className="text-xs text-[var(--brand-300)]/70 mt-0.5">Select all that apply</div>
+                  <div className="text-xs text-[var(--brand-300)]/70 mt-0.5">
+                    Select all that apply
+                  </div>
                 )}
                 <div className="mt-1.5 flex flex-col gap-1">
                   {q.options.map((opt, oi) => {

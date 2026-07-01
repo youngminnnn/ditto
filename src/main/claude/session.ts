@@ -170,7 +170,8 @@ export class ClaudeSession {
     if (!q) {
       return {
         canRewind: false,
-        error: 'No live session to rewind. Send a message first, then rewind within the same session.'
+        error:
+          'No live session to rewind. Send a message first, then rewind within the same session.'
       }
     }
     try {
@@ -218,7 +219,9 @@ export class ClaudeSession {
       text,
       ts: Date.now(),
       // base64 본문은 트랜스크립트에 남기지 않고(무겁다) 이름/형식만 칩으로 표시.
-      ...(imgs.length ? { attachments: imgs.map((i) => ({ name: i.name, mediaType: i.mediaType })) } : {})
+      ...(imgs.length
+        ? { attachments: imgs.map((i) => ({ name: i.name, mediaType: i.mediaType })) }
+        : {})
     }
     this.deps.persist(item)
     this.deps.emit({ type: 'item', item })
@@ -295,7 +298,11 @@ export class ClaudeSession {
       return
     }
 
-    if (this.deps.autoCompact && !this.autoCompactInFlight && percentage >= AUTO_COMPACT_THRESHOLD) {
+    if (
+      this.deps.autoCompact &&
+      !this.autoCompactInFlight &&
+      percentage >= AUTO_COMPACT_THRESHOLD
+    ) {
       // compact-first: 사용자 턴 전에 압축한다. 버퍼는 압축 result 후 flushBuffered 로 방출(preflightPending 유지).
       this.autoCompactInFlight = true
       this.emitItem({
@@ -556,7 +563,9 @@ export class ClaudeSession {
   // 라이브 갱신한다. 워크플로우(task_type==='local_workflow' 또는 workflow_name 존재)만 다루고,
   // 일반 서브에이전트 task 는 기존처럼 도구 카드로 충분하므로 건너뛴다.
 
-  private handleTaskStarted(msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_started' }>): void {
+  private handleTaskStarted(
+    msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_started' }>
+  ): void {
     const isWorkflow = msg.task_type === 'local_workflow' || typeof msg.workflow_name === 'string'
     // ambient/housekeeping task(skip_transcript)나 비워크플로우 task 는 트랜스크립트에 노출하지 않는다.
     if (!isWorkflow || msg.skip_transcript) return
@@ -572,7 +581,9 @@ export class ClaudeSession {
     this.upsertTask(state, true)
   }
 
-  private handleTaskProgress(msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_progress' }>): void {
+  private handleTaskProgress(
+    msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_progress' }>
+  ): void {
     const state = this.workflowTasks.get(msg.task_id)
     if (!state) return // 우리가 추적 중인 워크플로우가 아니면 무시(서브에이전트 진행 등).
     if (msg.description) state.description = msg.description
@@ -583,7 +594,9 @@ export class ClaudeSession {
     this.upsertTask(state, false)
   }
 
-  private handleTaskUpdated(msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_updated' }>): void {
+  private handleTaskUpdated(
+    msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_updated' }>
+  ): void {
     const state = this.workflowTasks.get(msg.task_id)
     if (!state) return
     const p = msg.patch
@@ -636,7 +649,11 @@ export class ClaudeSession {
 
   /** stream_event 는 텍스트/사고 과정의 실시간 타이핑에만 사용한다. */
   private handleStreamEvent(msg: Extract<SDKMessage, { type: 'stream_event' }>): void {
-    const event = msg.event as { type: string; message?: { id?: string }; delta?: { type: string; text?: string; thinking?: string } }
+    const event = msg.event as {
+      type: string
+      message?: { id?: string }
+      delta?: { type: string; text?: string; thinking?: string }
+    }
 
     if (event.type === 'message_start') {
       this.currentApiMsgId = event.message?.id ?? `msg:${Date.now()}`
@@ -646,9 +663,19 @@ export class ClaudeSession {
     if (event.type === 'content_block_delta' && event.delta) {
       const apiId = this.currentApiMsgId ?? `msg:${Date.now()}`
       if (event.delta.type === 'text_delta' && event.delta.text) {
-        this.deps.emit({ type: 'delta', id: `${apiId}:text`, itemType: 'assistant', text: clampText(event.delta.text) })
+        this.deps.emit({
+          type: 'delta',
+          id: `${apiId}:text`,
+          itemType: 'assistant',
+          text: clampText(event.delta.text)
+        })
       } else if (event.delta.type === 'thinking_delta' && event.delta.thinking) {
-        this.deps.emit({ type: 'delta', id: `${apiId}:thinking`, itemType: 'thinking', text: clampText(event.delta.thinking) })
+        this.deps.emit({
+          type: 'delta',
+          id: `${apiId}:thinking`,
+          itemType: 'thinking',
+          text: clampText(event.delta.thinking)
+        })
       }
     }
   }
@@ -806,7 +833,11 @@ export class ClaudeSession {
 
     // 임계치를 넘었으면 다음 턴 전에 자동으로 압축한다(Claude Code CLI 의 auto-compact).
     // /context 와 동일한 점유율(ctx.percentage, 0~100)을 기준으로 판단한다.
-    if (opts.allowAutoCompact && this.deps.autoCompact && ctx.percentage >= AUTO_COMPACT_THRESHOLD) {
+    if (
+      opts.allowAutoCompact &&
+      this.deps.autoCompact &&
+      ctx.percentage >= AUTO_COMPACT_THRESHOLD
+    ) {
       this.triggerAutoCompact()
     }
   }

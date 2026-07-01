@@ -18,7 +18,8 @@ const CURRENT_SCHEMA_VERSION = 5
 
 /** 더 이상 노출하지 않는 'bypassPermissions' 등 옛 모드는 acceptEdits 로 환산한다. */
 function normalizeMode(mode: unknown): PermissionMode {
-  if (mode === 'default' || mode === 'acceptEdits' || mode === 'plan' || mode === 'auto') return mode
+  if (mode === 'default' || mode === 'acceptEdits' || mode === 'plan' || mode === 'auto')
+    return mode
   return 'acceptEdits'
 }
 

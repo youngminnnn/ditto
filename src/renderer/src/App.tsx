@@ -63,7 +63,8 @@ export default function App(): React.JSX.Element {
 
   // 온보딩(약관 동의·계정 연결) 모달이 떠 있는 동안에는 전역 단축키도 막아, 동의 전 앱 조작을 차단한다.
   const onboardingOpen =
-    !!app && (!app.settings.onboarded || app.settings.acceptedTermsVersion !== CURRENT_TERMS_VERSION)
+    !!app &&
+    (!app.settings.onboarded || app.settings.acceptedTermsVersion !== CURRENT_TERMS_VERSION)
 
   // gh(GitHub CLI)는 필수다 — "설치 + 로그인"이 모두 끝나기 전에는 본 화면을 막는다(하드 게이트).
   // 온보딩(약관 동의)을 먼저 끝낸 뒤에만 게이트를 띄우고, 인증 상태가 로드되기 전에는 깜빡임을
@@ -187,7 +188,8 @@ export default function App(): React.JSX.Element {
           className="no-drag shrink-0 flex items-center justify-center gap-2 h-8 bg-[var(--warning-500)]/10 border-b border-[var(--warning-500)]/25 text-sm text-[var(--warning-300)] hover:bg-[var(--warning-500)]/15"
         >
           <AlertTriangle size={13} />
-          You&rsquo;re not signed in to your AI provider. Agents won&rsquo;t run until you connect — click to open Settings.
+          You&rsquo;re not signed in to your AI provider. Agents won&rsquo;t run until you connect —
+          click to open Settings.
         </button>
       )}
 
@@ -240,8 +242,12 @@ export default function App(): React.JSX.Element {
         />
       )}
       {tourOpen && <FeatureTour onDone={() => setTourOpen(false)} />}
-      {newWsRepoId && <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />}
-      {configRepoId && <RepoConfigModal repoId={configRepoId} onClose={() => setConfigRepoId(null)} />}
+      {newWsRepoId && (
+        <NewWorkspaceModal repoId={newWsRepoId} onClose={() => setNewWsRepoId(null)} />
+      )}
+      {configRepoId && (
+        <RepoConfigModal repoId={configRepoId} onClose={() => setConfigRepoId(null)} />
+      )}
 
       <Toaster />
       <ConfirmDialog />

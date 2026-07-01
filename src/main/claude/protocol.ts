@@ -42,12 +42,24 @@ export type SideQuestionUpdate =
 
 /** 메인 → 호스트 명령. */
 export type HostCommand =
-  | { type: 'send'; workspaceId: string; config: SessionConfig; text: string; images?: ImageAttachment[] }
+  | {
+      type: 'send'
+      workspaceId: string
+      config: SessionConfig
+      text: string
+      images?: ImageAttachment[]
+    }
   | { type: 'interrupt'; workspaceId: string }
   | { type: 'setPermissionMode'; workspaceId: string; mode: PermissionMode }
   | { type: 'dispose'; workspaceId: string }
   | { type: 'disposeAll' }
-  | { type: 'runCommand'; reqId: string; workspaceId: string; config: SessionConfig; kind: CommandPanelKind }
+  | {
+      type: 'runCommand'
+      reqId: string
+      workspaceId: string
+      config: SessionConfig
+      kind: CommandPanelKind
+    }
   | {
       type: 'mcpAction'
       reqId: string

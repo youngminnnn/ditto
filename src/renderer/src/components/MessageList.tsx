@@ -2,7 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { ChevronRight, Wrench, Brain, AlertTriangle, Check, Copy, Loader2, ArrowDown, ImageIcon, Workflow, XCircle, MessageSquarePlus, Terminal as TerminalIcon } from 'lucide-react'
+import {
+  ChevronRight,
+  Wrench,
+  Brain,
+  AlertTriangle,
+  Check,
+  Copy,
+  Loader2,
+  ArrowDown,
+  ImageIcon,
+  Workflow,
+  XCircle,
+  MessageSquarePlus,
+  Terminal as TerminalIcon
+} from 'lucide-react'
 import { useStore } from '../store'
 import { formatTime } from '../lib/format'
 import type { ChatItem } from '@shared/types'
@@ -73,9 +87,13 @@ export default function MessageList({
           <p className="text-base text-neutral-300">Start an agent session</p>
           <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
             Send your first message — nothing runs until you do. Type{' '}
-            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">/</kbd>{' '}
+            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">
+              /
+            </kbd>{' '}
             for commands or{' '}
-            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">!</kbd>{' '}
+            <kbd className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-neutral-300">
+              !
+            </kbd>{' '}
             to run a terminal command.
           </p>
         </div>
@@ -158,7 +176,13 @@ function Item({
     case 'thinking':
       return <Thinking text={item.text} />
     case 'tool_use':
-      return <ToolUse name={item.name} input={item.input} pending={running && !resolved.has(item.toolId)} />
+      return (
+        <ToolUse
+          name={item.name}
+          input={item.input}
+          pending={running && !resolved.has(item.toolId)}
+        />
+      )
     case 'tool_result':
       return <ToolResult text={item.text} isError={item.isError} />
     case 'result':
@@ -246,8 +270,10 @@ function TaskCard({ item }: { item: Extract<ChatItem, { type: 'task' }> }): Reac
   const failed = item.status === 'failed' || item.status === 'stopped'
 
   const stats: string[] = []
-  if (typeof item.totalTokens === 'number') stats.push(`${formatTokenCount(item.totalTokens)} tokens`)
-  if (typeof item.toolUses === 'number') stats.push(`${item.toolUses} tool ${item.toolUses === 1 ? 'use' : 'uses'}`)
+  if (typeof item.totalTokens === 'number')
+    stats.push(`${formatTokenCount(item.totalTokens)} tokens`)
+  if (typeof item.toolUses === 'number')
+    stats.push(`${item.toolUses} tool ${item.toolUses === 1 ? 'use' : 'uses'}`)
   if (typeof item.durationMs === 'number') stats.push(`${(item.durationMs / 1000).toFixed(1)}s`)
 
   return (
@@ -266,7 +292,11 @@ function TaskCard({ item }: { item: Extract<ChatItem, { type: 'task' }> }): Reac
         <span
           className={
             'ml-auto shrink-0 text-xs uppercase tracking-wide ' +
-            (running ? 'text-[var(--accent-400)]' : failed ? 'text-[var(--danger-400)]' : 'text-[var(--success-400)]')
+            (running
+              ? 'text-[var(--accent-400)]'
+              : failed
+                ? 'text-[var(--danger-400)]'
+                : 'text-[var(--success-400)]')
           }
         >
           {item.status}
@@ -351,7 +381,10 @@ function ToolUse({
         )}
         <span className="font-medium text-neutral-300">{name}</span>
         {summary && <span className="text-neutral-500 truncate">{summary}</span>}
-        <ChevronRight size={12} className={(open ? 'rotate-90 ' : '') + 'ml-auto shrink-0 transition'} />
+        <ChevronRight
+          size={12}
+          className={(open ? 'rotate-90 ' : '') + 'ml-auto shrink-0 transition'}
+        />
       </button>
       {open && (
         <pre className="mt-1 ml-4 text-xs bg-[var(--surface)] border border-[var(--border)] rounded-md p-2 overflow-x-auto text-neutral-400">
@@ -392,14 +425,21 @@ function ToolResult({ text, isError }: { text: string; isError: boolean }): Reac
   )
 }
 
-function ResultFooter({ item }: { item: Extract<ChatItem, { type: 'result' }> }): React.JSX.Element {
+function ResultFooter({
+  item
+}: {
+  item: Extract<ChatItem, { type: 'result' }>
+}): React.JSX.Element {
   const text =
     item.subtype === 'success'
       ? `${item.numTurns} turns · ${(item.durationMs / 1000).toFixed(1)}s · $${item.costUsd.toFixed(4)}`
       : `${item.subtype} · ${item.numTurns} turns`
   return (
     <div
-      className={'text-xs text-center py-1 ' + (item.isError ? 'text-[var(--danger-400)]/80' : 'text-neutral-600')}
+      className={
+        'text-xs text-center py-1 ' +
+        (item.isError ? 'text-[var(--danger-400)]/80' : 'text-neutral-600')
+      }
     >
       {text}
     </div>

@@ -172,6 +172,13 @@ export class RateLimitResumeCoordinator {
    * 인스턴스 필드 하나가 곧 계정 단위 게이트가 된다(CONTINUATION_SPACING_MS).
    */
   private lastContinuationAt = 0
+  /**
+   * 이 백엔드에서 제한을 마지막으로 **본** 시각. 제한도 계정 단위라 이것도 하나면 된다.
+   *
+   * 예약을 앞당길지 판단할 때 쓴다(checkLiftedEarly) — 제한이 일어나기 전에 뜬 스냅샷은 그 제한을
+   * 볼 기회가 없었으므로 "풀렸다" 의 근거가 되지 못한다.
+   */
+  private lastLimitAt = 0
 
   constructor(private deps: Deps) {}
 
@@ -245,6 +252,7 @@ export class RateLimitResumeCoordinator {
     const ws = state.workspaces.find((item) => item.id === workspaceId)
     if (!ws || ws.archived || ws.agentBackend !== this.deps.backend) return
 
+    this.lastLimitAt = Date.now()
     // async 함수는 첫 await 전까지 동기로 돈다 — 표시와 방송은 반드시 그 앞에 둔다.
     this.mark(workspaceId, resetAt ?? null)
     if (state.settings.autoResumeAfterRateLimit) {
@@ -557,9 +565,10 @@ export class RateLimitResumeCoordinator {
    * 돌아와 손으로 이어가는 수밖에 없다.
    *
    * 그래서 기다리는 동안에도 사용량을 다시 보고, 스냅샷이 **적극적으로** "제한이 아니다" 라고 말하면
-   * 예약 시각을 앞당겨 곧바로 이어간다. 모르겠다는 대답(조회 실패·창 없음·available=false)은 근거로
-   * 쓰지 않는다 — 그때는 원래 예약대로 기다린다. 이 판정은 예약 시각에 쓰는 것과 같은 것이라
-   * (isRateLimited), 신뢰 수준을 새로 만들지 않고 **시점만 앞당긴다.**
+   * 예약 시각을 앞당겨 곧바로 이어간다. 모르겠다는 대답(조회 실패·창 없음·available=false·제한보다
+   * 먼저 뜬 스냅샷)은 근거로 쓰지 않는다 — 그때는 원래 예약대로 기다린다. 그리고 "제한이 아니다" 의
+   * 기준은 예약을 걸 때 쓰는 것과 **같은 것**이다(limitLifted → knownResetAt). 신뢰 수준을 새로
+   * 만들지 않고 **시점만 앞당긴다.**
    *
    * 다만 **해제 시각을 안다고 믿고 기다리는 예약에만** 쓴다(rateLimited.resetsAt). 시각을 모른 채
    * 백오프로 물러선 예약에는 앞당길 근거가 없다 — 거기서는 조회가 "괜찮다" 고 말하는데도 실제 턴이
@@ -593,7 +602,10 @@ export class RateLimitResumeCoordinator {
     const latest = current.pendingRateLimitResume!
     if (latest.retryAt - now <= 1_000) return this.arm(workspaceId, latest.retryAt)
     const snapshot = getStore().getState().rateLimitsByAgent?.[this.deps.backend]
-    if (!limitLifted(snapshot, now)) {
+    // 제한보다 **먼저** 뜬 스냅샷은 그 제한을 볼 기회가 없었다. 조회는 자주 실패하므로(로그의
+    // "usage timed out"), 예약을 걸 때의 조회가 빈손으로 돌아오면 몇 분 전의 멀쩡한 스냅샷이
+    // 그대로 남는다 — 그것을 근거로 삼으면 예약을 걸자마자 다음 틱에 스스로 깨 버린다.
+    if (!snapshot || snapshot.fetchedAt <= this.lastLimitAt || !limitLifted(snapshot, now)) {
       this.arm(workspaceId, latest.retryAt)
       return
     }
@@ -884,7 +896,17 @@ export function limitLifted(snapshot: RateLimitSnapshot | undefined, now = Date.
   if (!snapshot?.available || !snapshot.windows.length) return false
   // 조회에 실패하면 fetchedAt 은 그대로다(마지막 성공 시각). 낡은 스냅샷은 지금을 말해 주지 않는다.
   if (now - snapshot.fetchedAt > EARLY_CHECK_MS) return false
-  return !isRateLimited(snapshot, now)
+  // "풀렸다" 의 기준은 예약을 거는 쪽(knownResetAt)과 **같아야 한다.** isRateLimited 만 물으면
+  // 100% 미만은 전부 풀린 것이 되는데, 제한 직후의 사용률은 요청 한 번어치만큼 늦어 95% 로 보인다
+  // (likelyExhaustedResetAt). 그러면 같은 스냅샷 하나를 놓고 schedule 은 "5시간 창이 소진됐다,
+  // 02:00 에 이어가자" 라고 읽고 여기서는 "제한이 아니다, 지금 가자" 라고 읽는 모순이 생긴다 —
+  // 실제로 그렇게 됐다: 02:00 으로 예약해 놓고 몇 분 뒤 스스로 그 예약을 깨 턴을 태우고, 1초 만에
+  // 다시 걸려 같은 자리로 돌아오기를 반복했다.
+  //
+  // 그래서 근거를 하나로 묶는다. 소진에 가까운 창이 하나라도 남아 있으면(knownResetAt 이 시각을
+  // 짚어내면) 앞당기지 않는다. 창이 굴러가 사용률이 실제로 내려오면 그때 null 이 되어 앞당겨진다 —
+  // 이 함수가 원래 잡으려던 경우(옛 창의 100% 를 물고 있다가 제자리를 찾는 스냅샷)는 그대로 잡힌다.
+  return knownResetAt(snapshot, now) === null
 }
 
 /** reset 시각을 모를 때 다음 확인까지 기다릴 시간. 시도마다 배로 늘려 한 시간에서 멈춘다. */

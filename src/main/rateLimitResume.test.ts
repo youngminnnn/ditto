@@ -445,6 +445,80 @@ describe('RateLimitResumeCoordinator', () => {
     expect(store.getState().workspaces[0].pendingRateLimitResume).toBeNull()
   })
 
+  it('사용률이 90%대인 스냅샷은 풀렸다는 근거가 아니다 — 제한 직후의 수치는 늦다', async () => {
+    const { getStore } = await import('./store')
+    const store = getStore()
+    seedWorkspace(store)
+    const sent = vi.fn()
+    // 5시간 창을 막 소진했다. 거절당한 요청은 사용률을 올려 주지 않아 수치는 95% 에 머문다 —
+    // 같은 스냅샷을 보고 예약은 "소진됐다(=다섯 시간 뒤)" 라고 읽으므로, 여기서 "풀렸다" 로
+    // 읽으면 제 예약을 스스로 깨고 턴을 태운 뒤 1초 만에 다시 걸린다.
+    const coordinator = new RateLimitResumeCoordinator({
+      backend: 'claude',
+      refreshLimits: async () => {
+        store.update((state) => {
+          state.rateLimitsByAgent = {
+            ...state.rateLimitsByAgent,
+            claude: {
+              fetchedAt: Date.now(),
+              available: true,
+              subscriptionType: 'pro',
+              windows: windows(95, 5 * 60 * 60_000)
+            }
+          }
+        })
+      },
+      sendContinuation: sent,
+      emitItem: () => {},
+      broadcastState: () => {}
+    })
+
+    await coordinator.noteRateLimit(WORKSPACE_ID)
+    expect(store.getState().workspaces[0].pendingRateLimitResume?.retryAt).toBeGreaterThan(
+      Date.now() + 4 * 60 * 60_000
+    )
+
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+
+    expect(sent).not.toHaveBeenCalled()
+    expect(store.getState().workspaces[0].pendingRateLimitResume).not.toBeNull()
+  })
+
+  it('제한보다 먼저 뜬 스냅샷으로는 예약을 앞당기지 않는다 — 그 조회는 제한을 볼 기회가 없었다', async () => {
+    const { getStore } = await import('./store')
+    const store = getStore()
+    seedWorkspace(store)
+    store.update((state) => {
+      // 제한에 걸리기 1분 전에 성공한 조회. 그 뒤 조회는 계속 타임아웃이라 이 값이 그대로 남는다.
+      state.rateLimitsByAgent = {
+        ...state.rateLimitsByAgent,
+        claude: {
+          fetchedAt: Date.now() - 60_000,
+          available: true,
+          subscriptionType: 'pro',
+          windows: windows(20, 5 * 60 * 60_000)
+        }
+      }
+    })
+    const sent = vi.fn()
+    const coordinator = new RateLimitResumeCoordinator({
+      backend: 'claude',
+      refreshLimits: async () => {},
+      sendContinuation: sent,
+      emitItem: () => {},
+      broadcastState: () => {}
+    })
+
+    // 오류가 해제 시각을 알려 줬으므로 예약도 표시도 그 시각으로 선다.
+    await coordinator.noteRateLimit(WORKSPACE_ID, Date.now() + 5 * 60 * 60_000)
+    expect(store.getState().workspaces[0].rateLimited?.resetsAt).not.toBeNull()
+
+    await vi.advanceTimersByTimeAsync(3 * 60_000)
+
+    expect(sent).not.toHaveBeenCalled()
+    expect(store.getState().workspaces[0].pendingRateLimitResume).not.toBeNull()
+  })
+
   it('낡은 스냅샷은 제한이 풀렸다는 근거가 되지 않는다 — 조회가 실패하면 예약대로 기다린다', async () => {
     const { getStore } = await import('./store')
     const store = getStore()

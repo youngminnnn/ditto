@@ -484,6 +484,84 @@ describe('RateLimitResumeCoordinator', () => {
     expect(store.getState().workspaces[0].pendingRateLimitResume).not.toBeNull()
   })
 
+  it('오류 문구만 아는 제한은 앞당기지 않는다 — 그 조회에는 이 제한이 보이지 않는다', async () => {
+    const { getStore } = await import('./store')
+    const store = getStore()
+    seedWorkspace(store)
+    const sent = vi.fn()
+    // 조회는 매번 성공하고 매번 "한가하다" 고 말한다. 사용량 창에 올라오지 않는 제한이라
+    // (해제 시각을 아는 것은 오류 문구뿐이다) 이 깨끗함은 풀렸다는 근거가 되지 못한다.
+    const coordinator = new RateLimitResumeCoordinator({
+      backend: 'claude',
+      refreshLimits: async () => {
+        store.update((state) => {
+          state.rateLimitsByAgent = {
+            ...state.rateLimitsByAgent,
+            claude: {
+              fetchedAt: Date.now(),
+              available: true,
+              subscriptionType: 'pro',
+              windows: windows(20, 5 * 60 * 60_000)
+            }
+          }
+        })
+      },
+      sendContinuation: sent,
+      emitItem: () => {},
+      broadcastState: () => {}
+    })
+
+    await coordinator.noteRateLimit(WORKSPACE_ID, Date.now() + 5 * 60 * 60_000)
+    const pending = store.getState().workspaces[0].pendingRateLimitResume
+    expect(pending?.resetSeenInUsage).toBe(false)
+    expect(store.getState().workspaces[0].rateLimited?.resetsAt).not.toBeNull()
+
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+
+    expect(sent).not.toHaveBeenCalled()
+    expect(store.getState().workspaces[0].pendingRateLimitResume).not.toBeNull()
+  })
+
+  it('스냅샷이 짚어 준 해제 시각이면 앞당긴다 — 오류가 같은 시각을 함께 알려 줘도 그렇다', async () => {
+    const { getStore } = await import('./store')
+    const store = getStore()
+    seedWorkspace(store)
+    const sent = vi.fn()
+    let utilization = 100
+    const coordinator = new RateLimitResumeCoordinator({
+      backend: 'claude',
+      refreshLimits: async () => {
+        store.update((state) => {
+          state.rateLimitsByAgent = {
+            ...state.rateLimitsByAgent,
+            claude: {
+              fetchedAt: Date.now(),
+              available: true,
+              subscriptionType: 'pro',
+              windows: windows(utilization, 5 * 60 * 60_000)
+            }
+          }
+        })
+      },
+      sendContinuation: sent,
+      emitItem: () => {},
+      broadcastState: () => {}
+    })
+
+    // 오류도 같은 창의 해제 시각을 알려 줬다 — 스냅샷이 짚어 준 것과 같으므로 앞당길 수 있다.
+    await coordinator.noteRateLimit(WORKSPACE_ID, Date.now() + 5 * 60 * 60_000 - 1_000)
+    expect(store.getState().workspaces[0].pendingRateLimitResume?.resetSeenInUsage).toBe(true)
+
+    utilization = 20
+    await vi.advanceTimersByTimeAsync(12 * 60_000)
+
+    expect(sent).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      RATE_LIMIT_CONTINUATION,
+      RATE_LIMIT_CONTINUATION_LABEL
+    )
+  })
+
   it('제한보다 먼저 뜬 스냅샷으로는 예약을 앞당기지 않는다 — 그 조회는 제한을 볼 기회가 없었다', async () => {
     const { getStore } = await import('./store')
     const store = getStore()

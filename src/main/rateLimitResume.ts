@@ -393,10 +393,14 @@ export class RateLimitResumeCoordinator {
       return
     }
     const snapshot = latest.rateLimitsByAgent?.[this.deps.backend]
+    const now = Date.now()
     // 조회로 해제 시각을 알아냈다면 표시도 같이 채운다(오류가 시각을 주지 않았을 때의 경로).
-    const known = knownResetAt(snapshot, Date.now(), resetAt)
+    const known = knownResetAt(snapshot, now, resetAt)
     if (known) this.mark(workspaceId, known)
-    const retryAt = retryTime(snapshot, Date.now(), attempt, resetAt)
+    // 이 해제 시각을 스냅샷이 직접 짚어 줬는지 남긴다([[shared/types]] resetSeenInUsage). 오류
+    // 문구만 아는 제한은 스냅샷에 올라오지 않으므로, 그 깨끗한 조회로 예약을 앞당겨서는 안 된다.
+    const seenInUsage = knownResetAt(snapshot, now)
+    const retryAt = retryTime(snapshot, now, attempt, resetAt)
     getStore().update((draft) => {
       const target = draft.workspaces.find((item) => item.id === workspaceId)
       if (!target || !target.sessionId) return
@@ -406,6 +410,7 @@ export class RateLimitResumeCoordinator {
         sessionId: target.sessionId,
         detectedAt: previous?.detectedAt ?? Date.now(),
         cause: 'rateLimit',
+        resetSeenInUsage: seenInUsage !== null && seenInUsage === known,
         retryAt,
         attempt
       }
@@ -574,6 +579,10 @@ export class RateLimitResumeCoordinator {
    * 백오프로 물러선 예약에는 앞당길 근거가 없다 — 거기서는 조회가 "괜찮다" 고 말하는데도 실제 턴이
    * 제한에 걸린 것이므로, 그 조회를 근거로 다시 보내면 물러선 의미가 사라지고 시도 예산만 몇 분 만에
    * 태운다. 백오프 자체가 그 경우의 확인 절차다.
+   *
+   * 같은 이유로 **그 해제 시각을 스냅샷이 직접 짚어 준 예약에만** 쓴다([[shared/types]]
+   * resetSeenInUsage). 오류 문구만 시각을 알려 준 제한은 사용량 창에 올라오지 않으므로, 그 조회가
+   * 깨끗한 것은 제한이 풀렸다는 뜻이 아니라 애초에 이 제한을 볼 수 있는 눈이 아니라는 뜻이다.
    */
   private async checkLiftedEarly(workspaceId: string, ws: Workspace): Promise<void> {
     const pending = ws.pendingRateLimitResume!
@@ -584,6 +593,7 @@ export class RateLimitResumeCoordinator {
       remaining > EARLY_CHECK_MS &&
       causeOf(pending) === 'rateLimit' &&
       !pending.blocked &&
+      pending.resetSeenInUsage === true &&
       Boolean(ws.rateLimited?.resetsAt)
     if (!eligible || (this.deps.isOnline && !this.deps.isOnline())) {
       this.arm(workspaceId, pending.retryAt)
@@ -812,6 +822,7 @@ export class RateLimitResumeCoordinator {
         sessionId: target.sessionId,
         detectedAt: target.pendingRateLimitResume?.detectedAt ?? Date.now(),
         cause: causeOf(target.pendingRateLimitResume),
+        resetSeenInUsage: target.pendingRateLimitResume?.resetSeenInUsage ?? false,
         ...fields
       }
     })

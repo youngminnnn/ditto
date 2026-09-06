@@ -4215,6 +4215,18 @@ export interface PendingRateLimitResume {
    *   확인 간격을 늘려 가며 기다린다([[rateLimitResume]] noteConnectionLost).
    */
   cause?: 'rateLimit' | 'connection'
+  /**
+   * 이 예약이 기다리는 해제 시각을 **사용량 스냅샷이 직접 짚어 줬는가.**
+   *
+   * 해제 시각의 출처는 둘이다 — 제한 오류 문구가 실어 준 epoch 와, 사용량 스냅샷에서 소진된 창
+   * ([[rateLimitResume]] knownResetAt). 앞의 것은 스냅샷이 그 제한을 **보지 못할 때도** 시각을
+   * 준다. 그런 예약을 "스냅샷이 깨끗하다" 는 이유로 앞당기면(checkLiftedEarly), 애초에 이 제한을
+   * 볼 수 있는 눈이 아니었던 조회를 근거로 삼는 것이라 보내자마자 다시 걸린다.
+   *
+   * 그래서 조기 재개는 이 표시가 있는 예약에만 쓴다. 없으면(이 필드보다 먼저 저장된 예약) 예약해
+   * 둔 시각을 그대로 기다린다 — 늦어야 그 시각이고, 그것이 원래 한 약속이다.
+   */
+  resetSeenInUsage?: boolean
 }
 
 export interface PendingShutdownResume {

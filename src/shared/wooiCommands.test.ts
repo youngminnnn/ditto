@@ -140,9 +140,17 @@ describe('parseWooiCommandArgs', () => {
     expect(parseWooiCommandArgs('logs', '')).toHaveProperty('error')
   })
 
-  it('requires a workspace id to archive', () => {
+  // 빈 인자는 여기서 "이 워크스페이스" 다 — 도구가 같은 규약을 쓴다(archive_workspace).
+  it('archives this workspace when no id is given', () => {
     expect(parseWooiCommandArgs('archive', 'ws_1')).toEqual({ args: { workspaceId: 'ws_1' } })
-    expect(parseWooiCommandArgs('archive', '')).toHaveProperty('error')
+    expect(parseWooiCommandArgs('archive', '')).toEqual({ args: {} })
+  })
+
+  // 삭제에는 기본 대상이 없다. 자기 자신은 애초에 지울 수 없으므로 빈 인자를 "이 워크스페이스"
+  // 로 읽어 주면 반드시 실패하는 호출을 만들어 주는 셈이 된다.
+  it('requires a workspace id to delete', () => {
+    expect(parseWooiCommandArgs('delete', 'ws_1')).toEqual({ args: { workspaceId: 'ws_1' } })
+    expect(parseWooiCommandArgs('delete', '')).toHaveProperty('error')
   })
 
   it('refuses commands it does not own', () => {

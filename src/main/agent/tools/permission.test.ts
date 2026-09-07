@@ -36,6 +36,7 @@ beforeEach(() => {
       path: '/src/wooi',
       defaultBranch: 'main',
       setupScript: 'npm install',
+      archiveScript: 'docker compose down',
       runScripts: [{ id: 'dev-1', name: 'Dev', command: 'npm run dev', autoStart: false }]
     },
     { id: 'repo-2', name: 'oh-my-wooi', path: '/src/oh-my-wooi', defaultBranch: 'trunk' }
@@ -83,6 +84,73 @@ describe('ensureToolApproved', () => {
     answer('deny')
 
     await expect(pending).rejects.toThrow(/declined/)
+  })
+
+  // 아카이브·삭제는 대상 경계를 카드로 옮겼다([[agent/tools/target]] allowAnyCreator).
+  // 그러면 카드 문장 자체가 방어의 일부다 — 어느 워크스페이스인지 사람이 읽고 잡아야 한다.
+  it('아카이브 카드는 어느 워크스페이스인지와 무엇이 남는지를 말한다', async () => {
+    const pending = ensureToolApproved(workspace(), 'archive_workspace', {
+      workspaceId: 'ws-parent'
+    })
+    await vi.waitFor(() => expect(cards).toHaveLength(1))
+
+    expect(cards[0].title).toMatch(/feat\/base/)
+    expect(cards[0].title).toMatch(/branch and conversation are kept/)
+    answer('allow')
+    await expect(pending).resolves.toBeUndefined()
+  })
+
+  it('다른 리포의 워크스페이스를 아카이브하면 그 리포를 적는다', async () => {
+    state.workspaces = [{ id: 'ws-parent', branch: 'feat/base', repoId: 'repo-2' }]
+    const pending = ensureToolApproved(workspace(), 'archive_workspace', {
+      workspaceId: 'ws-parent'
+    })
+    await vi.waitFor(() => expect(cards).toHaveLength(1))
+
+    expect(cards[0].title).toMatch(/oh-my-wooi/)
+    answer('allow')
+    await expect(pending).resolves.toBeUndefined()
+  })
+
+  // 인자를 빠뜨린 호출도 여기로 온다. 사용자가 보고 있는 대화가 끝나는 일이라 가장 또렷해야 한다.
+  it('자기 아카이브 카드는 이 세션이 끝난다는 것을 말한다', async () => {
+    const pending = ensureToolApproved(workspace(), 'archive_workspace', {}, { always: true })
+    await vi.waitFor(() => expect(cards).toHaveLength(1))
+
+    expect(cards[0].title).toMatch(/archive this workspace/)
+    expect(cards[0].title).toMatch(/ends the conversation session/)
+    answer('allow')
+    await expect(pending).resolves.toBeUndefined()
+  })
+
+  it('삭제 카드는 되돌릴 수 없다는 것과 GitHub 에 남는 것을 말한다', async () => {
+    const pending = ensureToolApproved(
+      workspace(),
+      'delete_workspace',
+      { workspaceId: 'ws-parent' },
+      { always: true }
+    )
+    await vi.waitFor(() => expect(cards).toHaveLength(1))
+
+    expect(cards[0].title).toMatch(/cannot be undone/)
+    expect(cards[0].title).toMatch(/stays on GitHub/)
+    answer('allow')
+    await expect(pending).resolves.toBeUndefined()
+  })
+
+  // 손실은 git 을 물어봐야 나오므로 동기인 titleFor 가 만들 수 없다 — 핸들러가 실어 보낸다.
+  it('핸들러가 넘긴 손실 문구가 카드 문장 뒤에 붙는다', async () => {
+    const pending = ensureToolApproved(
+      workspace(),
+      'delete_workspace',
+      { workspaceId: 'ws-parent' },
+      { always: true, details: 'It loses 3 uncommitted files.' }
+    )
+    await vi.waitFor(() => expect(cards).toHaveLength(1))
+
+    expect(cards[0].title).toMatch(/stays on GitHub\. It loses 3 uncommitted files\.$/)
+    answer('allow')
+    await expect(pending).resolves.toBeUndefined()
   })
 
   it('PR 카드는 앱이 정한 base 를 보여 준다 — 사용자가 판단하는 지점이다', async () => {

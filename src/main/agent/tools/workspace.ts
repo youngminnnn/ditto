@@ -1,14 +1,20 @@
 import { normalizeWorkspaceName, workspaceDisplayName } from '@shared/types'
-import type { Repo } from '@shared/types'
-import { isWorktreeClean } from '../../git'
+import type { Repo, Workspace } from '@shared/types'
+import { getStatus } from '../../git'
 import { getStore } from '../../store'
-import { archiveWorkspace, createWorkspace } from '../../workspaces'
+import { archiveWorkspace, createWorkspace, deleteWorkspace } from '../../workspaces'
 import { resolveRequestedAgentOptions } from './agentOptions'
+import { ensureToolApproved } from './permission'
 import type { AgentToolHandler } from './registry'
 import { callerWorkspace, resolveTargetRepo, resolveTargetWorkspace } from './target'
 
 /**
- * 스택에 얽히지 않는 워크스페이스 조작 — 독립 생성과 아카이브.
+ * 스택에 얽히지 않는 워크스페이스 조작 — 독립 생성, 아카이브, 삭제.
+ *
+ * 아카이브·삭제는 이 파일의 나머지와 **경계가 다르다**. 다른 도구들은 "내가 만든 것" 안에서만
+ * 움직이지만 그 둘은 열려 있는 아무 워크스페이스나 지목할 수 있고, 그 대신 승인 카드를 건너뛸
+ * 길이 없다([[agent/tools/catalog]] HANDLER_APPROVES · [[agent/tools/target]] allowAnyCreator).
+ * 카드가 곧 경계이므로 카드에 무엇이 적히는지가 이 파일이 지켜야 할 것이다.
  *
  * create_stacked_workspace 와 나란히 두지 않고 파일을 가른 이유는 **전제가 다르기 때문**이다.
  * 스택은 부모의 커밋된 tip 에서 갈라지므로 워크트리가 clean 이어야 하지만, 여기 만드는 것은
@@ -262,33 +268,90 @@ export const setWorkspaceName: AgentToolHandler = async (deps, workspaceId, args
   }
 }
 
+/**
+ * 워크스페이스를 없애는 두 도구가 공유하는 것 — **무엇을 잃는가**.
+ *
+ * 한때 아카이브는 dirty 워크트리를 그냥 거부했다. 그 근거는 "되돌릴 수 있다" 였는데(언아카이브),
+ * removeWorktree 가 `git worktree remove --force` 라 커밋 안 된 것은 되돌아오지 않기 때문이다
+ * ([[git]]). 지금은 거부 대신 **세어서 승인 카드에 싣는다** — 버리려고 만든 워크스페이스를
+ * 정리하는 것이 이 도구의 가장 흔한 쓰임인데, 거기서 매번 막히면 도구가 하는 일이 없다.
+ * 잃을 것이 있으면 어떤 권한 모드에서도 카드가 뜨므로(needsCard) 판단은 사람이 한다.
+ *
+ * git 조회가 실패하면(워크트리가 이미 없는 등) 빈 문자열이 아니라 **모른다**를 돌려준다 —
+ * 빈 문자열은 "잃을 것이 없다" 로 읽히고, 그 거짓말은 카드에서 사람이 검증할 수 없다.
+ * 빈 문자열은 정말로 잃을 것이 없을 때만 나온다(needsCard 가 그 값을 그대로 쓴다).
+ */
+async function lossesFor(target: Workspace): Promise<string> {
+  try {
+    const status = await getStatus(target.worktreePath, target.baseBranch)
+    const parts = [
+      status.changedFiles ? plural(status.changedFiles, 'uncommitted file') : '',
+      status.ahead ? `${plural(status.ahead, 'commit')} not in ${target.baseBranch}` : ''
+    ].filter(Boolean)
+    return parts.length ? `It loses ${parts.join(' and ')}.` : ''
+  } catch {
+    return 'Wooi could not read its git status, so it may be losing unsaved work.'
+  }
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`
+}
+
+/**
+ * 이 호출은 카드를 **반드시** 띄워야 하는가.
+ *
+ * 안 띄워도 되는 경우가 하나뿐이라 그것만 적는다 — 내가 만든, 깨끗한, 남의 워크스페이스.
+ * 그때는 기존 정책 그대로다(`fullAccess` 는 통과, 나머지는 카드). 에이전트가 자기 자식을
+ * 정리하던 자동 흐름이 이 예외 위에 서 있다.
+ *
+ * 나머지는 전부 카드다. 대상이 남의 것이면 그 카드가 **경계 자체**이고
+ * ([[agent/tools/target]] allowAnyCreator), 자기 자신이면 이 대화가 끝나는 것이며, 잃을 것이
+ * 있으면 카드가 그 사실을 전하는 유일한 통로다.
+ */
+function needsCard(caller: Workspace, target: Workspace, losses: string): boolean {
+  if (target.id === caller.id) return true
+  if (target.createdByWorkspaceId !== caller.id) return true
+  return !!losses
+}
+
 export const archiveWorkspaceTool: AgentToolHandler = async (deps, workspaceId, args) => {
-  // 자기 자신은 무조건 거부한다. 아카이브의 첫 걸음이 sessions.dispose 라, 이 호출을 낸 세션이
-  // 이 호출에 의해 죽는다 — 도구 결과가 돌아갈 곳이 없고, 에이전트는 지워지는 워크트리 안에서
-  // 돌고 있다. 실패해도 실패를 알릴 수 없는 유일한 도구가 되므로 대상 검증보다 먼저 막는다.
+  const caller = callerWorkspace(workspaceId)
   const requested = typeof args.workspaceId === 'string' ? args.workspaceId.trim() : ''
-  if (requested === workspaceId) {
-    throw new Error(
-      'You cannot archive the workspace you are running in: archiving ends this session and ' +
-        'deletes the worktree you are working in, so this call could never report back. Ask the ' +
-        'user to archive it from the sidebar.'
-    )
-  }
+  const isSelf = !requested || requested === workspaceId
 
-  const target = resolveTargetWorkspace(workspaceId, requested)
+  // 남을 지목했으면 대상 검증은 그대로 돈다. 생성자 검사만 연다 — 그 자리는 승인 카드가
+  // 대신하고, 이 도구는 카드를 건너뛸 수 없다([[agent/tools/catalog]] HANDLER_APPROVES).
+  const target = isSelf
+    ? caller
+    : resolveTargetWorkspace(workspaceId, requested, { allowAnyCreator: true })
 
-  // 미커밋 변경이 있으면 거부한다. removeWorktree 는 `git worktree remove --force` 를 쓰므로
-  // ([[git]]) 커밋 안 된 변경이 경고 없이 사라지고, 언아카이브로 되살아나는 것은 커밋된 것뿐이다.
-  // "되돌릴 수 있다" 가 이 도구를 안전하게 만드는 근거인데, dirty 워크트리에서는 그 근거가 없다.
-  if (!(await isWorktreeClean(target.worktreePath))) {
-    throw new Error(
-      `${workspaceDisplayName(target)} has uncommitted changes, and archiving would delete them ` +
-        'for good — only committed work comes back. Have it commit them first.'
-    )
-  }
+  const losses = await lossesFor(target)
+  await ensureToolApproved(caller, 'archive_workspace', args, {
+    always: needsCard(caller, target, losses),
+    details: losses
+  })
 
   // 이름은 아카이브 **전에** 잡는다. archiveWorkspace 가 표시 이름을 스냅샷해 덮어쓸 수 있다.
   const name = workspaceDisplayName(target)
+
+  if (isSelf) {
+    // 지금 아카이브하면 첫 걸음(sessions.dispose)이 이 호출의 결과가 돌아갈 세션을 죽인다.
+    // 그래서 예약만 하고 실제 파괴는 턴이 끝난 뒤에 한다([[agent/orchestrator]] archiveAfterTurn).
+    // 스크립트 실패는 이 경로에서 알릴 곳이 없다 — 그때는 렌더러 토스트가 유일한 출구다.
+    deps.sessions.archiveAfterTurn(workspaceId, async () => {
+      await archiveWorkspace(deps, workspaceId)
+    })
+    return {
+      scheduled: { workspaceId, name, branch: target.branch },
+      ...(losses ? { losing: losses } : {}),
+      next:
+        'End this turn now: say what you finished, in one message. When it ends Wooi closes this ' +
+        'session and removes this worktree. Do not start new work, do not call another tool, and ' +
+        'do not tell the user you will follow up — nothing here runs after this turn.'
+    }
+  }
+
   const { archiveScriptFailure } = await archiveWorkspace(deps, target.id)
 
   return {
@@ -298,6 +361,59 @@ export const archiveWorkspaceTool: AgentToolHandler = async (deps, workspaceId, 
       'the user can restore it from the sidebar.',
     // 스크립트 실패는 아카이브를 막지 않지만(worktree 는 이미 사라졌다) 정리가 안 끝났다는 뜻이라
     // 에이전트에게도 알린다 — 사용자에게는 렌더러가 토스트로 따로 알린다.
+    ...(archiveScriptFailure
+      ? {
+          archiveScriptFailed: {
+            command: archiveScriptFailure.command,
+            code: archiveScriptFailure.code,
+            timedOut: archiveScriptFailure.timedOut,
+            output: archiveScriptFailure.output,
+            note: "The repository's archive script did not succeed, so leftover containers or processes may remain."
+          }
+        }
+      : {})
+  }
+}
+
+/**
+ * 되돌릴 수 없는 유일한 도구. 아카이브와 갈라 둔 이유는 [[agent/tools/workspace]] 파일 주석의
+ * 판정 그대로다 — 기존 도구에 불린 플래그를 붙이면 이름이 거짓말을 하고, 무엇보다 "되돌릴 수
+ * 있다" 라는 전제가 플래그 값에 따라 켜졌다 꺼졌다 하게 된다.
+ */
+export const deleteWorkspaceTool: AgentToolHandler = async (deps, workspaceId, args) => {
+  const caller = callerWorkspace(workspaceId)
+  const requested = typeof args.workspaceId === 'string' ? args.workspaceId.trim() : ''
+
+  // 자기 자신은 무조건 거부한다. 아카이브는 턴이 끝난 뒤로 미룰 수 있지만 삭제는 그럴 수 없다 —
+  // 되돌릴 수 없는 데다 **이 요청을 담은 대화 기록까지** 함께 사라지므로, 잘못 눌린 승인 하나가
+  // 무엇이 왜 사라졌는지조차 남기지 않는다. 인자를 빠뜨린 호출도 여기서 멈춘다.
+  if (!requested || requested === workspaceId) {
+    throw new Error(
+      'You cannot delete the workspace you are running in — deleting removes its branch and this ' +
+        'whole conversation, and there would be nothing left to report back to. Call ' +
+        '`archive_workspace` with no arguments instead, which keeps both.'
+    )
+  }
+
+  // 이미 아카이브된 것을 완전히 지우는 것이 이 도구의 흔한 쓰임이라 allowArchived 를 연다.
+  const target = resolveTargetWorkspace(workspaceId, requested, {
+    allowAnyCreator: true,
+    allowArchived: true
+  })
+
+  // 아카이브된 워크스페이스는 워크트리가 이미 없다 — 물어봐야 나올 답이 없고, 잃는 것은
+  // 그때 이미 확정됐다(브랜치와 대화 기록). 카드 문장이 그것을 말한다.
+  const losses = target.archived ? '' : await lossesFor(target)
+  await ensureToolApproved(caller, 'delete_workspace', args, { always: true, details: losses })
+
+  const name = workspaceDisplayName(target)
+  const { archiveScriptFailure } = await deleteWorkspace(deps, target.id, { deleteBranch: true })
+
+  return {
+    deleted: { workspaceId: target.id, name, branch: target.branch },
+    note:
+      'The worktree, the local branch and the conversation are gone for good. Anything already ' +
+      'pushed — the remote branch and its pull request — is still on GitHub.',
     ...(archiveScriptFailure
       ? {
           archiveScriptFailed: {

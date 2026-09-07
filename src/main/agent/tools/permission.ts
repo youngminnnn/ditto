@@ -102,11 +102,20 @@ export async function ensureToolApproved(
   workspace: Workspace,
   tool: string,
   args: unknown,
-  options?: { always?: boolean }
+  /**
+   * `details` 는 카드 문장 뒤에 그대로 붙는다. 핸들러가 **비동기로만 알 수 있는 사실**을 싣는
+   * 자리다 — 아카이브·삭제로 무엇을 잃는지는 git 을 물어봐야 나오는데 titleFor 는 동기다.
+   * 문장 구조 자체는 계속 이 파일이 소유한다(핸들러가 카드 문구를 따로 쓰면 승인한 문장과
+   * 실제 동작이 갈라진다 — creationTargetPhrases 가 리포 판정을 공유하는 것과 같은 이유).
+   */
+  options?: { always?: boolean; details?: string }
 ): Promise<void> {
   if (!options?.always && !needsApproval(workspace, tool)) return
   if (!deps) throw new Error('Wooi cannot ask for permission right now.')
 
+  const title = [titleFor(tool, args, workspace), options?.details?.trim()]
+    .filter(Boolean)
+    .join(' ')
   const requestId = randomUUID()
   const decision = await new Promise<PermissionDecision>((resolve) => {
     pending.set(requestId, resolve)
@@ -115,7 +124,7 @@ export async function ensureToolApproved(
       workspaceId: workspace.id,
       toolName: `mcp__wooi__${tool}`,
       displayName: TOOL_LABELS[tool] ?? tool,
-      title: titleFor(tool, args, workspace),
+      title,
       input: (args ?? {}) as Record<string, unknown>
     })
   })
@@ -190,6 +199,7 @@ const TOOL_LABELS: Record<string, string> = {
   open_preview: 'Open the preview',
   create_workspace: 'Create a workspace',
   archive_workspace: 'Archive a workspace',
+  delete_workspace: 'Delete a workspace for good',
   set_workspace_name: 'Set the workspace name',
   switch_to_agent_team: 'Switch to an agent team',
   switch_workspace_agent: 'Switch the workspace agent'
@@ -278,17 +288,58 @@ function titleFor(tool: string, args: unknown, workspace: Workspace): string {
     )
   }
   if (tool === 'archive_workspace') {
-    const target = targetWorkspace(a.workspaceId)
+    // workspaceId 를 생략하면 **자기 자신**이다(핸들러와 같은 규약). 이 경우가 카드에서 가장
+    // 또렷해야 한다 — 사용자가 보고 있는 대화가 지금 끝나는 것이고, 인자를 빠뜨린 호출도
+    // 여기로 떨어지기 때문이다.
+    const requested = typeof a.workspaceId === 'string' ? a.workspaceId.trim() : ''
+    // 리포 레코드가 없거나(등록 해제) 스크립트가 비어 있으면 적을 것이 없다. 여기서 터지면
+    // 카드 자체가 안 뜨고, 그러면 승인을 받아야만 도는 도구가 통째로 막힌다.
+    const script = (w: Workspace): string => repoOf(w)?.archiveScript?.trim() ?? ''
+    const runsFor = (w: Workspace | undefined): string => {
+      const command = w ? script(w) : ''
+      return command ? ` and runs the repository's archive script (\`${command}\`)` : ''
+    }
+    if (!requested || requested === workspace.id) {
+      return (
+        `The agent wants to archive this workspace — ${workspaceDisplayName(workspace)} ` +
+        `(\`${workspace.branch}\`). Wooi ends the conversation session and removes the worktree ` +
+        `it is working in${runsFor(workspace)}, right after this turn finishes. Its branch and ` +
+        'conversation are kept, so you can restore it from the sidebar.'
+      )
+    }
+    const target = targetWorkspace(requested)
     // 어느 워크스페이스인지가 이 카드의 전부다 — 잘못 지목된 호출을 사람이 잡을 수 있는 곳은
     // 여기뿐이다. 이름과 브랜치를 함께 적어 같은 이름의 워크스페이스와 헷갈리지 않게 한다.
     const which = target
       ? `${workspaceDisplayName(target)} (\`${target.branch}\`)`
       : 'another workspace'
+    // 다른 리포의 워크스페이스도 지목할 수 있다. 그 사실은 이름만 봐서는 안 보이므로 적는다.
+    const where =
+      target && target.repoId !== workspace.repoId
+        ? ` in the \`${repoOf(target)?.name ?? '?'}\` repository`
+        : ''
     // 아카이브 스크립트는 사용자가 알고 승인해야 하는 부분이라 문장에 남긴다
     // (create_stacked_workspace 가 셋업 스크립트를 적는 것과 같은 이유).
-    const script = target ? repoOf(target)?.archiveScript.trim() : ''
-    const runs = script ? ` and runs the repository's archive script (\`${script}\`)` : ''
-    return `The agent wants to archive ${which} — this removes its worktree${runs}. Its branch and conversation are kept.`
+    return `The agent wants to archive ${which}${where} — this removes its worktree${runsFor(target)}. Its branch and conversation are kept.`
+  }
+  if (tool === 'delete_workspace') {
+    // 되돌릴 수 없는 유일한 도구다. 문장은 사이드바 삭제 확인창과 같은 것을 말해야 한다
+    // (renderer/src/store.ts requestDeleteWorkspace) — 같은 동작에 설명이 둘이면 안 된다.
+    const target = targetWorkspace(a.workspaceId)
+    const which = target
+      ? `${workspaceDisplayName(target)} (\`${target.branch}\`)`
+      : 'another workspace'
+    const where =
+      target && target.repoId !== workspace.repoId
+        ? ` in the \`${repoOf(target)?.name ?? '?'}\` repository`
+        : ''
+    const command = target && !target.archived ? repoOf(target)?.archiveScript?.trim() : ''
+    const runs = command ? ` It runs the repository's archive script (\`${command}\`) first.` : ''
+    return (
+      `The agent wants to permanently delete ${which}${where} — its worktree, its local branch ` +
+      `and its conversation go for good, and this cannot be undone.${runs} Anything already ` +
+      'pushed — the remote branch and its pull request — stays on GitHub.'
+    )
   }
   if (tool === 'switch_to_agent_team') {
     // 사용자가 판단할 거리는 "왜 팀이 필요한가" 다 — 승인하면 이 워크스페이스는 다른 에이전트

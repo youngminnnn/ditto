@@ -10,6 +10,7 @@ import { setCodexStatusProvider } from './auth'
 import { PaneWindows } from './paneWindows'
 import { ScriptRunner } from './scripts'
 import { startAutoRunScripts } from './workspaces'
+import { pruneFanoutGroups } from './fanout'
 import { SETUP_SCRIPT_ID } from '@shared/types'
 import { flushStore, getStore } from './store'
 import { getTranscripts } from './transcripts'
@@ -202,6 +203,7 @@ initAgentTools({
   scripts,
   sessions,
   terminals,
+  pruneFanoutGroups,
   broadcastState: () => dispatch(IPC.evtState, getStore().getState()),
   sendMessage: (workspaceId, text, opts) =>
     sessions.sendMessage(workspaceId, text, undefined, opts),

@@ -1520,6 +1520,17 @@ export const useStore = create<UIState>((set, get) => ({
     })
 
     window.api.onState((next) => {
+      // 보고 있던 워크스페이스가 **통째로 사라졌으면** 선택을 푼다.
+      //
+      // 오랫동안 필요 없었다 — 워크스페이스는 렌더러가 시작한 삭제로만 사라졌고, 그 경로
+      // (deleteWorkspaceNow)는 스스로 직전에 보던 곳으로 돌아간다. 에이전트가 `delete_workspace`
+      // 로 지우면서 처음으로 메인이 먼저 없애는 길이 생겼고, 그때 선택은 없는 id 를 가리킨 채
+      // 남아 화면이 빈다. 아카이브는 여기 걸리지 않는다 — 목록에 그대로 있고, 아카이브된
+      // 워크스페이스를 들여다보는 것은 이미 지원되는 상태다(archivedPreviewTarget).
+      const selected = get().selectedWorkspaceId
+      if (selected && !next.workspaces.some((w) => w.id === selected)) {
+        void get().selectWorkspace(null)
+      }
       // 삭제·아카이브된 workspace 의 미확인 표시가 Dock 배지에 남지 않도록 정리한다
       // (배지 카운트는 unread 변화에만 반응하므로, 사라진 workspace 의 항목을 여기서 제거해야 0 으로 떨어진다).
       set((s) => {

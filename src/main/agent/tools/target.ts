@@ -15,9 +15,13 @@ import { getStore } from '../../store'
  * 파일 끝의 리포 해석도 같은 이유로 여기 있다 — create_workspace 가 다른 리포에도 만들 수 있게
  * 되면서 "무엇에 작용하는가" 의 답이 워크스페이스 하나에서 (리포, 워크스페이스) 로 늘었다.
  *
- * **승인 카드에 기대지 않는다.** `fullAccess` 모드에서는 needsApproval 이 그냥 통과시키고
- * ([[agent/tools/permission]]), Codex 경로의 verifyCaller 는 이름 그대로 **호출자만** 본다
- * ([[agent/tools/socket]]) — 대상 쪽에는 아무 방어가 없다. 방어는 핸들러 안에 있어야 한다.
+ * **기본적으로 승인 카드에 기대지 않는다.** `fullAccess` 모드에서는 needsApproval 이 그냥
+ * 통과시키고([[agent/tools/permission]]), Codex 경로의 verifyCaller 는 이름 그대로 **호출자만**
+ * 본다([[agent/tools/socket]]) — 대상 쪽에는 아무 방어가 없다. 방어는 핸들러 안에 있어야 한다.
+ *
+ * 예외는 카드가 **반드시 뜨는 것이 보장된** 도구뿐이다. 아카이브·삭제는 대상 경계를 "내가 만든
+ * 것" 에서 "사용자가 승인한 것" 으로 옮겼는데, 그 이동이 성립하려면 카드를 건너뛸 길이 하나도
+ * 없어야 한다 — HANDLER_APPROVES + `always: true` 가 그것을 보장한다(아래 allowAnyCreator).
  */
 
 /** 호출자 자신. 도구가 도는 중에도 사용자가 워크스페이스를 지울 수 있다. */
@@ -35,9 +39,9 @@ export function callerWorkspace(workspaceId: string): Workspace {
  *
  * 조건은 넷이고 각각 다른 사고를 막는다:
  * 1. 실재 — 사라진 id 를 조용히 성공으로 만들지 않는다.
- * 2. **자기가 만든 것** — 이것이 핵심 경계다. 모델은 다른 워크스페이스의 id 를 볼 수 있고
- *    (check_stacked_work · check_related_work 는 id 를 그대로 돌려준다), 사용자가 승인 카드를
- *    대충 넘길 수도 있다. 만든 것에만 손댈 수 있으면 최악의 오폭이 자기가 만든 것에서 멈춘다.
+ * 2. **자기가 만든 것** — 기본 경계다. 모델은 다른 워크스페이스의 id 를 볼 수 있고
+ *    (check_stacked_work · check_related_work · list_workspace_peers 는 id 를 그대로 돌려준다),
+ *    만든 것에만 손댈 수 있으면 최악의 오폭이 자기가 만든 것에서 멈춘다.
  *
  *    부모 관계(parentWorkspaceId)로 판정하지 않는다. 그건 "어느 브랜치 위에 쌓였는가" 라는 git
  *    사실이라 **사람이 UI 에서 만든 스택 자식까지 포함해 버리고**, 에이전트가 만들지 않은 것을
@@ -48,21 +52,32 @@ export function callerWorkspace(workspaceId: string): Workspace {
  * 4. **running** — 남이 지금 도는 턴을 죽이는 것이다. 사용자가 지켜보는 작업이 이유 없이
  *    중간에 끊기고, 그 워크스페이스의 에이전트는 자기가 왜 죽었는지 남길 기회조차 없다.
  *
- * 넷 중 running 만 도구에 따라 갈린다(allowRunning). 나머지 셋은 어느 도구에서도 같은 사고를
- * 막으므로 끄는 길을 두지 않는다.
+ * 1번과 4번은 어느 도구에서도 같은 사고를 막으므로 끄는 길이 없다(running 은 대상에게 무엇을
+ * 하는지로 갈린다 — allowRunning). 2번과 3번만 도구에 따라 열린다.
  */
 export function resolveTargetWorkspace(
   callerWorkspaceId: string,
   targetWorkspaceId: unknown,
   /**
-   * 도는 중인 대상을 허용한다.
+   * 셋 다 기본이 거부다. 켜는 쪽이 왜 안전한지를 스스로 설명할 수 있어야 한다.
    *
-   * 기본이 거부인 이유는 4번이 **턴을 죽이는** 동작을 전제하기 때문이다(archive_workspace).
-   * 메시지를 보내는 것은 그렇지 않다 — 세션 입력 큐가 현재 턴 뒤로 붙여 주므로 하던 일이
-   * 끊기지 않고, 오히려 낡은 전제로 일하는 중일 때가 알려야 할 때다(notify_child).
-   * 그래서 "도는 중" 이라는 사실 하나로 묶지 않고, 대상에게 무엇을 하는지로 가른다.
+   * - `allowRunning` — 도는 중인 대상을 허용한다. 기본이 거부인 이유는 4번이 **턴을 죽이는**
+   *   동작을 전제하기 때문이다(archive_workspace). 메시지를 보내는 것은 그렇지 않다 — 세션
+   *   입력 큐가 현재 턴 뒤로 붙여 주므로 하던 일이 끊기지 않고, 오히려 낡은 전제로 일하는
+   *   중일 때가 알려야 할 때다(notify_child).
+   *
+   * - `allowAnyCreator` — 2번을 건너뛴다. **승인 카드가 그 자리를 대신할 때만 켠다.** 이 파일
+   *   맨 위가 "승인 카드에 기대지 않는다" 고 적어 둔 것은 `fullAccess` 에서 needsApproval 이
+   *   그냥 통과하기 때문인데, 이 옵션을 켜는 도구(archive_workspace · delete_workspace)는
+   *   [[agent/tools/catalog]] 의 HANDLER_APPROVES 에 있어 전송 계층이 손대지 않고 핸들러가
+   *   `always: true` 로 직접 묻는다 — 어느 권한 모드에서도 사람이 한 번 본다. 그 보장이
+   *   없는 도구에서 이 옵션을 켜면 경계가 통째로 사라진다.
+   *
+   * - `allowArchived` — 3번을 건너뛴다. 아카이브된 것을 영구 삭제하는 것은 사용자가 자주 하는
+   *   정리이고(사이드바의 "아카이브 비우기"와 같은 동작), 그때는 "이미 아카이브됨" 이 거부
+   *   사유가 아니라 전제다. 아카이브 자신에게는 열지 않는다 — 두 번 아카이브할 것이 없다.
    */
-  options: { allowRunning?: boolean } = {}
+  options: { allowRunning?: boolean; allowAnyCreator?: boolean; allowArchived?: boolean } = {}
 ): Workspace {
   const id = typeof targetWorkspaceId === 'string' ? targetWorkspaceId.trim() : ''
   if (!id) throw new Error('No workspace id was given — say which workspace you mean.')
@@ -74,14 +89,16 @@ export function resolveTargetWorkspace(
 
   // 옛 워크스페이스는 이 값이 null 이라(v19 마이그레이션) 아무에게도 걸리지 않는다 — 기록이
   // 없으면 권한도 없다. 호출자 id 는 맥락에서 오는 실제 uuid 라 null 과 마주칠 일이 없다.
-  if (target.createdByWorkspaceId !== callerWorkspaceId) {
+  if (!options.allowAnyCreator && target.createdByWorkspaceId !== callerWorkspaceId) {
     throw new Error(
       `${workspaceDisplayName(target)} was not created by this workspace, so you cannot act on ` +
         'it. You can only target a workspace you created yourself — ask the user to do it ' +
         'themselves.'
     )
   }
-  if (target.archived) throw new Error(`${workspaceDisplayName(target)} is already archived.`)
+  if (!options.allowArchived && target.archived) {
+    throw new Error(`${workspaceDisplayName(target)} is already archived.`)
+  }
   if (target.status === 'running' && !options.allowRunning) {
     throw new Error(
       `${workspaceDisplayName(target)} is running a turn right now. Wait for it to finish — ` +

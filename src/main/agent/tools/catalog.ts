@@ -31,7 +31,8 @@ export const WOOI_MCP_SERVER_NAME = 'wooi'
  * 이름을 모른 채로 도달해야 하는 몇 개만 켠다) 검색될 때만 비용을 내지만, 이 문장은 스택을
  * 한 번도 쓰지 않는 워크스페이스까지 전부 낸다.
  * 그래서 여기에는 **상시 알아야 하는 것만** 둔다 — "스택이라는 게 있고, 대상을 받는 도구는
- * 자기가 만든 것만 지목할 수 있다". 한때 여기 같이 있던 인계 규약(자식이 보고한다 · 보고는 저절로 오지 않는다)은
+ * 원칙적으로 자기가 만든 것만 지목하며, 옆 워크스페이스에 손을 뻗는 세 도구가 따로 있다".
+ * 한때 여기 같이 있던 인계 규약(자식이 보고한다 · 보고는 저절로 오지 않는다)은
  * 필요한 쪽에 필요한 순간 전달하는 편이 싸고 정확해서 옮겼다. 부모는 create_stacked_workspace
  * 결과로, 자식은 인계 메시지로 받는다([[agent/tools/stackedWorkspace]]).
  */
@@ -44,12 +45,14 @@ export const WOOI_MCP_INSTRUCTIONS = [
   // 없다는 것도 모른 채 시도하게 된다. 실제 경계를 그대로 적는다([[agent/tools/target]]).
   'Most tools act on the workspace you are running in; the ones that take a workspace id can only',
   'name a workspace you created yourself.',
-  // 이 한 줄이 없으면 `send_to_workspace` 는 사실상 없는 도구다. 도구 검색은 **이미 무엇을 찾는지
-  // 알 때** 통하는 경로인데, 다른 워크스페이스에 말을 걸 수 있다는 것 자체를 모르는 모델에게는
-  // 검색해 볼 단어가 없다 — `switch_to_agent_team` 이 Solo 안내를 받는 것과 같은 이유다. 정의
-  // 전체를 상시 싣는 대신(alwaysLoad, ≈250 토큰) 능력의 존재만 알린다.
-  'One exception: `send_to_workspace` can message any open workspace, in any repository —',
-  'use it instead of asking the user to relay something to work happening elsewhere.'
+  // 이 두 줄이 없으면 `send_to_workspace`·`archive_workspace`·`delete_workspace` 는 사실상 없는
+  // 도구다. 도구 검색은 **이미 무엇을 찾는지 알 때** 통하는 경로인데, 옆 워크스페이스를 건드릴
+  // 수 있다는 것 자체를 모르는 모델에게는 검색해 볼 단어가 없다 — `switch_to_agent_team` 이
+  // Solo 안내를 받는 것과 같은 이유다. 정의 전체를 상시 싣는 대신 능력의 존재만 알린다.
+  'Three tools reach further, and are the way to act on work happening elsewhere instead of',
+  'asking the user to do it by hand: `send_to_workspace` messages any open workspace in any',
+  'repository, and `archive_workspace` / `delete_workspace` clean one up (or archive your own,',
+  'once your work here is done). Wooi asks the user to approve every archive and delete.'
 ].join(' ')
 
 /**
@@ -718,23 +721,57 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
   {
     name: 'archive_workspace',
     description: [
-      'Archive a workspace you created from here, once its work is finished or abandoned, so it',
-      'stops cluttering the sidebar. Its worktree is removed; the branch, the pull request and the',
-      'conversation stay, so the user can restore it.',
+      'Archive a workspace once its work is finished or abandoned, so it stops cluttering the',
+      'sidebar. Its worktree is removed; the branch, the pull request and the conversation stay,',
+      'so the user can restore it.',
       '',
-      'This works on workspaces you created with `create_workspace` or `create_stacked_workspace`,',
-      'stacked or not. You cannot archive the workspace you are running in, or one the user made.',
-      'The target must have no uncommitted changes — those would be lost — and no turn in flight.'
+      'Omit `workspaceId` to archive the workspace you are running in. Wooi does that after this',
+      'turn ends, so end your turn once the call returns: say what you finished, and do not start',
+      'new work or promise a follow-up — this session is over.',
+      '',
+      'Pass a `workspaceId` to archive any other open workspace, in any repository, including ones',
+      'the user made. The user approves every one of these calls on a card, in every permission',
+      'mode, so ask for what the work actually needs and let them decide. The target cannot have a',
+      'turn in flight, and it cannot already be archived. Uncommitted changes and commits that are',
+      'not on the remote are lost — the card says how many, so do not ask the user separately.'
+    ].join(' '),
+    inputSchema: {
+      workspaceId: z
+        .string()
+        .optional()
+        .describe(
+          'The workspace to archive, as listed by `list_workspace_peers` / `check_stacked_work` / ' +
+            '`check_related_work`. Omit it to archive the workspace you are running in.'
+        )
+    },
+    annotations: { title: 'Archive a workspace', readOnlyHint: false }
+  },
+  {
+    name: 'delete_workspace',
+    description: [
+      'Permanently delete another workspace: its worktree, its local branch and its conversation',
+      'go for good. This cannot be undone — anything already pushed stays on GitHub, nothing else',
+      'comes back. Prefer `archive_workspace`, which keeps all of it and can be restored; delete',
+      'only when the user wants the branch and history gone too.',
+      '',
+      'This works on any open workspace, in any repository, and on already-archived ones. The user',
+      'approves every call on a card, in every permission mode, and the card says what is lost.',
+      'The target cannot have a turn in flight. You cannot delete the workspace you are running',
+      'in — archive it instead.'
     ].join(' '),
     inputSchema: {
       workspaceId: z
         .string()
         .describe(
-          'The workspace to archive, as returned when you created it, or listed by ' +
-            '`check_stacked_work` / `check_related_work`.'
+          'The workspace to delete, as listed by `list_workspace_peers` / `check_stacked_work` / ' +
+            '`check_related_work`. Required — there is no default target.'
         )
     },
-    annotations: { title: 'Archive a workspace', readOnlyHint: false }
+    annotations: {
+      title: 'Delete a workspace for good',
+      readOnlyHint: false,
+      destructiveHint: true
+    }
   },
   {
     name: 'set_workspace_name',
@@ -963,7 +1000,14 @@ export function neverAsksWooiTool(qualifiedName: string): boolean {
  * 전송 계층이 아니라 핸들러에서 직접 승인받는 도구. 양 백엔드에서 같은 카드와 반드시-묻기
  * 계약을 보장해야 하는 좁은 경우에만 쓴다.
  */
-const HANDLER_APPROVES = new Set(['switch_workspace_agent'])
+const HANDLER_APPROVES = new Set([
+  'switch_workspace_agent',
+  // 이 둘은 대상 경계를 "내가 만든 것" 에서 "사용자가 승인한 것" 으로 옮겼다
+  // ([[agent/tools/target]] allowAnyCreator). 그 이동은 카드를 건너뛸 길이 없을 때만 성립하므로
+  // 전송 계층에서 빼고 핸들러가 직접 묻는다 — 무엇을 잃는지(git 조회)까지 실어야 해서도 그렇다.
+  'archive_workspace',
+  'delete_workspace'
+])
 
 export function approvesInsideHandlerToolName(name: string): boolean {
   return HANDLER_APPROVES.has(name)

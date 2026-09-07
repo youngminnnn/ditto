@@ -214,14 +214,17 @@ stack them in dependency order, and pass results along the chain.
   same panel you are looking at, so you can see what it is looking at. Reading only —
   there are no click or type tools.
 - **Plus the everyday ones** — `open_pull_request` (Wooi picks the base: the parent
-  branch when stacked, the default branch otherwise), `list_issues`, `archive_workspace`,
-  and `run_script` / `stop_script` / `read_script_output` for the repo scripts you
-  configured.
+  branch when stacked, the default branch otherwise), `list_issues`, and `run_script` /
+  `stop_script` / `read_script_output` for the repo scripts you configured.
+- **Clean up after itself** — `archive_workspace` folds a finished workspace away and
+  `delete_workspace` removes one for good. They reach any open workspace, in any
+  repository, including the one the agent is running in (archive only — deleting itself
+  would take this conversation with it). You approve each one on a card that names the
+  workspace and counts what is lost, in every permission mode.
 - **Fenced in** — most tools act only on the calling workspace; tools that take a
-  `workspaceId` can only name a workspace that the caller created, `archive_workspace`
-  can't archive its caller, and `notify_child` is limited to a direct stacked child.
-  Read-only tools run without a prompt; state-changing ones follow the workspace's
-  permission mode and show an approval card.
+  `workspaceId` can only name a workspace that the caller created, and `notify_child` is
+  limited to a direct stacked child. Read-only tools run without a prompt; state-changing
+  ones follow the workspace's permission mode and show an approval card.
 - **Explicit when useful** — built-in tools are also available as `/wooi:*` slash
   commands, so you can deliberately invoke the same orchestration path from the composer.
 

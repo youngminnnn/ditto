@@ -62,6 +62,7 @@ interface Agents {
   sendMessage: (id: string, text: string) => void
   restartBeforeNextMessage: (id: string) => void
   resumeAfterTurn: (id: string, prompt: string) => void
+  archiveAfterTurn: (id: string, run: () => Promise<void>) => void
   interrupt: (id: string) => Promise<void>
   clearSession: (id: string) => void
   dispose: (id: string) => void
@@ -317,5 +318,83 @@ describe('resumeAfterTurn', () => {
 
     expect(endTurn('ws-2')).toBe(false)
     expect(backend.sendMessage).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * 자기 워크스페이스 아카이브 — 예약하는 쪽이 도는 턴 안에 있다는 점은 resumeAfterTurn 과 같고,
+ * **되돌릴 수 없다**는 점이 다르다. 그래서 실행 조건이 더 좁다: 정상 종료일 때만, 사용자가
+ * 개입하지 않았을 때만.
+ */
+describe('archiveAfterTurn', () => {
+  it('예약만으로는 아무것도 지우지 않는다 — 이 호출의 결과가 돌아갈 세션이 죽는다', async () => {
+    const run = vi.fn(async () => {})
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', run)
+
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('턴이 끝나면 실행한다', async () => {
+    const run = vi.fn(async () => {})
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', run)
+
+    // 턴 종료는 그대로 방송한다 — 아카이브가 곧 자기 상태 방송으로 사이드바를 다시 그린다.
+    expect(endTurn()).toBe(false)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('한 번만 실행한다 — 그다음 턴이 끝날 때 되살아나지 않는다', async () => {
+    const run = vi.fn(async () => {})
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', run)
+    endTurn()
+
+    endTurn()
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  // 무엇이 잘못됐는지 화면에 남은 채로 둔다 — 사용자는 워크트리가 살아 있어야 그것을 본다.
+  it('오류로 끝난 턴에서는 지우지 않고, 예약도 남기지 않는다', async () => {
+    const run = vi.fn(async () => {})
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', run)
+
+    expect(endTurn('ws-1', 'error')).toBe(false)
+    expect(run).not.toHaveBeenCalled()
+    expect(endTurn('ws-1', 'idle')).toBe(false)
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('중단하면 지우지 않는다 — 중단은 "계속하지 말라" 이지 "예정대로 지워라" 가 아니다', async () => {
+    const run = vi.fn(async () => {})
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', run)
+    void agents.interrupt('ws-1')
+
+    endTurn()
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('사용자가 먼저 말을 걸면 지우지 않는다', async () => {
+    const run = vi.fn(async () => {})
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', run)
+    agents.sendMessage('ws-1', 'wait, do this first')
+
+    endTurn()
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  // 아카이브가 실패해도 턴 종료 처리는 이미 끝나 있어야 한다 — 여기서 던지면 백엔드의
+  // 훅 호출부로 예외가 새어 나가고, 그러면 사이드바가 '진행 중' 에 갇힌다.
+  it('아카이브가 실패해도 턴 종료를 깨뜨리지 않는다', async () => {
+    const agents = await orchestrator()
+    agents.archiveAfterTurn('ws-1', async () => {
+      throw new Error('worktree is busy')
+    })
+
+    expect(() => endTurn()).not.toThrow()
   })
 })

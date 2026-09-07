@@ -577,3 +577,57 @@ export async function archiveWorkspace(
   deps.broadcastState()
   return archiveScriptFailure ? { archiveScriptFailure } : {}
 }
+
+/**
+ * 삭제에 필요한 것. 아카이브보다 하나 넓다 — 삭제는 워크스페이스를 store 에서 아예 없애므로,
+ * 그 id 를 들고 있던 fan-out 그룹까지 정리해야 비교 화면이 없는 워크스페이스 칸을 그리지 않는다.
+ *
+ * `pruneFanoutGroups` 를 import 하지 않고 **받는** 이유는 방향이다 — [[fanout]] 이 이 파일을
+ * 부르므로(createWorkspace·archiveWorkspace), 반대로 import 하면 순환이 된다. 부르는 쪽은
+ * 어차피 그 함수를 이미 알고 있다(ipc.ts·index.ts).
+ */
+export interface DeleteWorkspaceDeps extends ArchiveWorkspaceDeps {
+  pruneFanoutGroups: (removedWorkspaceIds: string[]) => void
+}
+
+/**
+ * 영구 삭제: 아카이브가 남겨 두는 것까지 전부 지운다 — worktree, 로컬 브랜치, 대화 기록,
+ * store 의 워크스페이스 자체. 되돌릴 수 없다(이미 push 된 원격 브랜치와 PR 만 GitHub 에 남는다).
+ *
+ * [[archiveWorkspace]] 와 같은 이유로 IPC 핸들러에서 여기로 올라왔다 — 에이전트가 워크스페이스를
+ * 삭제하는 도구도 이 함수를 그대로 부른다([[agent/tools/workspace]]). 순서가 곧 정확성인 것도
+ * 같다: 아카이브 스크립트는 worktree 가 살아 있을 때 돌아야 하고, **아직 아카이브되지 않은**
+ * 워크스페이스일 때만 돌아야 한다(아카이브된 것은 그때 이미 한 번 돌았다).
+ *
+ * 없는 워크스페이스는 조용히 넘긴다 — 목적이 "없는 상태" 이고 이미 그 상태다.
+ */
+export async function deleteWorkspace(
+  deps: DeleteWorkspaceDeps,
+  workspaceId: string,
+  options: { deleteBranch: boolean }
+): Promise<ArchiveOutcome> {
+  const store = getStore()
+  const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
+  if (!ws) return {}
+  const repo = repoFor(ws.repoId)
+
+  deps.sessions.dispose(workspaceId)
+  deps.scripts.disposeWorkspace(workspaceId)
+  deps.terminals.disposeWorkspace(workspaceId)
+  const archiveScriptFailure =
+    !ws.archived && repo
+      ? await runArchiveScript(deps.scripts, repo.archiveScript, ws.worktreePath)
+      : undefined
+  getTranscripts().remove(workspaceId)
+  invalidateWorkspacePr(workspaceId)
+  // 아카이브된 워크스페이스는 worktree 디렉토리가 이미 없을 수 있으나, removeWorktree 는
+  // 누락된 worktree 를 prune 으로 정리하므로 안전하다.
+  if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, options.deleteBranch)
+
+  store.update((st) => {
+    st.workspaces = st.workspaces.filter((w) => w.id !== workspaceId)
+  })
+  deps.pruneFanoutGroups([workspaceId])
+  deps.broadcastState()
+  return archiveScriptFailure ? { archiveScriptFailure } : {}
+}

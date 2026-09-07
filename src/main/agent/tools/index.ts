@@ -28,6 +28,7 @@ import { runDelegateTool } from './subagent'
 import {
   archiveWorkspaceTool,
   createIndependentWorkspace,
+  deleteWorkspaceTool,
   listRepositories,
   setWorkspaceName
 } from './workspace'
@@ -74,6 +75,7 @@ export function initAgentTools(deps: AgentToolDeps): void {
   registerAgentTool('list_repositories', listRepositories)
   registerAgentTool('create_workspace', createIndependentWorkspace)
   registerAgentTool('archive_workspace', archiveWorkspaceTool)
+  registerAgentTool('delete_workspace', deleteWorkspaceTool)
   registerAgentTool('set_workspace_name', setWorkspaceName)
   registerAgentTool('switch_to_agent_team', switchToAgentTeam)
   registerAgentTool('switch_workspace_agent', switchWorkspaceAgent)

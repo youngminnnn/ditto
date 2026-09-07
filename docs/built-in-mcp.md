@@ -16,7 +16,7 @@ Tools normally appear to the agent as `mcp__wooi__<tool-name>`. Most tool defini
 are loaded on demand, so a tool may not be visible in the model's initial context even
 though it is available through tool search.
 
-The 24 core tools are available in every workspace. `claude_subagent` and
+The 25 core tools are available in every workspace. `claude_subagent` and
 `codex_subagent` are added only when multi-agent mode is enabled and the corresponding
 backend is available for delegation.
 
@@ -25,8 +25,12 @@ backend is available for delegation.
 - Most tools act on the workspace that made the call. An agent cannot substitute a
   different caller workspace.
 - Tools that accept a target `workspaceId` can target only a workspace created by the
-  calling workspace. `archive_workspace` cannot archive its caller, and
-  `notify_child` is further limited to a direct stacked child.
+  calling workspace, and `notify_child` is further limited to a direct stacked child.
+- `archive_workspace` and `delete_workspace` are the exception: they can name any open
+  workspace, in any repository, including ones the user created by hand. The boundary
+  moves rather than disappearing — it becomes the approval card, which is why these two
+  tools always show one (see below). `delete_workspace` still refuses its own caller;
+  `archive_workspace` archives its caller after the turn ends.
 - `send_to_workspace` is the exception, and it moves the boundary instead of removing it:
   any open workspace can be addressed, in any repository, but the **receiving** workspace
   decides whether the message is delivered. See [Peer messages](#peer-messages).
@@ -36,8 +40,10 @@ backend is available for delegation.
 - Read-only tools run without an approval prompt. State-changing tools follow the
   workspace's permission mode and normally show an approval card before running. Full
   Access runs them without approval.
-- `switch_workspace_agent` is the exception: handing the conversation to another agent
-  always requires an approval card, including in Full Access.
+- `switch_workspace_agent`, `delete_workspace` and most `archive_workspace` calls are the
+  exception: they always require an approval card, including in Full Access. Archiving
+  skips the card only in the one case where nothing new is at stake — a clean, idle
+  workspace the caller created itself.
 - `set_workspace_name` is the one state-changing tool that never shows a card. It is not
   marked read-only — it does change state — but the change is one string in Wooi's own
   store: it never leaves the machine, one context-menu click undoes it, and the result
@@ -118,14 +124,37 @@ the child could not reliably start from the work just completed.
 
 ### `archive_workspace`
 
-Archives a workspace created by the caller and removes its worktree.
+Removes a workspace's worktree. Its branch, pull request, and conversation are retained,
+so the user can restore it from the sidebar.
 
 | Input | Type | Required | Description |
 | --- | --- | --- | --- |
-| `workspaceId` | string | Yes | ID returned at creation or by a workspace inspection tool. |
+| `workspaceId` | string | No | Any open workspace. Omit it to archive the caller. |
 
-The target must be idle and have no uncommitted changes. Its branch, pull request, and
-conversation are retained, so the user can restore it from the sidebar.
+The target must be idle. It does not have to be clean and it does not have to belong to
+the caller — the approval card names the workspace and counts what is lost (uncommitted
+files, commits not on the base branch) so the user decides with that in front of them.
+
+Omitting `workspaceId` archives the calling workspace. Wooi cannot do that during the
+call — archiving disposes the session the call would return through — so it schedules the
+archive for the moment the turn ends. The agent gets a `scheduled` result and should end
+the turn with a summary; nothing in that workspace runs afterwards.
+
+### `delete_workspace`
+
+Permanently deletes another workspace: its worktree, its local branch, and its
+conversation. This cannot be undone. Anything already pushed — the remote branch and its
+pull request — stays on GitHub.
+
+| Input | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workspaceId` | string | Yes | Any workspace other than the caller, including archived ones. |
+
+The target must be idle. It may already be archived, which is the common cleanup case.
+The caller cannot delete itself — deleting removes the conversation that asked for it, so
+there would be nothing left to report back to; `archive_workspace` is the way out.
+
+The approval card always shows, in every permission mode, and states what is lost.
 
 ### `set_workspace_name`
 
@@ -574,7 +603,8 @@ with your own commands: `/wooi:pr`, `/wooi:children`, and so on. The catalog is
 | `/wooi:preview [path]` | `open_preview` | direct |
 | `/wooi:screenshot` | `capture_preview` | agent |
 | `/wooi:preview-errors` | `read_preview_issues` | direct |
-| `/wooi:archive <workspace id>` | `archive_workspace` | direct |
+| `/wooi:archive [workspace id]` | `archive_workspace` | direct |
+| `/wooi:delete <workspace id>` | `delete_workspace` | direct |
 | `/wooi:rename [name]` | `set_workspace_name` | direct |
 
 In a team-mode workspace, one more command per agent backend appears — `/wooi:claude` and

@@ -344,9 +344,21 @@ export const WOOI_COMMANDS: WooiCommandSpec[] = [
     name: 'archive',
     tool: 'archive_workspace',
     mode: 'direct',
-    description: 'Archive a workspace created from here',
+    // 인자를 빼면 이 워크스페이스다 — 도구가 같은 규약을 쓴다. 사이드바에도 입구가 있지만
+    // 여기서는 에이전트가 마지막 말을 남기고 나서 접히므로 대화가 끊긴 채로 끝나지 않는다.
+    description: 'Archive a workspace (no argument archives this one)',
+    argumentHint: '[workspace id]',
+    prompt:
+      'Call `mcp__wooi__archive_workspace` to archive the workspace with id: $ARGUMENTS ' +
+      '(no id means this workspace).'
+  },
+  {
+    name: 'delete',
+    tool: 'delete_workspace',
+    mode: 'direct',
+    description: 'Permanently delete another workspace',
     argumentHint: '<workspace id>',
-    prompt: 'Call `mcp__wooi__archive_workspace` to archive the workspace with id: $ARGUMENTS'
+    prompt: 'Call `mcp__wooi__delete_workspace` to delete the workspace with id: $ARGUMENTS'
   },
   {
     name: 'rename',
@@ -486,12 +498,19 @@ export function parseWooiCommandArgs(name: string, raw: string): WooiCommandArgs
       return { args: { name: parts.join(' ') } }
     }
 
-    case 'archive': {
+    // 빈 인자를 오류로 막지 않는다 — 여기서는 그것이 "이 워크스페이스" 라는 뜻이다(도구가 같은
+    // 규약을 쓴다). 어느 쪽이든 승인 카드가 무엇이 사라지는지 적어 보여 준다.
+    case 'archive':
+      return rest ? { args: { workspaceId: rest } } : { args: {} }
+
+    // 삭제에는 기본 대상이 없다. 되돌릴 수 없는 데다 자기 자신은 애초에 지울 수 없으므로,
+    // 빈 인자를 "이 워크스페이스" 로 읽어 주는 것은 반드시 실패하는 호출을 만드는 일이다.
+    case 'delete': {
       if (!rest) {
         return {
           error:
-            `Usage: /${WOOI_COMMAND_NAMESPACE}:archive <workspace id> — ` +
-            `run /${WOOI_COMMAND_NAMESPACE}:children to see the ids.`
+            `Usage: /${WOOI_COMMAND_NAMESPACE}:delete <workspace id> — ` +
+            `run /${WOOI_COMMAND_NAMESPACE}:peers to see the ids.`
         }
       }
       return { args: { workspaceId: rest } }

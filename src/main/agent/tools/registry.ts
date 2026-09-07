@@ -92,8 +92,23 @@ export interface AgentToolDeps {
     resumeAfterTurn: (workspaceId: string, prompt: string) => void
     /** 현재 턴이 끝나고 도구 결과가 돌아간 뒤 메인 에이전트 백엔드를 교체한다. */
     switchAgentAfterTurn: (workspaceId: string, target: AgentBackendId) => void
+    /**
+     * 현재 턴이 끝난 뒤 이 워크스페이스를 스스로 아카이브한다([[agent/tools/workspace]]).
+     *
+     * 아카이브 자체가 아니라 **클로저**를 맡기는 이유는 오케스트레이터가 아카이브에 필요한
+     * 것들(scripts·terminals)을 모르기 때문이다. 오케스트레이터가 소유하는 것은 절차가 아니라
+     * **시점** 하나다 — 지금 아카이브하면 이 호출의 결과가 돌아갈 세션을 자기가 죽인다
+     * (switchAgentAfterTurn 과 같은 사고).
+     */
+    archiveAfterTurn: (workspaceId: string, run: () => Promise<void>) => void
   }
   terminals: { disposeWorkspace: (workspaceId: string) => void }
+  /**
+   * 삭제된 워크스페이스 id 를 들고 있던 fan-out 그룹을 정리한다([[workspaces]] deleteWorkspace).
+   *
+   * [[fanout]] 이 [[workspaces]] 를 부르므로 반대 방향 import 가 순환이 된다 — 그래서 주입한다.
+   */
+  pruneFanoutGroups: (removedWorkspaceIds: string[]) => void
 }
 
 /**

@@ -14,17 +14,26 @@ import { AGENT_TOOLS } from './catalog'
  * 이 두 성질이 무너지면 각각 "조용히 잘못 갈라진 브랜치" 와 "남의 작업을 지우는 도구" 가 된다.
  */
 
-const clean = vi.hoisted(() => vi.fn())
+const status = vi.hoisted(() => vi.fn())
 const create = vi.hoisted(() => vi.fn())
 const archive = vi.hoisted(() => vi.fn())
+const remove = vi.hoisted(() => vi.fn())
+const approve = vi.hoisted(() => vi.fn())
 const state = vi.hoisted(() => ({
   workspaces: [] as Partial<Workspace>[],
   repos: [] as Partial<Repo>[],
   settings: {} as AppSettings
 }))
 
-vi.mock('../../git', () => ({ isWorktreeClean: clean }))
-vi.mock('../../workspaces', () => ({ createWorkspace: create, archiveWorkspace: archive }))
+vi.mock('../../git', () => ({ getStatus: status }))
+vi.mock('../../workspaces', () => ({
+  createWorkspace: create,
+  archiveWorkspace: archive,
+  deleteWorkspace: remove
+}))
+// 승인은 이 두 도구의 **경계 자체**라 흉내만 내지 않고 무엇으로 불렸는지까지 본다
+// ([[agent/tools/target]] allowAnyCreator).
+vi.mock('./permission', () => ({ ensureToolApproved: approve }))
 vi.mock('../../store', () => ({
   getStore: () => ({
     getState: () => state,
@@ -39,12 +48,14 @@ const broadcastState = vi.fn()
 // agentBackend 를 생략하면(대부분의 경우) 전역 기본값이 지금 감지된 목록에 있는지 여기로
 // 확인한다(`usableDefaultBackend`). 둘 다 available 로 둬 기존 동작(그대로 claude)을 유지한다.
 const listBackends = vi.fn<() => Promise<AgentBackendMeta[]>>()
+const archiveAfterTurn = vi.fn<(workspaceId: string, run: () => Promise<void>) => void>()
 const deps = {
   scripts: {},
   sendMessage,
   listModels,
   broadcastState,
-  listBackends
+  listBackends,
+  sessions: { archiveAfterTurn }
 } as unknown as AgentToolDeps
 
 const repo: Partial<Repo> = { id: 'repo-1', name: 'wooi', path: '/src/wooi', defaultBranch: 'main' }
@@ -110,10 +121,12 @@ beforeEach(() => {
     { id: 'claude', available: true } as AgentBackendMeta,
     { id: 'codex', available: true } as AgentBackendMeta
   ])
-  clean.mockResolvedValue(true)
+  status.mockResolvedValue({ changedFiles: 0, ahead: 0, behind: 0, branch: 'x', conflicted: false })
+  approve.mockResolvedValue(undefined)
   create.mockResolvedValue({ workspaceId: 'ws-new', name: 'feat/other', branch: 'feat/other' })
-  // 아카이브는 결과 객체를 돌려준다 — 스크립트가 실패했을 때만 내용이 찬다.
+  // 아카이브·삭제는 결과 객체를 돌려준다 — 스크립트가 실패했을 때만 내용이 찬다.
   archive.mockResolvedValue({})
+  remove.mockResolvedValue({})
 })
 
 async function create_(args: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
@@ -132,6 +145,24 @@ async function archive_(
 ): Promise<Record<string, unknown>> {
   const { archiveWorkspaceTool } = await import('./workspace')
   return archiveWorkspaceTool(deps, from, args) as Promise<Record<string, unknown>>
+}
+
+async function delete_(
+  args: Record<string, unknown>,
+  from = 'ws-caller'
+): Promise<Record<string, unknown>> {
+  const { deleteWorkspaceTool } = await import('./workspace')
+  return deleteWorkspaceTool(deps, from, args) as Promise<Record<string, unknown>>
+}
+
+/** 이 호출이 승인 카드를 **반드시** 띄우도록 요청했는가(`always`). */
+function forcedCard(): boolean {
+  return approve.mock.calls.at(-1)?.[3]?.always === true
+}
+
+/** 카드에 실린 손실 문구. */
+function cardDetails(): string {
+  return approve.mock.calls.at(-1)?.[3]?.details ?? ''
 }
 
 async function name_(
@@ -297,12 +328,18 @@ describe('create_workspace', () => {
   })
 
   it('미커밋 변경이 있어도 만든다 — 새 브랜치는 이 워크트리에서 갈라지지 않는다', async () => {
-    clean.mockResolvedValue(false)
+    status.mockResolvedValue({
+      changedFiles: 4,
+      ahead: 1,
+      behind: 0,
+      branch: 'feat/base',
+      conflicted: false
+    })
 
     await expect(create_()).resolves.toMatchObject({ workspaceId: 'ws-new' })
     expect(create).toHaveBeenCalled()
     // 검사 자체를 하지 않아야 한다. 물어보고 무시하면 나중에 누가 그 값을 쓰게 된다.
-    expect(clean).not.toHaveBeenCalled()
+    expect(status).not.toHaveBeenCalled()
   })
 
   it('이름을 안 주면 Wooi 가 짓도록 넘기지 않는다', async () => {
@@ -441,15 +478,39 @@ describe('archive_workspace', () => {
     expect(result.note).toMatch(/branch/)
   })
 
-  it('자기 자신은 거부한다 — 이 호출이 이 호출을 낸 세션을 죽인다', async () => {
-    await expect(archive_({ workspaceId: 'ws-caller' })).rejects.toThrow(
-      /cannot archive the workspace you are running in/
-    )
+  // 자기가 만든, 깨끗한, 놀고 있는 자식 — 새로 걸리는 것이 하나도 없는 유일한 경우다.
+  // 여기서 카드를 강제하면 에이전트가 자기 뒷정리를 하던 자동 흐름이 매번 사람 손에 멈춘다.
+  it('자기가 만든 깨끗한 자식에는 카드를 강제하지 않는다', async () => {
+    await archive_({ workspaceId: 'ws-child' })
+    expect(forcedCard()).toBe(false)
+  })
+
+  // 이번 변경의 요점. 대상 경계가 "내가 만든 것" 에서 "사용자가 승인한 것" 으로 옮겨 갔다.
+  it('남이 만든 워크스페이스도 아카이브한다 — 대신 카드를 반드시 띄운다', async () => {
+    state.workspaces = [{ ...caller }, { ...child, createdByWorkspaceId: 'ws-someone-else' }]
+
+    await expect(archive_({ workspaceId: 'ws-child' })).resolves.toMatchObject({
+      archived: { workspaceId: 'ws-child' }
+    })
+    expect(forcedCard()).toBe(true)
+  })
+
+  it('사용자가 손으로 만든 워크스페이스도 마찬가지다', async () => {
+    state.workspaces = [{ ...caller }, { ...child, createdByWorkspaceId: null }]
+
+    await expect(archive_({ workspaceId: 'ws-child' })).resolves.toMatchObject({
+      archived: { workspaceId: 'ws-child' }
+    })
+    expect(forcedCard()).toBe(true)
+  })
+
+  it('사용자가 거절하면 아카이브하지 않는다', async () => {
+    approve.mockRejectedValue(new Error('The user declined this action.'))
+
+    await expect(archive_({ workspaceId: 'ws-child' })).rejects.toThrow(/declined/)
     expect(archive).not.toHaveBeenCalled()
   })
 
-  // 이번 변경의 요점. 부모 관계로 판정하던 시절에는 이 워크스페이스가 빠져나갔다 —
-  // 자기가 만들어 놓고 자기가 치우지 못했다.
   it('부모가 없어도 자기가 만든 워크스페이스면 아카이브한다', async () => {
     state.workspaces = [{ ...caller }, { ...independent }]
 
@@ -459,44 +520,6 @@ describe('archive_workspace', () => {
     expect(archive).toHaveBeenCalledWith(deps, 'ws-indep')
   })
 
-  it('남의 워크스페이스는 거부한다 — 자기가 만든 것만 지목할 수 있다', async () => {
-    state.workspaces = [{ ...caller }, { ...child, createdByWorkspaceId: 'ws-someone-else' }]
-
-    await expect(archive_({ workspaceId: 'ws-child' })).rejects.toThrow(/not created by this/)
-    expect(archive).not.toHaveBeenCalled()
-  })
-
-  // 반대 방향의 사고다. 사람이 UI 에서 스택을 만들면 부모는 있어도 생성자는 없다 —
-  // 부모 관계로 판정하면 에이전트가 사람의 워크스페이스를 지우게 된다.
-  it('사람이 만든 스택 자식은 부모가 자기여도 거부한다', async () => {
-    state.workspaces = [{ ...caller }, { ...child, createdByWorkspaceId: null }]
-
-    await expect(archive_({ workspaceId: 'ws-child' })).rejects.toThrow(/not created by this/)
-    expect(archive).not.toHaveBeenCalled()
-  })
-
-  it('손자(자식이 만든 워크스페이스)도 거부한다', async () => {
-    state.workspaces = [
-      { ...caller },
-      { ...child },
-      {
-        ...child,
-        id: 'ws-grandchild',
-        parentWorkspaceId: 'ws-child',
-        createdByWorkspaceId: 'ws-child'
-      }
-    ]
-
-    await expect(archive_({ workspaceId: 'ws-grandchild' })).rejects.toThrow(/not created by this/)
-  })
-
-  it('자기를 만든 워크스페이스는 거꾸로 지우지 못한다', async () => {
-    await expect(archive_({ workspaceId: 'ws-caller' }, 'ws-child')).rejects.toThrow(
-      /not created by this/
-    )
-    expect(archive).not.toHaveBeenCalled()
-  })
-
   it('도는 중인 자식은 거부한다 — 남의 턴을 죽이는 일이다', async () => {
     state.workspaces = [{ ...caller }, { ...child, status: 'running' }]
 
@@ -504,13 +527,33 @@ describe('archive_workspace', () => {
     expect(archive).not.toHaveBeenCalled()
   })
 
-  it('미커밋 변경이 있는 자식은 거부한다 — 언아카이브로 돌아오지 않는다', async () => {
-    clean.mockResolvedValue(false)
+  // 한때 그냥 거부했다. 지금은 세어서 카드에 싣고, 그 카드는 어떤 권한 모드에서도 뜬다 —
+  // 버리려고 만든 워크스페이스를 정리하는 것이 이 도구의 가장 흔한 쓰임이기 때문이다.
+  it('미커밋 변경은 막지 않고 카드에 적는다', async () => {
+    status.mockResolvedValue({
+      changedFiles: 3,
+      ahead: 2,
+      behind: 0,
+      branch: 'x',
+      conflicted: false
+    })
 
-    await expect(archive_({ workspaceId: 'ws-child' })).rejects.toThrow(/uncommitted changes/)
-    expect(archive).not.toHaveBeenCalled()
+    await expect(archive_({ workspaceId: 'ws-child' })).resolves.toMatchObject({
+      archived: { workspaceId: 'ws-child' }
+    })
+    expect(forcedCard()).toBe(true)
+    expect(cardDetails()).toMatch(/3 uncommitted files/)
+    expect(cardDetails()).toMatch(/2 commits not in feat\/base/)
     // 대상의 워크트리를 봐야 한다 — 호출자 것을 보면 엉뚱한 판단이 된다.
-    expect(clean).toHaveBeenCalledWith('/tmp/wt-child')
+    expect(status).toHaveBeenCalledWith('/tmp/wt-child', 'feat/base')
+  })
+
+  it('git 을 못 읽으면 0 이라고 하지 않는다 — 카드가 거짓말을 하면 안 된다', async () => {
+    status.mockRejectedValue(new Error('no such worktree'))
+
+    await archive_({ workspaceId: 'ws-child' })
+    expect(forcedCard()).toBe(true)
+    expect(cardDetails()).toMatch(/could not read/)
   })
 
   it('이미 아카이브된 자식은 거부한다', async () => {
@@ -524,9 +567,114 @@ describe('archive_workspace', () => {
     await expect(archive_({ workspaceId: 'ws-nope' })).rejects.toThrow(/No Wooi workspace/)
   })
 
-  it('id 를 빠뜨리면 거부한다', async () => {
-    await expect(archive_({})).rejects.toThrow(/No workspace id/)
+  // 자기 아카이브. 지금 지우면 이 호출의 결과가 돌아갈 세션을 자기가 죽이므로 예약만 한다.
+  it('id 를 빠뜨리면 자기 자신을 예약한다 — 지금 지우지 않는다', async () => {
+    const result = await archive_({})
+
     expect(archive).not.toHaveBeenCalled()
+    expect(archiveAfterTurn).toHaveBeenCalledWith('ws-caller', expect.any(Function))
+    expect(result.scheduled).toMatchObject({ workspaceId: 'ws-caller', branch: 'feat/base' })
+    expect(result.next).toMatch(/End this turn now/)
+    // 자기 자신은 무엇을 잃든 카드가 뜬다 — 사용자가 보고 있는 대화가 끝나는 일이다.
+    expect(forcedCard()).toBe(true)
+  })
+
+  it('자기 id 를 그대로 적어도 같은 길로 간다', async () => {
+    await expect(archive_({ workspaceId: 'ws-caller' })).resolves.toMatchObject({
+      scheduled: { workspaceId: 'ws-caller' }
+    })
+    expect(archiveAfterTurn).toHaveBeenCalledOnce()
+  })
+
+  it('예약된 클로저가 실제로 아카이브를 부른다', async () => {
+    await archive_({})
+    await archiveAfterTurn.mock.calls[0][1]()
+    expect(archive).toHaveBeenCalledWith(deps, 'ws-caller')
+  })
+
+  it('자기 아카이브를 거절하면 예약도 남지 않는다', async () => {
+    approve.mockRejectedValue(new Error('The user declined this action.'))
+
+    await expect(archive_({})).rejects.toThrow(/declined/)
+    expect(archiveAfterTurn).not.toHaveBeenCalled()
+  })
+})
+
+describe('delete_workspace', () => {
+  it('되돌릴 수 없다는 것과 무엇이 남는지를 알려 준다', async () => {
+    const result = await delete_({ workspaceId: 'ws-child' })
+
+    expect(remove).toHaveBeenCalledWith(deps, 'ws-child', { deleteBranch: true })
+    expect(result.deleted).toMatchObject({ workspaceId: 'ws-child', branch: 'feat/next' })
+    expect(result.note).toMatch(/GitHub/)
+  })
+
+  // 아카이브와 달리 예외가 없다. 되돌릴 수 없는 동작에 자동 통과 경로를 두지 않는다.
+  it('자기가 만든 깨끗한 자식이어도 카드를 반드시 띄운다', async () => {
+    await delete_({ workspaceId: 'ws-child' })
+    expect(forcedCard()).toBe(true)
+  })
+
+  it('사용자가 거절하면 지우지 않는다', async () => {
+    approve.mockRejectedValue(new Error('The user declined this action.'))
+
+    await expect(delete_({ workspaceId: 'ws-child' })).rejects.toThrow(/declined/)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('남이 만든 워크스페이스도 지운다', async () => {
+    state.workspaces = [{ ...caller }, { ...child, createdByWorkspaceId: null }]
+
+    await expect(delete_({ workspaceId: 'ws-child' })).resolves.toMatchObject({
+      deleted: { workspaceId: 'ws-child' }
+    })
+  })
+
+  // 아카이브된 것을 완전히 지우는 것이 이 도구의 가장 흔한 쓰임이다.
+  it('이미 아카이브된 워크스페이스도 지운다', async () => {
+    state.workspaces = [{ ...caller }, { ...child, archived: true }]
+
+    await expect(delete_({ workspaceId: 'ws-child' })).resolves.toMatchObject({
+      deleted: { workspaceId: 'ws-child' }
+    })
+    // 워크트리가 이미 없다 — 물어봐야 나올 답이 없다.
+    expect(status).not.toHaveBeenCalled()
+  })
+
+  it('미커밋 변경을 카드에 적는다', async () => {
+    status.mockResolvedValue({
+      changedFiles: 1,
+      ahead: 0,
+      behind: 0,
+      branch: 'x',
+      conflicted: false
+    })
+
+    await delete_({ workspaceId: 'ws-child' })
+    expect(cardDetails()).toMatch(/1 uncommitted file/)
+  })
+
+  it('도는 중인 워크스페이스는 거부한다', async () => {
+    state.workspaces = [{ ...caller }, { ...child, status: 'running' }]
+
+    await expect(delete_({ workspaceId: 'ws-child' })).rejects.toThrow(/running a turn/)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  // 삭제는 이 요청을 담은 대화 기록까지 함께 지운다 — 무엇이 왜 사라졌는지도 남지 않는다.
+  it('자기 자신은 거부하고 아카이브를 가리킨다', async () => {
+    await expect(delete_({ workspaceId: 'ws-caller' })).rejects.toThrow(/archive_workspace/)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('id 를 빠뜨려도 자기 자신으로 읽지 않는다', async () => {
+    await expect(delete_({})).rejects.toThrow(/cannot delete the workspace you are running in/)
+    expect(remove).not.toHaveBeenCalled()
+    expect(approve).not.toHaveBeenCalled()
+  })
+
+  it('모르는 id 는 거부한다', async () => {
+    await expect(delete_({ workspaceId: 'ws-nope' })).rejects.toThrow(/No Wooi workspace/)
   })
 })
 

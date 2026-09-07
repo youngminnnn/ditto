@@ -123,6 +123,13 @@ export class AgentOrchestrator {
     string,
     { target: AgentBackendId; fromLabel: string; targetLabel: string }
   >()
+  /**
+   * 턴이 끝난 뒤 워크스페이스를 스스로 아카이브하기 위한 예약([[archiveAfterTurn]]).
+   *
+   * pendingAgentSwitch 와 같은 이유로 존재하지만 되돌릴 수 없다는 점이 다르다 — 그래서 실행
+   * 조건이 더 좁다(정상 종료일 때만, 사용자가 개입하지 않았을 때만).
+   */
+  private pendingSelfArchive = new Map<string, () => Promise<void>>()
 
   constructor(
     private dispatch: Dispatch,
@@ -342,6 +349,17 @@ export class AgentOrchestrator {
   }
 
   /**
+   * 에이전트가 자기 턴 안에서 요청한 **자기 워크스페이스 아카이브**를 예약한다.
+   *
+   * 지금 실행하면 아카이브의 첫 걸음(sessions.dispose)이 이 호출을 낸 세션을 죽인다 — 도구
+   * 결과가 돌아갈 곳이 없고, 사용자는 에이전트의 마지막 말을 보지 못한 채 워크트리가 사라지는
+   * 것만 본다. 그래서 실제 파괴는 handleTurnEnd 가 한다([[agent/tools/registry]]).
+   */
+  archiveAfterTurn(workspaceId: string, run: () => Promise<void>): void {
+    this.pendingSelfArchive.set(workspaceId, run)
+  }
+
+  /**
    * 백엔드가 턴 종료를 알려 온다([[agent/backend]] TurnEndHook). 이어 보낼 것이 있으면 여기서
    * 보내고 true 를 돌려준다 — 그러면 백엔드는 이 턴을 끝난 것으로 방송하지 않는다.
    *
@@ -359,6 +377,23 @@ export class AgentOrchestrator {
       // 전문 기억만 버린다 — 세션은 아직 살아 있으므로 대기 중인 묶음까지 승인 대기로 되돌리면
       // 곧 유휴가 되어 받을 수 있는 메시지를 사람 손에 떠넘기게 된다(버퍼는 자기 타이머가 비운다).
       forgetPeerSessionRules(workspaceId)
+    }
+    // 자기 아카이브가 예약돼 있으면 이 워크스페이스에는 이어질 것이 없다 — 세션도 워크트리도
+    // 곧 사라지므로, 재시작·이어가기보다 먼저 본다.
+    const selfArchive = this.pendingSelfArchive.get(workspaceId)
+    if (selfArchive) {
+      this.pendingSelfArchive.delete(workspaceId)
+      // 오류로 끝난 턴에서는 파괴하지 않는다. 무엇이 잘못됐는지 화면에 남은 채로 두는 편이
+      // 낫고, 사용자는 워크트리가 살아 있어야 그것을 볼 수 있다. 예약은 여기서 소진됐으므로
+      // 다시 하려면 모델이 다시 불러야 하고, 그 호출은 카드를 다시 띄운다.
+      if (status === 'idle') {
+        // 백엔드가 idle 을 방송하게 그대로 둔다(false 를 돌려준다) — 아카이브는 그 뒤 몇 백
+        // 밀리초 안에 자기 상태 방송으로 사이드바를 다시 그린다.
+        void selfArchive().catch((err) => {
+          log.error(`orchestrator: 턴 종료 뒤 자기 아카이브 실패 (${workspaceId})`, err)
+        })
+        return false
+      }
     }
     const switch_ = this.pendingAgentSwitch.get(workspaceId)
     if (switch_) {
@@ -457,14 +492,18 @@ export class AgentOrchestrator {
   }
 
   /**
-   * 사용자가 직접 개입했다 — 예약된 자동 이어가기를 접는다.
+   * 사용자가 직접 개입했다 — 예약된 자동 이어가기와 자기 아카이브를 접는다.
    *
    * 자동 턴의 명분은 "사용자가 방금 시킨 일을 이어서 한다" 하나뿐이다. 그 사이 사용자가 직접
    * 보내거나·중단하거나·대화를 비웠다면 그 명분이 사라진다. 재시작 예약(pendingRestart)은 건드리지
    * 않는다 — 세션이 낡았다는 사실은 개입과 무관하게 그대로다.
+   *
+   * 자기 아카이브도 같은 명분 위에 서 있고, 되돌릴 수 없다는 점에서 더 그렇다 — 사용자가 턴을
+   * 멈추거나 말을 걸었다면 그것은 "계속하지 말라" 이지 "예정대로 워크트리를 지워라" 가 아니다.
    */
   private cancelResume(workspaceId: string): void {
     this.pendingResume.delete(workspaceId)
+    this.pendingSelfArchive.delete(workspaceId)
   }
 
   sendMessage(

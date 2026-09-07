@@ -154,14 +154,15 @@ import {
   carryIntoNewWorktree,
   carrySuggestionsFor,
   createWorkspace,
+  deleteWorkspace,
   portEnvName,
-  runArchiveScript,
   scriptEnvFor,
   syncPrBase,
   workspaceForkError,
   type ArchiveOutcome,
   type ArchiveWorkspaceDeps,
-  type CreateWorkspaceDeps
+  type CreateWorkspaceDeps,
+  type DeleteWorkspaceDeps
 } from './workspaces'
 import type {
   AdoptFanoutResult,
@@ -536,6 +537,8 @@ export function registerIpc(ctx: IpcContext): void {
     terminals: ctx.terminals,
     broadcastState
   }
+  /** 삭제는 store 에서 레코드를 없애므로 그 id 를 들고 있던 fan-out 그룹까지 정리한다. */
+  const deleteDeps: DeleteWorkspaceDeps = { ...archiveDeps, pruneFanoutGroups }
 
   /**
    * 리포의 origin 리모트가 GitHub 이면 소유자 아바타를 받아 data URL 로 저장한다(best-effort).
@@ -1123,33 +1126,8 @@ export function registerIpc(ctx: IpcContext): void {
   // 살아 있는 워크스페이스에도 쓰인다(사이드바 메뉴 · ⌥⌘⌫ · 생성 되돌리기).
   handle(
     IPC.workspaceRemove,
-    async (_e, workspaceId: string, deleteBranch: boolean): Promise<ArchiveOutcome> => {
-      const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
-      if (!ws) return {}
-      const repo = repoFor(ws.repoId)
-
-      ctx.sessions.dispose(workspaceId)
-      ctx.scripts.disposeWorkspace(workspaceId)
-      ctx.terminals.disposeWorkspace(workspaceId)
-      // 아카이브 스크립트는 "이 worktree 를 정리한다" 는 훅이다(dev 컨테이너 종료 등). 워크트리가
-      // 아직 살아 있는 워크스페이스를 지울 때는 아카이브와 같은 이유로 실행해야 한다 —
-      // 이미 아카이브된 워크스페이스는 그때 한 번 돌았으므로 건너뛴다.
-      const archiveScriptFailure =
-        !ws.archived && repo
-          ? await runArchiveScript(ctx.scripts, repo.archiveScript, ws.worktreePath)
-          : undefined
-      getTranscripts().remove(workspaceId)
-      invalidateWorkspacePr(workspaceId)
-      if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, deleteBranch)
-
-      store.update((st) => {
-        st.workspaces = st.workspaces.filter((w) => w.id !== workspaceId)
-      })
-      // 지워진 후보가 fan-out 그룹에 남아 있으면 비교 화면이 없는 워크스페이스 칸을 그린다.
-      pruneFanoutGroups([workspaceId])
-      broadcastState()
-      return archiveScriptFailure ? { archiveScriptFailure } : {}
-    }
+    async (_e, workspaceId: string, deleteBranch: boolean): Promise<ArchiveOutcome> =>
+      deleteWorkspace(deleteDeps, workspaceId, { deleteBranch })
   )
 
   // 일괄 삭제: 한 레포의 아카이브된 워크스페이스를 모두 영구 제거한다.

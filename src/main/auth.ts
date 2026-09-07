@@ -312,6 +312,18 @@ export function githubLoginCancel(): void {
   }
 }
 
+/**
+ * 앱 종료 경로에서 살아 있는 로그인 pty 를 정리한다.
+ *
+ * 로그인 세션은 사용자가 취소하거나 완료할 때만 닫힌다(claudeLoginCancel·githubLoginCancel).
+ * 로그인 창을 띄워 둔 채로 앱을 끄면 그 `claude auth login` / `gh auth login` pty 가 고아로
+ * 남아 터미널 없이 영원히 입력을 기다린다.
+ */
+export function disposeAuthSessions(): void {
+  claudeLoginCancel()
+  githubLoginCancel()
+}
+
 export function githubLogout(): void {
   // gh 로그아웃은 계정 확인 프롬프트가 뜰 수 있어 Terminal 에서 실행한다.
   openInTerminal('gh auth logout')

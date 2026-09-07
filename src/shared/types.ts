@@ -1477,12 +1477,7 @@ export interface McpInventory {
  * 확인 종류마다 따로 저장한다. "모든 확인 끄기" 하나로 두면 사용자가 아카이브 하나를 끄려다
  * 삭제 확인까지 함께 끄게 된다.
  */
-export const CONFIRM_SKIP_KEYS = [
-  'archiveWorkspace',
-  'archiveReview',
-  'discardHunk',
-  'keepWorkingInBackground'
-] as const
+export const CONFIRM_SKIP_KEYS = ['archiveWorkspace', 'archiveReview', 'discardHunk'] as const
 export type ConfirmSkipKey = (typeof CONFIRM_SKIP_KEYS)[number]
 
 /**
@@ -1576,15 +1571,6 @@ export interface AppSettings {
    * "도는 동안만" 외에 합리적인 다른 정책이 없기 때문이다. [[main/sleepBlocker]] 참고.
    */
   keepAwakeWhileRunning: boolean
-  /**
-   * ⌘Q 를 눌렀을 때 아직 도는 일이 있으면 창만 닫고 메뉴 막대(Tray)에서 계속 굴린다(기본 켜짐).
-   * 일이 전부 끝나면 앱이 스스로 종료한다([[main/backgroundMode]]).
-   *
-   * 이 값은 "그래도 종료" 를 고르며 다시 묻지 않기를 켠 사용자의 결정도 함께 담는다 — 꺼지면
-   * 확인 자체가 사라지고 ⌘Q 는 언제나 곧바로 종료한다. 어느 쪽을 골라도 돌던 턴은 기록됐다가
-   * 다음 실행에서 이어진다([[main/shutdownResume]]).
-   */
-  keepWorkingInBackground: boolean
   /**
    * 사용자가 "다시 묻지 않기" 로 끈 확인 대화상자. 끈 것만 true 로 담긴다(없으면 묻는다).
    *

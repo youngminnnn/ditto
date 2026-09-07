@@ -80,6 +80,15 @@ export class ScriptRunner {
   private running = new Map<string, Running>()
   /** (workspaceId, kind) 별 누적 출력의 꼬리. 프로세스가 끝나도 다음 실행 전까지 남겨 둔다. */
   private history = new Map<string, string>()
+  /**
+   * 실행 중인 일회성 명령(runOnce). `running` 과 따로 두는 이유는 키가 없기 때문이다 —
+   * workspace/script 에 매이지 않으므로 Map 이 아니라 Set 이다.
+   *
+   * 추적하지 않으면 `disposeAll` 이 이들을 못 본다. 그러면 아카이브 스크립트가 도는 중에
+   * 앱을 종료했을 때 detached 프로세스 그룹이 통째로 살아남고, 유일한 정리 경로인 아래
+   * 타임아웃 타이머는 메인 프로세스와 함께 사라진다.
+   */
+  private oneOff = new Set<ChildProcess>()
 
   /**
    * @param onExit 스크립트 프로세스가 종료될 때(정상/비정상 무관) 불린다. setup 결과를
@@ -223,6 +232,7 @@ export class ScriptRunner {
       const shell = process.env.SHELL || '/bin/zsh'
       // run() 과 같은 이유로 detached — 자식이 띄운 손자까지 그룹 단위로 정리한다.
       const proc = spawn(shell, ['-lc', command], { cwd, detached: true })
+      this.oneOff.add(proc)
       let output = ''
       let timedOut = false
       let done = false
@@ -230,6 +240,7 @@ export class ScriptRunner {
         if (done) return
         done = true
         clearTimeout(timer)
+        this.oneOff.delete(proc)
         resolve({ code, timedOut, output })
       }
       const timer = setTimeout(() => {
@@ -291,7 +302,9 @@ export class ScriptRunner {
 
   disposeAll(): void {
     for (const { proc } of this.running.values()) killProcessGroup(proc)
+    for (const proc of this.oneOff) killProcessGroup(proc)
     this.running.clear()
+    this.oneOff.clear()
     this.history.clear()
   }
 }

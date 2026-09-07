@@ -27,6 +27,7 @@ import {
   type SessionConfig
 } from './protocol'
 import { runAgentTool } from '../agent/tools'
+import { abortAllSubAgents } from '../agent/tools/subagent'
 import { RateLimitResumeCoordinator } from '../rateLimitResume'
 import { ShutdownResumeCoordinator } from '../shutdownResume'
 import { type RemotePushKind } from '../remote/push'
@@ -760,6 +761,9 @@ export class SessionManager implements AgentBackend {
 
   disposeAll(): void {
     this.sendIfHost({ type: 'disposeAll' })
+    // 서브에이전트는 호스트가 아니라 **메인 프로세스**에서 돈다 — 위 메시지로는 안 죽는다.
+    // codex/manager 의 disposeAll 과 같은 이유다.
+    abortAllSubAgents()
     for (const w of getStore().getState().workspaces) {
       if (w.agentBackend === CLAUDE_META.id) this.clearGoalState(w.id)
     }

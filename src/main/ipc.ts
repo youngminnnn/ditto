@@ -9,7 +9,6 @@ import { memoryFile } from './claude/memory'
 import { getStore } from './store'
 import { getRemoteBridge } from './remote'
 import { pendingPermissions } from './remote/permissions'
-import { isStayingAlive } from './backgroundMode'
 import { lastNotificationSkip, setViewingWorkspace } from './notifications'
 import { rememberPrStatus } from './prStatusCache'
 import { forgetContextUsage } from './contextUsageCache'
@@ -3019,10 +3018,6 @@ export function registerIpc(ctx: IpcContext): void {
   // 앱을 닫을 때는 **워크트리만** 정리한다. 리뷰 레코드·ref·사이드카를 지우면 다음 실행에
   // 리뷰가 통째로 사라져 영속화가 무의미해진다(ref 를 남겨야 오프라인에서도 복원된다).
   app.on('before-quit', () => {
-    // 종료가 막혔으면(백그라운드 모드) 리뷰는 계속 돌아야 한다. Electron 은 preventDefault 와
-    // 무관하게 모든 before-quit 리스너를 실행하므로, 여기서 직접 물어보지 않으면 살아 있어야 할
-    // 워크트리를 지운다([[main/backgroundMode]]).
-    if (isStayingAlive()) return
     void reviewManager.disposeWorktreesOnQuit()
   })
 

@@ -926,7 +926,7 @@ function documentVisible(): boolean {
 }
 
 /** 지금 주기 폴링을 돌려야 하는가. 판정 규칙과 그 근거는 [[lib/pollingGate]] 에 있다. */
-function pollingAwake(): boolean {
+export function pollingAwake(): boolean {
   return shouldPoll({
     focused: windowFocused,
     visible: documentVisible(),

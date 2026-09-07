@@ -247,6 +247,12 @@ const CONTEXT_USAGE_RETRY_TIMEOUT_MS = 30_000
 const BACKGROUND_BASH_TASK_TYPE = 'local_bash'
 
 /**
+ * 부모(메인) 대화 스트림의 키. 서브에이전트 스트림은 자기 `parent_tool_use_id` 를 키로 쓰므로,
+ * 도구 호출 id 와 부딪히지 않도록 `@` 로 시작하는 이름을 쓴다.
+ */
+const MAIN_STREAM = '@main'
+
+/**
  * 계획 승인 뒤 라이브 query 에 새 권한 모드를 보내기까지의 지연.
  * CLI 가 ExitPlanMode 를 처리하며 스스로 모드를 되돌리는 창을 넘긴 뒤에 우리 값을 얹는다.
  */
@@ -329,6 +335,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export class ClaudeSession {
   /** 결과 메시지에는 id만 오므로 호출 시점의 이름을 짝지어 둔다. 오래 도는 세션에서도 상한을 둔다. */
   private toolNames = new Map<string, string>()
+  /**
+   * 서브에이전트가 낸 도구 호출의 id → 그 서브에이전트(부모 도구 호출 id).
+   *
+   * 결과 쪽 메시지도 `parent_tool_use_id` 를 싣지만, 그 표시가 없는 결과가 오면 호출은 패널로
+   * 가고 결과만 메인 대화에 남아 짝 없는 카드가 된다. 호출 시점의 주인을 기억해 그 갈라짐을 막는다.
+   */
+  private toolParents = new Map<string, string>()
   private readonly writeIsolation: WriteIsolationGuard
   private input = new AsyncQueue<SDKUserMessage>()
   /**
@@ -358,7 +371,15 @@ export class ClaudeSession {
    * 때문이다.
    */
   private runId = randomUUID()
-  private currentApiMsgId: string | null = null
+  /**
+   * 스트림별로 지금 쌓고 있는 API 메시지 id. 키는 `parent_tool_use_id ?? MAIN_STREAM` 이다.
+   *
+   * 필드 하나가 아니라 Map 인 이유: `forwardSubagentText` 를 켜면 부모와 서브에이전트들의
+   * `message_start` 가 한 스트림에 뒤섞여 도착한다. 값을 하나만 들고 있으면 나중에 온 쪽이
+   * 앞의 것을 덮어써, 부모가 하던 말이 서브에이전트 버블에 이어붙는다(그 반대도 마찬가지).
+   * 스트림마다 자기 자리를 갖게 해서 그 교차를 원천적으로 없앤다.
+   */
+  private apiMsgIds = new Map<string, string>()
   /** 사용자가 "always allow" 한 도구 이름. 이 세션 동안 다시 묻지 않는다. */
   private alwaysAllow = new Set<string>()
   /** 모르는 블록을 종류당 한 번만 알리기 위한 기록(Codex 쪽 CodexThread.warned 와 같은 역할). */
@@ -466,9 +487,17 @@ export class ClaudeSession {
   /**
    * 지금 살아 있는 서브에이전트(Task 도구)의 상태(task_id 기준). 워크플로우와 같은 task_* 스트림을
    * 쓰지만 표시 경로가 다르다 — 워크플로우는 트랜스크립트 카드, 서브에이전트는 사이드바 패널.
-   * 서브에이전트는 부모 턴의 tool_use/tool_result 로 이미 트랜스크립트에 남으므로 영속하지 않는다.
+   * 이 목록 자체는 영속하지 않는다 — 끝난 실행까지 남기는 일은 아래 `subagentItems` 가 맡는다.
    */
   private agentTasks = new Map<string, RunningAgent>()
+  /**
+   * SDK task_id → 그 서브에이전트의 영속 기록(Agents 패널의 행).
+   *
+   * `agentTasks` 와 나란히 두는 이유는 수명이 다르기 때문이다 — 그쪽은 끝나면 목록에서 빠지는
+   * "지금 돌고 있는 것"이고, 이쪽은 끝난 상태(completed/failed/stopped)까지 적어 트랜스크립트에
+   * 남긴다. 종료를 적고 나면 이 맵에서도 지운다(기록은 이미 디스크에 있다).
+   */
+  private subagentItems = new Map<string, Extract<ChatItem, { type: 'subagent' }>>()
   /** SDK 가 전량 교체로 알려 주는 라이브 백그라운드 task. 트랜스크립트에는 남기지 않는다. */
   private backgroundTasks = new Map<string, RunningAgent>()
   /**
@@ -1011,6 +1040,13 @@ export class ClaudeSession {
             ? { env: { ...process.env, ...this.deps.env } }
             : {}),
           includePartialMessages: true,
+          // 서브에이전트의 말과 사고까지 받아 Agents 패널에 그 대화를 그린다. 켜지 않으면 SDK 는
+          // tool_use/tool_result 블록만 보내므로(하트비트 카운터 수준) 무엇을 시켰고 무엇을
+          // 알아냈는지가 통째로 사라진다.
+          //
+          // 토큰 비용은 늘지 않는다 — 이미 서브에이전트가 쓴 산출물을 호스트로 한 번 더 흘려
+          // 보낼 뿐, 부모의 컨텍스트에 들어가지 않는다. 늘어나는 것은 트랜스크립트 파일 크기다.
+          forwardSubagentText: true,
           // 매 턴 뒤 Claude Code 가 예측한 다음 프롬프트를 컴포저에 제안한다.
           promptSuggestions: true,
           // Claude Code 의 기본 시스템 프롬프트를 그대로 쓴다 — 생략하면 SDK 가 빈 프롬프트로
@@ -1800,20 +1836,57 @@ export class ClaudeSession {
 
   // ── 동적 워크플로우 진행 추적 ─────────────────────────────────────────────
   // 백그라운드 워크플로우 실행을 SDK 의 task_* 시스템 메시지로 추적해, 하나의 진행 카드로
-  // 라이브 갱신한다. 워크플로우(task_type==='local_workflow' 또는 workflow_name 존재)만 다루고,
-  // 일반 서브에이전트 task 는 기존처럼 도구 카드로 충분하므로 건너뛴다.
+  // 라이브 갱신한다. 워크플로우(task_type==='local_workflow' 또는 workflow_name 존재)는 대화 안의
+  // 진행 카드가 되고, 일반 서브에이전트 task 는 Agents 패널의 행이 된다([[shared/subagents]]).
+
+  /**
+   * 서브에이전트 실행 1건의 영속 기록을 만들거나 갱신한다(Agents 패널의 행).
+   *
+   * `tool_use_id` 가 있어야만 만든다 — 그 값이 이 행과 자식 항목(`parentToolId`)을 잇는 유일한
+   * 열쇠라, 없으면 행은 있는데 펼쳐도 비어 있는 껍데기가 된다. 사이드바의 휘발성 목록
+   * (`agentTasks`)은 그런 경우에도 계속 등록되므로 "돌고 있다" 는 사실 자체는 잃지 않는다.
+   *
+   * 영속화는 시작·종료에서만 한다(`upsertTask` 와 같은 규칙) — 진행 갱신까지 디스크에 적으면
+   * 서브에이전트 하나가 JSONL 에 수백 줄을 남긴다.
+   */
+  private upsertSubagent(taskId: string, persist: boolean): void {
+    const state = this.subagentItems.get(taskId)
+    if (!state) return
+    // 매번 새 객체를 만들어 내보낸다(`upsertTask` 와 같은 규칙) — 우리가 들고 있는 것을 그대로
+    // 넘기면 렌더러의 트랜스크립트와 같은 객체를 공유하게 되고, 다음 진행 갱신에서 그것을
+    // 제자리에서 고치는 순간 이벤트 없이 화면 뒤의 값이 바뀐다.
+    const item: ChatItem = { ...state }
+    if (persist) this.deps.persist(item)
+    this.deps.emit({ type: 'item', item })
+  }
 
   private handleTaskStarted(
     msg: Extract<SDKMessage, { type: 'system'; subtype: 'task_started' }>
   ): void {
     const isWorkflow = msg.task_type === 'local_workflow' || typeof msg.workflow_name === 'string'
     if (!isWorkflow) {
-      // 서브에이전트는 트랜스크립트 카드를 만들지 않는다(부모 턴의 tool_use/tool_result 가 이미
-      // 남는다) — 사이드바 패널용 휘발성 상태로만 등록한다. skip_transcript 여도 등록한다:
-      // 그 플래그는 "인라인 트랜스크립트에서 숨겨라"는 뜻이고, task 패널은 그 대상이 아니다.
+      // 서브에이전트는 부모 대화에 카드를 만들지 않는다(Task 도구 호출이 이미 그 자리다) —
+      // 대신 Agents 패널의 행이 될 `subagent` 항목과, 사이드바용 휘발성 상태를 등록한다.
+      // skip_transcript 여도 등록한다: 그 플래그는 "인라인 트랜스크립트에서 숨겨라"는 뜻이고,
+      // 패널은 그 대상이 아니다.
       if (typeof msg.subagent_type === 'string') {
+        if (msg.tool_use_id) {
+          this.subagentItems.set(msg.task_id, {
+            id: `subagent:${msg.tool_use_id}`,
+            type: 'subagent',
+            toolId: msg.tool_use_id,
+            taskId: msg.task_id,
+            backend: 'claude',
+            agentType: msg.subagent_type,
+            description: msg.description || msg.subagent_type,
+            status: 'running',
+            ts: Date.now()
+          })
+          this.upsertSubagent(msg.task_id, true)
+        }
         this.agentTasks.set(msg.task_id, {
           taskId: msg.task_id,
+          ...(msg.tool_use_id ? { toolUseId: msg.tool_use_id } : {}),
           canStop: true,
           agentType: msg.subagent_type,
           description: msg.description || msg.subagent_type,
@@ -1852,6 +1925,15 @@ export class ClaudeSession {
       agent.toolUses = msg.usage.tool_uses
       if (msg.last_tool_name) agent.lastToolName = msg.last_tool_name
       this.emitAgents()
+      const row = this.subagentItems.get(msg.task_id)
+      if (row) {
+        if (msg.description) row.description = msg.description
+        row.totalTokens = msg.usage.total_tokens
+        row.toolUses = msg.usage.tool_uses
+        row.durationMs = msg.usage.duration_ms
+        // 진행 중에는 화면만 갱신한다 — 디스크는 시작·종료에서만 적는다.
+        this.upsertSubagent(msg.task_id, false)
+      }
       return
     }
     const state = this.workflowTasks.get(msg.task_id)
@@ -1877,6 +1959,14 @@ export class ClaudeSession {
       if (terminal) this.agentTasks.delete(msg.task_id)
       // 목록만 갱신한다 — 상태는 레벨 신호가 정한다([[syncStatus]]).
       this.emitAgents()
+      const row = this.subagentItems.get(msg.task_id)
+      if (row) {
+        if (p.description) row.description = p.description
+        if (terminal)
+          row.status = st === 'killed' ? 'stopped' : st === 'failed' ? 'failed' : 'completed'
+        this.upsertSubagent(msg.task_id, terminal)
+        if (terminal) this.subagentItems.delete(msg.task_id)
+      }
       return
     }
     const state = this.workflowTasks.get(msg.task_id)
@@ -1903,6 +1993,17 @@ export class ClaudeSession {
   ): void {
     // 완료 엣지도 즉시 반영한다. 뒤따르는 snapshot 을 놓쳐도 중지 버튼과 스피너가 남지 않는다.
     const removedBackground = this.backgroundTasks.delete(msg.task_id)
+    const row = this.subagentItems.get(msg.task_id)
+    if (row) {
+      row.status = msg.status
+      if (msg.usage) {
+        row.totalTokens = msg.usage.total_tokens
+        row.toolUses = msg.usage.tool_uses
+        row.durationMs = msg.usage.duration_ms
+      }
+      this.upsertSubagent(msg.task_id, true)
+      this.subagentItems.delete(msg.task_id)
+    }
     if (this.agentTasks.delete(msg.task_id)) {
       this.emitAgents()
       this.syncStatus()
@@ -1973,6 +2074,13 @@ export class ClaudeSession {
    * 계속 고치는 프로세스가 남는다.
    */
   private clearAgents(): void {
+    // 아직 running 으로 적혀 있는 행을 먼저 마감한다. 그냥 지우면 다음에 이 대화를 열었을 때
+    // 영원히 도는 것처럼 보이는 행이 패널에 남는다 — 그 프로세스는 이미 없다.
+    for (const [taskId, row] of this.subagentItems) {
+      row.status = 'stopped'
+      this.upsertSubagent(taskId, true)
+    }
+    this.subagentItems.clear()
     if (this.agentTasks.size === 0 && this.backgroundTasks.size === 0) return
     this.agentTasks.clear()
     this.backgroundTasks.clear()
@@ -2006,26 +2114,38 @@ export class ClaudeSession {
       delta?: { type: string; text?: string; thinking?: string }
     }
 
+    // 서브에이전트의 스트림은 자기 부모 도구 호출 id 로 갈라 둔다 — 부모와 뒤섞여 도착하므로
+    // 한 자리를 나눠 쓰면 서로의 버블에 글자가 새어 들어간다(apiMsgIds 주석).
+    const stream = msg.parent_tool_use_id ?? MAIN_STREAM
+    const parent = msg.parent_tool_use_id ? { parentToolId: msg.parent_tool_use_id } : {}
+
     if (event.type === 'message_start') {
-      this.currentApiMsgId = event.message?.id ?? `msg:${Date.now()}`
+      this.apiMsgIds.set(stream, event.message?.id ?? `msg:${Date.now()}`)
+      // 서브에이전트는 한 대화에 수십 개가 뜰 수 있다. 스트림별 자리는 각각 한 칸뿐이지만
+      // 끝난 것을 치우지 않으면 세션이 길어질수록 죽은 키가 쌓인다.
+      if (this.apiMsgIds.size > 200) {
+        this.apiMsgIds.delete(this.apiMsgIds.keys().next().value!)
+      }
       return
     }
 
     if (event.type === 'content_block_delta' && event.delta) {
-      const apiId = this.currentApiMsgId ?? `msg:${Date.now()}`
+      const apiId = this.apiMsgIds.get(stream) ?? `msg:${Date.now()}`
       if (event.delta.type === 'text_delta' && event.delta.text) {
         this.deps.emit({
           type: 'delta',
           id: `${apiId}:text`,
           itemType: 'assistant',
-          text: clampText(event.delta.text)
+          text: clampText(event.delta.text),
+          ...parent
         })
       } else if (event.delta.type === 'thinking_delta' && event.delta.thinking) {
         this.deps.emit({
           type: 'delta',
           id: `${apiId}:thinking`,
           itemType: 'thinking',
-          text: clampText(event.delta.thinking)
+          text: clampText(event.delta.thinking),
+          ...parent
         })
       }
     }
@@ -2034,7 +2154,9 @@ export class ClaudeSession {
   /** 권위 있는 assistant 메시지로 각 블록을 확정·영속화한다. */
   private handleAssistant(msg: Extract<SDKMessage, { type: 'assistant' }>): void {
     const m = msg.message as unknown as { id?: string; model?: string; content?: Block[] }
-    if (m.model && this.currentSessionId) {
+    // 서브에이전트는 부모와 다른 모델로 돌 수 있다(`Agent(model: "sonnet")`). 그 메시지의 모델을
+    // 세션 모델로 보고하면 워크스페이스 표시가 서브에이전트를 따라 흔들리므로 부모 것만 센다.
+    if (m.model && this.currentSessionId && !msg.parent_tool_use_id) {
       this.deps.emit({
         type: 'session',
         sessionId: this.currentSessionId,
@@ -2045,6 +2167,9 @@ export class ClaudeSession {
     }
     const apiId = m.id ?? msg.uuid
     const blocks = m.content ?? []
+    // 서브에이전트가 낸 것이면 그 표시를 항목에 새긴다 — 메인 대화는 이 표시가 있는 항목을
+    // 걸러 내고, Agents 패널은 이것만 모아 그 서브에이전트의 대화를 복원한다.
+    const parent = msg.parent_tool_use_id ? { parentToolId: msg.parent_tool_use_id } : {}
 
     // error 가 실린 assistant 는 모델 산출이 아니라 API 레벨 실패 보고다(설명 텍스트가 함께 온다).
     // 프로세스를 갈아 재시도하면 사용자에게 보일 필요가 없으므로, 표시를 result 시점까지 보류한다.
@@ -2085,7 +2210,8 @@ export class ClaudeSession {
           type: 'assistant',
           text: clampText(String(block.text ?? '')),
           ts: Date.now(),
-          streaming: false
+          streaming: false,
+          ...parent
         })
       } else if (block.type === 'thinking') {
         // 사고 과정 블록은 대개 본문 없이 signature 만 온다 — 사람이 읽을 요약은 Claude Code 의
@@ -2101,7 +2227,8 @@ export class ClaudeSession {
             type: 'thinking',
             text: thinking,
             ts: Date.now(),
-            streaming: false
+            streaming: false,
+            ...parent
           })
         }
       } else if (block.type === 'tool_use') {
@@ -2109,11 +2236,16 @@ export class ClaudeSession {
         const toolId = String(block.id)
         this.toolNames.set(toolId, name)
         if (this.toolNames.size > 500) this.toolNames.delete(this.toolNames.keys().next().value!)
+        if (this.toolParents.size > 500)
+          this.toolParents.delete(this.toolParents.keys().next().value!)
         // assistant 메시지는 도구 실행 **전**에 도착하므로, 이 시점의 디스크 내용이 곧 변경 전 상태다.
         // 여기서 diff 를 떠 두지 않으면 나중엔 이미 적용된 뒤라 되살릴 수 없다.
         const diff = isFileChangeTool(name)
           ? buildFileChangeDiff(name, block.input ?? {}, this.deps.cwd)
           : null
+        // 이 호출의 주인을 기억해 둔다 — 뒤따르는 tool_result 가 부모 표시를 잃으면 호출은
+        // 패널로 가고 결과만 메인 대화에 남아 짝 없는 카드가 된다.
+        if (msg.parent_tool_use_id) this.toolParents.set(toolId, msg.parent_tool_use_id)
         this.emitItem({
           id: `${apiId}:tool:${String(block.id)}`,
           type: 'tool_use',
@@ -2121,7 +2253,8 @@ export class ClaudeSession {
           name,
           input: clampInput(block.input ?? {}),
           ...(diff ? { diff: clampText(diff) } : {}),
-          ts: Date.now()
+          ts: Date.now(),
+          ...parent
         })
       } else {
         this.noticeUnknown(`content block "${String(block.type)}"`)
@@ -2193,6 +2326,8 @@ export class ClaudeSession {
         const toolId = String(block.tool_use_id)
         const structured = (msg as SDKUserMessage & { tool_use_result?: unknown }).tool_use_result
         const summary = summarizeToolResult(this.toolNames.get(toolId) ?? '', structured)
+        // 결과가 실어 온 표시를 먼저 믿고, 없으면 호출 시점에 기억해 둔 주인으로 되돌린다.
+        const owner = msg.parent_tool_use_id ?? this.toolParents.get(toolId)
         this.emitItem({
           id: `toolresult:${String(block.tool_use_id)}`,
           type: 'tool_result',
@@ -2200,7 +2335,8 @@ export class ClaudeSession {
           text: clampText(normalizeToolResult(block.content)),
           isError: Boolean(block.is_error),
           ...(summary ? { summary } : {}),
-          ts: Date.now()
+          ts: Date.now(),
+          ...(owner ? { parentToolId: owner } : {})
         })
       }
     }

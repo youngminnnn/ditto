@@ -42,6 +42,7 @@ import {
   workspaceDisplayName
 } from '@shared/types'
 import { fileDiffHash, isFileViewed, viewedKey } from '@shared/reviewViewed'
+import { mainConversationItems } from '@shared/subagents'
 import { playNotification } from './lib/sound'
 import {
   carryMissingShownFlag,
@@ -477,6 +478,13 @@ interface UIState {
    * 리액트가 변화를 못 보고 두 번째 선택이 조용히 무시된다).
    */
   jumpTarget: { workspaceId: string; itemId: string; seq: number } | null
+  /**
+   * Agents 탭으로 데려갈 목적지(사이드바의 실행 중 행, 대화의 Task 카드에서 눌렀을 때).
+   *
+   * `toolId` 가 있으면 그 서브에이전트의 대화를 펼치고 그 자리로 스크롤한다. seq 는 jumpTarget 과
+   * 같은 이유의 토큰이다 — 같은 행을 연달아 눌러도 이동이 다시 일어나야 한다.
+   */
+  agentsTarget: { workspaceId: string; toolId: string | null; seq: number } | null
   toasts: Toast[]
   confirmState: ConfirmState | null
   /**
@@ -780,6 +788,8 @@ interface UIState {
    * 아카이브된 워크스페이스는 대화창이 없으므로 안내만 하고 이동하지 않는다.
    */
   jumpToTranscriptItem: (workspaceId: string, itemId: string) => Promise<void>
+  /** 그 워크스페이스를 고르고 Agents 탭을 연다. toolId 를 주면 그 서브에이전트를 펼친다. */
+  openAgentsPanel: (workspaceId: string, toolId?: string) => Promise<void>
   /** 이동이 끝났다(또는 대상을 못 찾았다) — 대기 중인 목적지를 지운다. */
   clearJumpTarget: () => void
   openFileViewer: (workspaceId: string, path: string, line?: number) => void
@@ -1008,6 +1018,8 @@ type PendingDelta = {
   id: string
   itemType: 'assistant' | 'thinking'
   text: string
+  /** 서브에이전트가 낸 것이면 그 부모 도구 호출 id. 메인 대화가 이 항목을 걸러 내는 근거다. */
+  parentToolId?: string
 }
 const pendingDeltas = new Map<string, PendingDelta>()
 let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
@@ -1033,7 +1045,10 @@ function applyPendingDeltas(workspaceId?: string): void {
             type: delta.itemType,
             text: delta.text,
             ts: Date.now(),
-            streaming: true
+            streaming: true,
+            // 항목을 처음 만드는 것은 델타다(권위 있는 항목은 나중에 온다). 여기서 부모를 싣지
+            // 않으면 서브에이전트의 말이 메인 대화에 잠깐 떴다가 뒤늦게 사라진다.
+            ...(delta.parentToolId ? { parentToolId: delta.parentToolId } : {})
           }
         ]
       } else {
@@ -1216,6 +1231,7 @@ export const useStore = create<UIState>((set, get) => ({
   fileViewer: null,
   fileViewerTreeWidth: 260,
   jumpTarget: null,
+  agentsTarget: null,
   toasts: [],
   confirmState: null,
   overlayOpen: false,
@@ -1800,7 +1816,13 @@ export const useStore = create<UIState>((set, get) => ({
           return { contextUsage, promptSuggestions }
         })
       } else if (event.type === 'delta') {
-        scheduleDelta({ workspaceId, id: event.id, itemType: event.itemType, text: event.text })
+        scheduleDelta({
+          workspaceId,
+          id: event.id,
+          itemType: event.itemType,
+          text: event.text,
+          ...(event.parentToolId ? { parentToolId: event.parentToolId } : {})
+        })
       } else if (event.type === 'status' || event.type === 'session') {
         patchWorkspace(set, get, workspaceId, (w) => {
           if (event.type === 'status') {
@@ -2950,7 +2972,12 @@ export const useStore = create<UIState>((set, get) => ({
           ...s.transcriptPaging,
           [id]: {
             limit: TRANSCRIPT_INITIAL_LIMIT,
-            hasMore: hasMoreTranscriptHistory(history.length, TRANSCRIPT_INITIAL_LIMIT),
+            // 페이지 예산은 부모 대화 항목만 센다(main 의 loadTail 과 같은 셈) — 함께 실려 온
+            // 서브에이전트 항목까지 세면 대화의 머리에 닿고도 "더 있다" 로 남는다.
+            hasMore: hasMoreTranscriptHistory(
+              mainConversationItems(history).length,
+              TRANSCRIPT_INITIAL_LIMIT
+            ),
             loading: false
           }
         }
@@ -3345,7 +3372,7 @@ export const useStore = create<UIState>((set, get) => ({
           ...s.transcriptPaging,
           [workspaceId]: {
             limit,
-            hasMore: hasMoreTranscriptHistory(older.length, limit),
+            hasMore: hasMoreTranscriptHistory(mainConversationItems(older).length, limit),
             loading: false
           }
         }
@@ -3444,6 +3471,19 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   clearJumpTarget: () => set((s) => (s.jumpTarget ? { jumpTarget: null } : {})),
+
+  openAgentsPanel: async (workspaceId, toolId) => {
+    // 목적지를 먼저 세운다 — 다른 워크스페이스에서 눌렀다면 패널은 선택이 끝난 뒤에 마운트되고,
+    // 그때 이 값을 보고 곧바로 제 탭을 연다.
+    set((st) => ({
+      agentsTarget: {
+        workspaceId,
+        toolId: toolId ?? null,
+        seq: (st.agentsTarget?.seq ?? 0) + 1
+      }
+    }))
+    if (get().selectedWorkspaceId !== workspaceId) await get().selectWorkspace(workspaceId)
+  },
 
   openFileViewer: (workspaceId, path, line) =>
     set((s) => {

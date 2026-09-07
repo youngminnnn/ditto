@@ -5,6 +5,7 @@ import {
   GitCommitVertical,
   CheckCheck,
   MonitorPlay,
+  Bot,
   SquareArrowOutUpRight
 } from 'lucide-react'
 import FileBrowser from './FileBrowser'
@@ -12,11 +13,13 @@ import ChangesPanel from './ChangesPanel'
 import CommitsPanel from './CommitsPanel'
 import ChecksPanel from './ChecksPanel'
 import PreviewPanel from './PreviewPanel'
+import SubagentsPanel from './SubagentsPanel'
 import { useStore } from '../store'
+import { runningSubagentCount } from '@shared/subagents'
 import { isPaneWindow } from '../lib/paneWindow'
 import type { Workspace } from '@shared/types'
 
-type Tab = 'files' | 'changes' | 'check' | 'preview'
+type Tab = 'files' | 'changes' | 'check' | 'agents' | 'preview'
 type ChangesView = 'changes' | 'commits'
 
 const TABS: {
@@ -27,14 +30,22 @@ const TABS: {
   { id: 'files', label: 'All files', icon: Files },
   { id: 'changes', label: 'Changes', icon: GitCompare },
   { id: 'check', label: 'Check', icon: CheckCheck },
+  { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'preview', label: 'Preview', icon: MonitorPlay }
 ]
 
-/** 우상단 탭 패널: All files / Changes / Check / Preview. */
+/** 우상단 탭 패널: All files / Changes / Check / Agents / Preview. */
 export default function WorkPanel({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('changes')
   const [changesView, setChangesView] = useState<ChangesView>('changes')
   const detachPane = useStore((s) => s.detachPane)
+  // 탭 라벨 옆 숫자 — 지금 돌고 있는 서브에이전트 수. 탭을 열어 보지 않아도 "저기서 뭔가 돌고
+  // 있다"가 보여야, 병렬로 띄운 작업을 잊고 지나치지 않는다.
+  const runningAgents = useStore((s) => runningSubagentCount(s.transcripts[workspace.id]))
+  // 사이드바의 실행 중 행이나 대화의 Task 카드에서 온 이동 명령. 이 칸이 그 워크스페이스를
+  // 그리고 있을 때만 받는다 — 나란히 띄운 다른 칸까지 함께 탭을 바꾸면 안 된다.
+  const agentsTarget = useStore((s) => s.agentsTarget)
+  const agentsSeq = agentsTarget?.workspaceId === workspace.id ? agentsTarget.seq : null
 
   // Preview 는 한 번 연 뒤로는 계속 붙여 둔다(탭을 옮길 때마다 언마운트하면 보고 있던 dev
   // 서버 페이지가 매번 처음부터 다시 로드된다). 열기 전에는 만들지 않는다 — 쓰지도 않을
@@ -48,6 +59,14 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
     setPreviewOpened(true)
     setTab('preview')
     if (url) setNavTarget({ url, seq: ++navSeq.current })
+  }
+
+  // effect 가 아니라 렌더 중에 맞춘다 — 명령이 도착한 그 렌더에서 바로 Agents 탭을 그리므로
+  // 이전 탭이 한 프레임 스쳐 지나가지 않는다(React 의 "props 가 바뀔 때 state 조정" 패턴).
+  const [seenAgentsSeq, setSeenAgentsSeq] = useState<number | null>(null)
+  if (agentsSeq != null && agentsSeq !== seenAgentsSeq) {
+    setSeenAgentsSeq(agentsSeq)
+    setTab('agents')
   }
 
   // 스크립트 패널의 "Open in Preview". 그 패널은 다른 창(분리한 scripts 창)에 있을 수 있어
@@ -88,6 +107,11 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
               >
                 <Icon size={13} className="shrink-0" />
                 <span className="workpanel-tab-label">{label}</span>
+                {id === 'agents' && runningAgents > 0 && (
+                  <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-1.5 text-[10px] tabular-nums text-neutral-300">
+                    {runningAgents}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -151,6 +175,7 @@ export default function WorkPanel({ workspace }: { workspace: Workspace }): Reac
           </div>
         )}
         {tab === 'check' && <ChecksPanel workspaceId={workspace.id} />}
+        {tab === 'agents' && <SubagentsPanel workspaceId={workspace.id} />}
         {/* 다른 탭과 달리 조건부 렌더가 아니라 감추기다 — 위 previewOpened 주석 참고. */}
         {previewOpened && (
           <div className={tab === 'preview' ? 'h-full' : 'hidden'}>

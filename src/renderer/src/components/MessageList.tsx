@@ -18,7 +18,8 @@ import {
   Layers,
   MessagesSquare,
   GitMergeConflict,
-  Sparkles
+  Sparkles,
+  Bot
 } from 'lucide-react'
 import { transcriptDensityOf, useStore } from '../store'
 import { DiffLine } from './DiffView'
@@ -27,7 +28,8 @@ import { ToolCard } from './tools/ToolCard'
 import { ToolGroupCard } from './tools/ToolGroupCard'
 import { formatTime } from '../lib/format'
 import { buildTaskCards, taskLabel, type TaskEntry } from '../lib/tasks'
-import { buildToolGroups, type ToolGroup } from '@shared/toolGroups'
+import { buildToolGroups, toolKind, type ToolGroup } from '@shared/toolGroups'
+import { mainConversationItems } from '@shared/subagents'
 import { useTranscriptJump } from '../lib/transcriptJump'
 import { compactHistoryWindow } from '../lib/compactHistory'
 import { useAvailableBackends } from '../lib/backends'
@@ -282,7 +284,10 @@ export default function MessageList({
   workspaceId: string
   running: boolean
 }): React.JSX.Element {
-  const items = useStore((s) => s.transcripts[workspaceId]) ?? EMPTY
+  const allItems = useStore((s) => s.transcripts[workspaceId]) ?? EMPTY
+  // 서브에이전트가 낸 것은 Agents 패널의 몫이다([[shared/subagents]]). 여기 두면 Task 카드
+  // 사이에 남의 Bash·Read 가 섞여, 누가 한 일인지 알 수 없는 채로 대화가 길어진다.
+  const items = useMemo(() => mainConversationItems(allItems), [allItems])
   // 빈 화면에서만 쓰는 값들 — 이 워크스페이스를 돌릴 에이전트를 아직 고를 수 있는지 판단한다.
   const workspace = useStore((s) => s.app?.workspaces.find((w) => w.id === workspaceId))
   const availableAgents = useAvailableBackends()
@@ -815,6 +820,7 @@ function Item({
               ))}
             </pre>
           )}
+          <SubagentLink workspaceId={workspaceId} use={item} />
         </ToolCard>
       )
     case 'tool_result':
@@ -1305,4 +1311,40 @@ function itemText(it: ChatItem): string {
 /** 속성 선택자 값에 들어갈 수 있는 따옴표·역슬래시를 이스케이프한다. */
 function cssAttr(value: string): string {
   return value.replace(/["\\]/g, '\\$&')
+}
+
+/**
+ * Task/Agent 도구 카드에서 그 서브에이전트의 대화(Agents 탭)로 가는 길.
+ *
+ * 이 카드는 "누구에게 무엇을 시켰다"만 말한다 — 그가 실제로 한 일은 병렬 실행이 뒤엉키지 않도록
+ * 패널로 갈라 두었다([[SubagentsPanel]]). 그 사실을 알려 주지 않으면 사용자는 위임한 순간
+ * 대화가 끊긴 것으로 읽는다.
+ *
+ * 대화가 실제로 기록돼 있을 때만 나온다. 아직 첫 항목이 오지 않았거나 옛 기록이면 링크가
+ * 막다른 길이 되므로 아무것도 그리지 않는다.
+ */
+function SubagentLink({
+  workspaceId,
+  use
+}: {
+  workspaceId: string
+  use: Extract<ChatItem, { type: 'tool_use' }>
+}): React.JSX.Element | null {
+  const open = useStore((s) => s.openAgentsPanel)
+  const known = useStore((s) =>
+    (s.transcripts[workspaceId] ?? []).some(
+      (item) => item.type === 'subagent' && item.toolId === use.toolId
+    )
+  )
+  if (toolKind(use.name, use.input) !== 'agent' || !known) return null
+  return (
+    <button
+      type="button"
+      onClick={() => void open(workspaceId, use.toolId)}
+      className="ml-4 mt-1 flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300"
+    >
+      <Bot size={11} />
+      View this subagent’s conversation
+    </button>
+  )
 }

@@ -39,6 +39,7 @@ export function WorkspaceAgents({
   // 설정이 로드되기 전(app === null)에는 켜진 것으로 본다 — 기본값이 켜짐이므로 첫 프레임에
   // 목록이 깜빡이며 사라지는 일이 없다.
   const enabled = useStore((s) => s.app?.settings.showRunningAgents ?? true)
+  const openAgents = useStore((s) => s.openAgentsPanel)
 
   // 표시만 끈다 — main 은 계속 추적하므로 다시 켜면 지금 돌고 있는 것이 바로 나타난다.
   if (!enabled) return null
@@ -75,6 +76,9 @@ export function WorkspaceAgents({
           // 위임 실행은 자기 백엔드를 싣고 오고, 네이티브 서브에이전트는 부모의 것을 따른다.
           const agentBackend = agent.backend ?? backend
           const isTask = typeof agent.taskType === 'string'
+          // 서브에이전트의 대화는 Agents 패널에 있다. 도구 호출 id 를 아는 행만 데려갈 수 있다 —
+          // 그 값이 자식 항목을 묶는 열쇠라, 없으면 열어 봐야 빈 화면이다.
+          const openable = !isTask && !!agent.toolUseId
           return (
             <div
               key={agent.taskId}
@@ -89,7 +93,8 @@ export function WorkspaceAgents({
                 typeof agent.toolUses === 'number' ? `${agent.toolUses} tool uses` : null,
                 typeof agent.totalTokens === 'number'
                   ? `${agent.totalTokens.toLocaleString()} tokens`
-                  : null
+                  : null,
+                openable ? 'Click to open this subagent’s conversation' : null
               ]
                 .filter(Boolean)
                 .join('\n')}
@@ -103,17 +108,28 @@ export function WorkspaceAgents({
                   <AgentBackendMark backend={agentBackend} size={10} />
                 </span>
               )}
-              {/* 타입 이름도 결국 잘린다 — `humanize-korean:translationese-research-distiller`
+              {/* 이름과 설명 묶음만 버튼이다 — 행 전체를 버튼으로 만들면 옆의 중지 버튼이 버튼
+                  안에 중첩된다. 타입 이름도 결국 잘린다: `humanize-korean:translationese-…`
                   처럼 긴 이름이 오면 shrink-0 은 행을 사이드바 폭 밖으로 밀어내 경과 시간까지
                   잘라 먹는다. 설명이 먼저 0 폭으로 줄고(basis 0), 그래도 모자라면 여기서 준다. */}
-              <span className="min-w-0 truncate font-medium text-neutral-400">
-                {agent.agentType}
-              </span>
-              {/* 설명은 남는 폭만 차지하고 먼저 잘린다 — 타입·경과 시간이 항상 읽히는 쪽이 유용하다. */}
-              <span className="min-w-0 flex-1 truncate text-neutral-600">
-                {agent.lastToolName ? `${agent.lastToolName} · ` : ''}
-                {agent.description}
-              </span>
+              <button
+                type="button"
+                disabled={!openable}
+                onClick={() => void openAgents(workspaceId, agent.toolUseId)}
+                className={
+                  'min-w-0 flex-1 flex items-baseline gap-1.5 text-left ' +
+                  (openable ? 'hover:text-neutral-300' : 'cursor-default')
+                }
+              >
+                <span className="min-w-0 truncate font-medium text-neutral-400">
+                  {agent.agentType}
+                </span>
+                {/* 설명은 남는 폭만 차지하고 먼저 잘린다 — 타입·경과 시간이 항상 읽히는 쪽이 유용하다. */}
+                <span className="min-w-0 flex-1 truncate text-neutral-600">
+                  {agent.lastToolName ? `${agent.lastToolName} · ` : ''}
+                  {agent.description}
+                </span>
+              </button>
               <span className="shrink-0 tabular-nums text-neutral-600">
                 {formatDuration(now - agent.startedAt)}
               </span>

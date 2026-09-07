@@ -1998,8 +1998,22 @@ export type ChatItem =
       /** 없으면 사용자가 직접 보낸 기존 메시지다. */
       origin?: ChatUserOrigin
     }
-  | { id: string; type: 'assistant'; text: string; ts: number; streaming?: boolean }
-  | { id: string; type: 'thinking'; text: string; ts: number; streaming?: boolean }
+  | {
+      id: string
+      type: 'assistant'
+      text: string
+      ts: number
+      streaming?: boolean
+      parentToolId?: string
+    }
+  | {
+      id: string
+      type: 'thinking'
+      text: string
+      ts: number
+      streaming?: boolean
+      parentToolId?: string
+    }
   | {
       id: string
       type: 'tool_use'
@@ -2013,6 +2027,7 @@ export type ChatItem =
        */
       diff?: string
       ts: number
+      parentToolId?: string
     }
   | {
       id: string
@@ -2023,6 +2038,35 @@ export type ChatItem =
       ts: number
       /** 구조화 출력에서 화면에 필요한 값만 줄인 요약. 옛 기록에는 없으며 text 로 폴백한다. */
       summary?: ToolSummary
+      parentToolId?: string
+    }
+  /**
+   * 서브에이전트 실행 1건 — Agents 패널의 행이자, 그 실행이 존재했다는 영속 기록.
+   *
+   * `RunningAgent`([[RunningAgent]])와 짝이지만 성격이 반대다. 그쪽은 "지금 돌고 있는 것"의
+   * 휘발성 스냅샷이라 앱을 껐다 켜면 사라지고, 이쪽은 트랜스크립트에 남아 **끝난 뒤에도**
+   * 무엇을 시켰고 무엇을 했는지 다시 열어 볼 수 있게 한다.
+   *
+   * `toolId` 가 이 항목과 자식들을 잇는 유일한 열쇠다 — 자식 항목은 `parentToolId` 에 같은 값을
+   * 싣고, 패널은 그것으로 한 서브에이전트의 대화만 모아 그린다. Claude 네이티브 Task 는 SDK 의
+   * `tool_use_id`(= 부모 트랜스크립트의 Task 도구 호출 id)를, 위임 실행·Codex collab 은 각자의
+   * 실행 id 를 쓴다.
+   */
+  | {
+      id: string
+      type: 'subagent'
+      toolId: string
+      /** SDK task_id. 있으면 패널에서 이 실행만 중지할 수 있다. */
+      taskId?: string
+      backend: AgentBackendId
+      /** 서브에이전트 타입(예: 'Explore', 'code-reviewer') 또는 위임 백엔드 이름. */
+      agentType: string
+      description: string
+      status: 'running' | 'completed' | 'failed' | 'stopped'
+      totalTokens?: number
+      toolUses?: number
+      durationMs?: number
+      ts: number
     }
   | {
       id: string
@@ -2035,7 +2079,7 @@ export type ChatItem =
       costUsd?: number
       ts: number
     }
-  | { id: string; type: 'error'; text: string; ts: number }
+  | { id: string; type: 'error'; text: string; ts: number; parentToolId?: string }
   | { id: string; type: 'system'; text: string; ts: number }
   | {
       id: string
@@ -2341,6 +2385,14 @@ export function nativePeerInbound(policy: PeerInboundPolicy | undefined): 'accep
 export interface RunningAgent {
   /** SDK task_id. 이 워크스페이스 안에서 유일하며, 갱신·종료를 이 값으로 병합한다. */
   taskId: string
+  /**
+   * 이 실행을 띄운 도구 호출 id. 있으면 Agents 패널에서 이 서브에이전트의 대화를 바로 펼칠 수
+   * 있다([[shared/subagents]] — 자식 항목의 `parentToolId` 와 같은 값).
+   *
+   * 없을 수 있다: SDK 가 `tool_use_id` 를 싣지 않은 task 나, 도구 호출로 시작하지 않은 실행.
+   * 그때는 사이드바 행이 "돌고 있다"만 알리고 패널로 데려가지는 않는다.
+   */
+  toolUseId?: string
   /** 에이전트가 아닌 SDK 백그라운드 task 면 그 task_type. 없으면 서브에이전트다. */
   taskType?: string
   /** 이 항목만 중지할 수 있는 Claude 라이브 query 가 있음을 뜻한다. */
@@ -2411,8 +2463,20 @@ export type ChatEvent =
    * 때문이다. 자를 지점만 알려 주면 렌더러와 메인이 같은 규칙으로 같은 결과에 도달한다.
    */
   | { type: 'truncate'; fromItemId: string }
-  /** assistant/thinking 버블(id)에 텍스트 조각을 이어붙임. */
-  | { type: 'delta'; id: string; itemType: 'assistant' | 'thinking'; text: string }
+  /**
+   * assistant/thinking 버블(id)에 텍스트 조각을 이어붙임.
+   *
+   * `parentToolId` 는 이 델타가 서브에이전트의 것임을 뜻한다([[ChatItem]] parentToolId). 델타는
+   * 권위 있는 항목보다 **먼저** 도착해 렌더러가 항목을 만들어 내므로, 여기서 부모를 실어 보내지
+   * 않으면 그 버블이 부모 없는 채로 메인 대화에 한 번 나타났다가 뒤늦게 사라진다.
+   */
+  | {
+      type: 'delta'
+      id: string
+      itemType: 'assistant' | 'thinking'
+      text: string
+      parentToolId?: string
+    }
   /** workspace 실행 상태 변화. */
   | { type: 'status'; status: WorkspaceStatus }
   /** 세션 ID·모델 확정/갱신 (init 메시지 기준). */

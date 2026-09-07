@@ -10,7 +10,7 @@ import {
   MessageSquarePlus,
   SquareArrowOutUpRight
 } from 'lucide-react'
-import { backgroundTaskCount, refreshAccountUsage, useStore } from '../store'
+import { backgroundTaskCount, pollingAwake, refreshAccountUsage, useStore } from '../store'
 import { useNow } from '../lib/useNow'
 import { formatCost, formatCountdown, formatDuration, formatTime } from '../lib/format'
 import { activeRateLimitPause, wasInterrupted, workspaceDisplayName } from '@shared/types'
@@ -85,7 +85,10 @@ export default function Overview(): React.JSX.Element {
       lastUsageFetch.current = Date.now()
       setUsageNonce((n) => n + 1)
     }
-    const id = window.setInterval(bump, USAGE_REFRESH_MS)
+    // 자리를 비운 동안에는 건너뛴다 — 라이브 세션이 없으면 이 왕복이 claude CLI 를 새로 스폰한다.
+    const id = window.setInterval(() => {
+      if (pollingAwake()) bump()
+    }, USAGE_REFRESH_MS)
     // 창 전환을 반복해도 매번 왕복하지 않도록 최소 간격을 둔다.
     const onFocus = (): void => {
       if (Date.now() - lastUsageFetch.current >= USAGE_FOCUS_MIN_GAP_MS) bump()

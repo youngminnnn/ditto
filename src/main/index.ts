@@ -34,16 +34,12 @@ import { log } from './logger'
 import { hydrateEnvFromLoginShell } from './env'
 import { initUpdater, isInstallingUpdate } from './updater'
 import { captureRunningTurns } from './shutdownResume'
-import {
-  enterBackground,
-  initBackgroundMode,
-  revealWindow,
-  shouldStayAlive
-} from './backgroundMode'
 import { setWindowOpener } from './notifications'
 import { initNotice } from './notice'
 import { initFeatures } from './features'
 import { initPreview } from './preview'
+import { disposeAuthSessions } from './auth'
+import { reapDescendants } from './reaper'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -318,6 +314,17 @@ function createWindow(): void {
   loadRenderer(mainWindow)
 }
 
+/** 알림 클릭·dock activate 가 같은 문으로 메인 창을 되살린다. */
+function showMainWindow(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+    return
+  }
+  createWindow()
+}
+
 app.whenReady().then(() => {
   // 인증 탐지·세션 spawn 보다 먼저 셸 환경(PATH + export 변수)을 보정해, 설치된 CLI 가
   // 미설치로 보이거나 child 프로세스가 토큰/설정을 못 읽는 일이 없게 한다.
@@ -344,16 +351,8 @@ app.whenReady().then(() => {
   // 기동 시점에는 도는 워크스페이스가 없다(store 가 남은 'running' 을 'idle' 로 씻는다) —
   // 설정만 물려주고, 실제 판단은 첫 방송부터 시작한다.
   initSleepBlocker(getStore().getState().settings.keepAwakeWhileRunning)
-  // 창이 사라진 뒤에도 사용자가 돌아올 통로가 있어야 한다 — 메뉴 막대와 OS 알림 클릭이
-  // 둘 다 같은 방법으로 메인 창을 되살린다([[main/backgroundMode]]).
-  initBackgroundMode({
-    showWindow: () => createWindow(),
-    getWindow: () => mainWindow,
-    broadcastState: () => dispatch(IPC.evtState, getStore().getState())
-  })
-  // 창이 없을 때의 알림 클릭도 메뉴 막대의 "Show Wooi" 와 같은 문을 쓴다 — 되살아난 창 앞에
-  // 앉은 사용자를 두고 앱이 스스로 꺼지지 않도록, 이 경로가 백그라운드 모드도 함께 푼다.
-  setWindowOpener(() => revealWindow())
+  // 창이 없을 때의 알림 클릭도 Dock activate 와 같은 문을 쓴다.
+  setWindowOpener(() => showMainWindow())
   createWindow()
   sessions.prewarm()
   initUpdater(dispatch)
@@ -388,19 +387,11 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  // mac 이 아니면 마지막 창이 곧 앱이다. 백그라운드 모드가 darwin 한정인 이유가 여기 있다 —
-  // 이 quit 을 가드가 막으면 창도 Dock 도 없이 앱이 갇힌다([[main/backgroundMode]] 헤더).
+  // mac 이 아니면 마지막 창이 곧 앱이다.
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', (event) => {
-  // 가드는 **이 리스너 안에서** 물어본다. 별도 리스너로 막으면 Electron 이 나머지 리스너를
-  // 그대로 실행해, 지키려던 세션·소켓·승인·리뷰 워크트리가 먼저 사라진다([[main/backgroundMode]]).
-  if (shouldStayAlive()) {
-    event.preventDefault()
-    enterBackground()
-    return
-  }
+app.on('before-quit', () => {
   void disposeRemote()
   // 세션을 먼저 내리면 어느 턴이 실행 중이었는지 사라진다. 또 Store.update 는 디바운스되므로
   // 아래 flushStore 보다 반드시 먼저 기록해야 이번 종료에서 디스크까지 내려간다.
@@ -408,6 +399,8 @@ app.on('before-quit', (event) => {
   sessions.disposeAll()
   scripts.disposeAll()
   terminals.disposeAll()
+  // 로그인 창을 띄워 둔 채 끄면 그 `claude auth login` pty 가 입력을 기다리며 남는다.
+  disposeAuthSessions()
   // 소켓 파일을 남기면 다음 실행의 bind 가 EADDRINUSE 로 실패한다(그쪽에서도 지우지만, 살아
   // 있는 앱이 쓰던 소켓을 지우는 일이 없도록 정상 종료 경로에서 먼저 치운다).
   stopToolSocket(app.getPath('userData'))
@@ -419,4 +412,14 @@ app.on('before-quit', (event) => {
   // 밀린 것을 마저 내려야 마지막 변경이 유실되지 않는다.
   flushStore()
   flushPendingSyncs()
+})
+
+/**
+ * 정리자들이 각자 아는 자식을 다 내린 **뒤**, 아무도 몰랐던 손자를 혈통으로 지운다.
+ *
+ * `before-quit` 이 아니라 `will-quit` 인 이유는 순서다 — 위 리스너와 [[main/ipc]] 의 리뷰
+ * 워크트리 정리가 먼저 끝나야, 여기서 남은 것이 진짜로 아무도 안 챙긴 것이다([[main/reaper]]).
+ */
+app.on('will-quit', () => {
+  reapDescendants()
 })

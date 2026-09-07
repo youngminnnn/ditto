@@ -322,4 +322,17 @@ port.on('message', (e: { data: HostCommand }) => {
   void handle(e.data).catch((err) => log.error('agent-host command failed', err))
 })
 
+// 앱이 어떤 경로로 종료되든 SDK 가 띄운 claude CLI 와 그 자식들이 고아로 남지 않게 한다.
+// codex/host.ts 의 같은 훅과 짝이다 — 'disposeAll' 메시지는 메인이 먼저 사라지면 도착하지 않는다.
+process.on('exit', () => {
+  for (const session of sessions.values()) {
+    try {
+      session.dispose()
+    } catch {
+      // 종료 중이다 — 하나가 실패해도 나머지는 계속 내린다.
+    }
+  }
+  sessions.clear()
+})
+
 log.info('agent-host ready')

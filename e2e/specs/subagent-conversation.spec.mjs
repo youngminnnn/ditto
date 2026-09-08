@@ -1,4 +1,4 @@
-/* global console, process */
+/* global console, process, document, window */
 
 import { openSeededWorkspace, seedAppState, waitForInspection } from '../fixtures.mjs'
 import { launchWooi, withScratchRepo } from '../harness.mjs'
@@ -98,6 +98,18 @@ export default async function 서브에이전트의_대화를_사이드바에서
       ts: now - 16,
       parentToolId: 'toolu_named'
     },
+    // 화면을 넘치도록 채운다. 이게 없으면 레이아웃이 깨져도(목록이 창 밖으로 자라도) 시드가
+    // 짧아 아무 일도 일어나지 않는다 — 실제로 그렇게 통과한 적이 있다.
+    //
+    // 도구 호출로 채우지 않는 이유: 연속된 조회 호출은 하나의 묶음 카드로 접히므로
+    // (`buildToolGroups`) 위의 Bash 카드까지 그 안으로 빨려 들어가 본문에서 사라진다.
+    ...Array.from({ length: 40 }, (_, i) => ({
+      id: `child-1-filler-${i}`,
+      type: 'assistant',
+      text: `Checking module number ${i} for the loader.`,
+      ts: now - 17 + i * 0.001,
+      parentToolId: 'toolu_named'
+    })),
     {
       id: 'child-1-say',
       type: 'assistant',
@@ -158,6 +170,26 @@ export default async function 서브에이전트의_대화를_사이드바에서
             `a named running subagent should offer a composer:\n${inside.slice(0, 2000)}`
           )
         }
+        // 대화가 길어도 화면 안에 갇혀 있어야 한다. Wooi 는 전체 화면을 채우는 고정 레이아웃이라
+        // 문서 자체는 절대 스크롤되지 않는다 — 그 불변식이 깨지면 어딘가 높이 제약이 새고 있다는
+        // 뜻이다(MessageList 는 flex 컬럼의 직계 자식이어야 `flex-1 min-h-0` 이 먹는다).
+        const overflow = await wooi.win.evaluate(
+          () => document.documentElement.scrollHeight - window.innerHeight
+        )
+        if (overflow > 2) {
+          throw new Error(`the subagent conversation overflows the window by ${overflow}px`)
+        }
+        // 입력창이 화면 밖으로 밀려나지 않았는지도 함께 본다 — 넘침의 가장 아픈 증상이다.
+        const composerBottom = await wooi.win
+          .getByPlaceholder(/^Message explorer/)
+          .evaluate((el) => el.getBoundingClientRect().bottom)
+        const viewportHeight = await wooi.win.evaluate(() => window.innerHeight)
+        if (composerBottom > viewportHeight) {
+          throw new Error(
+            `the composer is pushed below the viewport (${composerBottom} > ${viewportHeight})`
+          )
+        }
+
         console.log(`[e2e] screenshot=${await wooi.shot('subagent-named')}`)
 
         // ── 이름 없이 뜬 쪽은 잠기고, 이유가 보인다 ──────────────────────

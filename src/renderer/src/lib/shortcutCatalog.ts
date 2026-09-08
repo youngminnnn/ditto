@@ -42,6 +42,7 @@ export type PaletteActionId =
   | 'delete-workspace'
   | 'focus-composer'
   | 'toggle-tool-results'
+  | 'cycle-subagent'
   | 'close-focused-pane'
   | 'toggle-split-focus'
 
@@ -108,6 +109,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       { keys: ['⌘,'], label: 'Open settings', action: 'open-settings' },
       { keys: ['⌘J'], label: 'Toggle the work panel', action: 'toggle-work-panel' },
+      {
+        keys: ['⌃A'],
+        label: 'Step through this workspace’s subagents, then back to the main conversation',
+        action: 'cycle-subagent'
+      },
       { keys: ['⇧⌘S'], label: 'Toggle the scripts panel', action: 'toggle-scripts-panel' },
       { keys: ['⇧⌘D'], label: 'Run / stop the dev script', action: 'toggle-dev-script' },
       { keys: ['⇧⇥'], label: 'Cycle permission mode', action: 'cycle-permission-mode' },

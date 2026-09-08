@@ -36,6 +36,7 @@ import { useFeatureNudge } from './lib/featureNudge'
 import PrReviewStartModal from './components/review/PrReviewStartModal'
 import ChatView from './components/ChatView'
 import SubagentChatView from './components/SubagentChatView'
+import { nextSubagent, subagentCycle } from './lib/subagentRows'
 import ArchivedChatView from './components/ArchivedChatView'
 import FileViewerOverlay from './components/FileViewerOverlay'
 import FileQuickOpen from './components/FileQuickOpen'
@@ -560,6 +561,27 @@ export default function App(): React.JSX.Element {
           // 워크스페이스마다 따로 기억하므로 지금 보고 있는 워크스페이스에만 걸린다.
           if (focusedWorkspaceId) st.cycleTranscriptDensity(focusedWorkspaceId)
           return
+
+        case 'cycle-subagent': {
+          if (!focusedWorkspaceId) return
+          const cycle = subagentCycle(
+            st.transcripts[focusedWorkspaceId],
+            st.runningAgents[focusedWorkspaceId]
+          )
+          if (cycle.length === 0) {
+            // 조용히 아무 일도 안 하면 키가 고장난 것으로 읽힌다. 왜 갈 곳이 없는지 밝힌다.
+            st.pushToast('info', 'This workspace has not run any subagents yet.')
+            return
+          }
+          const current =
+            st.selectedSubagent?.workspaceId === focusedWorkspaceId
+              ? st.selectedSubagent.toolId
+              : null
+          const next = nextSubagent(cycle, current)
+          if (next) void st.openSubagent(focusedWorkspaceId, next)
+          else st.closeSubagent()
+          return
+        }
       }
     },
     [fileViewerVisible, toggleDevScript]
@@ -708,6 +730,16 @@ export default function App(): React.JSX.Element {
         if (typing() || !st.selectedWorkspaceId) return
         e.preventDefault()
         runPaletteAction('toggle-tool-results')
+        return
+      }
+
+      // ⌃A — 이 워크스페이스의 서브에이전트 대화를 차례로 열고, 마지막을 지나면 부모로 돌아온다.
+      // ⌃O 와 같은 "대화 표면" 계열의 키다. 입력 중에는 양보한다 — ⌃A 는 여러 입력 위젯에서
+      // 줄 맨 앞으로 가는 관습적 글쇠이고, 그것을 빼앗으면 타이핑이 망가진다.
+      if (e.code === 'KeyA' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        if (typing() || !st.selectedWorkspaceId) return
+        e.preventDefault()
+        runPaletteAction('cycle-subagent')
         return
       }
 

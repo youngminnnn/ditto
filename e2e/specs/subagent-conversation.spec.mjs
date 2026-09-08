@@ -220,6 +220,25 @@ export default async function 서브에이전트의_대화를_사이드바에서
           )
         }
 
+        // ── ⌃A 로 차례로 돌고 부모로 돌아온다 ───────────────────────────
+        // 시드의 두 실행은 둘 다 도는 중이고 config loader 쪽이 먼저 시작했다 — 사이드바 순서
+        // 그대로 돌아야 한다(순환과 목록이 같은 함수를 본다).
+        await wooi.win.keyboard.press('Control+a')
+        if (!(await wooi.win.locator('body').innerText()).includes(NAMED_TEXT)) {
+          throw new Error('⌃A from the parent should enter the first subagent')
+        }
+        await wooi.win.keyboard.press('Control+a')
+        if (!(await wooi.win.locator('body').innerText()).includes(UNNAMED_TEXT)) {
+          throw new Error('⌃A should step to the next subagent')
+        }
+        await wooi.win.keyboard.press('Control+a')
+        const wrapped = await wooi.win.locator('body').innerText()
+        if (!wrapped.includes(PARENT_TEXT) || wrapped.includes(UNNAMED_TEXT)) {
+          throw new Error(
+            `⌃A past the last subagent should return to the parent:\n${wrapped.slice(0, 1500)}`
+          )
+        }
+
         await waitForInspection(wooi.win)
       } finally {
         await wooi.close()

@@ -108,6 +108,7 @@ export function transcriptEntryKind(
     case 'bash':
       return item.agent ? 'agentBash' : 'userBash'
     case 'task':
+    case 'subagent':
       return 'subagent'
     default:
       return 'message'

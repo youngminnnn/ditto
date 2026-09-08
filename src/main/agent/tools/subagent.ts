@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   AGENT_BACKEND_LABELS,
   type AgentBackendId,
+  type ChatItem,
   type RunningAgent,
   type Workspace
 } from '@shared/types'
@@ -121,6 +122,10 @@ export function runDelegateTool(backend: AgentBackendId) {
 
     const agent: RunningAgent = {
       taskId,
+      // 위임 실행에는 이 호출을 가리키는 도구 id 가 없다(전송 계층이 이름과 인자만 나른다).
+      // 그래서 taskId 를 그 자리에 쓴다 — Agents 패널이 자식 항목을 묶는 열쇠이기만 하면 되고,
+      // 그 값이 어디서 왔는지는 상관없다([[shared/subagents]]).
+      toolUseId: taskId,
       backend,
       agentType: AGENT_BACKEND_LABELS[backend],
       description,
@@ -128,6 +133,26 @@ export function runDelegateTool(backend: AgentBackendId) {
       toolUses: 0
     }
     upsertAgent(deps, workspaceId, agent)
+
+    // Agents 패널의 행. 사이드바 목록(휘발성)과 달리 트랜스크립트에 남아, 끝난 뒤에도 무엇을
+    // 시켰고 무엇을 했는지 다시 열어 볼 수 있다.
+    const startedAt = Date.now()
+    const row = (status: SubagentRow['status']): SubagentRow => ({
+      id: `subagent:${taskId}`,
+      type: 'subagent',
+      toolId: taskId,
+      backend,
+      agentType: AGENT_BACKEND_LABELS[backend],
+      description,
+      status,
+      toolUses: agent.toolUses,
+      ...(status === 'running' ? {} : { durationMs: Date.now() - startedAt }),
+      ts: startedAt
+    })
+    deps.postToTranscript(workspaceId, row('running'))
+
+    // 자식 항목의 id. 활동은 순서만 있으면 되므로 단조 증가 카운터로 충분하다.
+    let step = 0
 
     try {
       const result = await runSubAgent({
@@ -146,6 +171,7 @@ export function runDelegateTool(backend: AgentBackendId) {
             agent.lastToolName = activity.toolName ?? activity.text
           }
           upsertAgent(deps, workspaceId, agent)
+          deps.postToTranscript(workspaceId, activityItem(taskId, step++, activity))
         },
         // Codex 서브런은 이 콜백을 쓰지 않는다 — `codex exec` 가 비대화형이라 승인 채널이 없고,
         // 그 경로에서는 샌드박스가 유일한 방어선이다.
@@ -154,17 +180,55 @@ export function runDelegateTool(backend: AgentBackendId) {
       })
 
       if (result.error && !result.text) throw new Error(result.error)
+      deps.postToTranscript(workspaceId, row(result.error ? 'failed' : 'completed'))
       // 아무 말도 없이 끝나는 경우가 있다(중단되었거나 도구만 돌리고 끝난 실행). 빈 문자열을
       // 그대로 돌려주면 모델이 성공으로 오해하므로 사실대로 적는다.
       return {
         text: result.text || `${AGENT_BACKEND_LABELS[backend]} finished without returning any text.`
       }
+    } catch (err) {
+      deps.postToTranscript(workspaceId, row(abort.signal.aborted ? 'stopped' : 'failed'))
+      throw err
     } finally {
       running.delete(taskId)
       const byWorkspace = agents.get(workspaceId)
       if (byWorkspace?.delete(taskId)) emitAgents(deps, workspaceId)
     }
   }
+}
+
+type SubagentRow = Extract<ChatItem, { type: 'subagent' }>
+
+/**
+ * 위임 실행이 흘리는 활동 한 건을 Agents 패널이 그릴 항목으로 옮긴다.
+ *
+ * 네이티브 Task 만큼 자세하지는 않다 — `SubAgentActivity` 계약이 주는 것은 **요약 한 줄**이라
+ * (`subagent/run.ts`) 도구의 실제 인자도, 결과 본문도 없다. 그래도 "무엇을 하는 중인지"는
+ * 순서대로 남으므로, 사이드바 한 줄만 보고 결과를 기다리던 것과는 다르다.
+ */
+function activityItem(
+  taskId: string,
+  step: number,
+  activity: { kind: 'text' | 'tool' | 'error'; text: string; toolName?: string }
+): ChatItem {
+  const id = `delegate:${taskId}:${step}`
+  const ts = Date.now()
+  if (activity.kind === 'tool') {
+    return {
+      id,
+      type: 'tool_use',
+      toolId: id,
+      name: activity.toolName || 'Tool',
+      // `description` 은 도구 카드가 요약으로 읽어 주는 키다([[shared/toolDisplay]]).
+      input: { description: activity.text },
+      ts,
+      parentToolId: taskId
+    }
+  }
+  if (activity.kind === 'error') {
+    return { id, type: 'error', text: activity.text, ts, parentToolId: taskId }
+  }
+  return { id, type: 'assistant', text: activity.text, ts, parentToolId: taskId }
 }
 
 function repoPathOf(ws: Workspace): string | null {

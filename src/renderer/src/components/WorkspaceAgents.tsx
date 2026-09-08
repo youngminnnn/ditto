@@ -1,18 +1,24 @@
-import { ChevronDown, ChevronRight, Square } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, Square } from 'lucide-react'
 import { useStore } from '../store'
 import { formatDuration } from '../lib/format'
 import { AgentBackendMark } from './BrandIcons'
 import { AGENT_BACKEND_LABELS } from '@shared/types'
+import { buildRows } from '../lib/subagentRows'
 import type { AgentBackendId } from '@shared/types'
 
 /**
- * 사이드바에서 워크스페이스 행 **바로 아래**에 붙는, 지금 돌고 있는 에이전트·task 목록.
+ * 사이드바에서 워크스페이스 행 **바로 아래**에 붙는, 이 워크트리의 서브에이전트 목록.
+ *
+ * 예전에는 "지금 돌고 있는 것"만 알리는 표시였다. 지금은 **들어가는 문**이다 — 행을 누르면 그
+ * 서브에이전트의 대화가 열린다([[SubagentChatView]]). 그래서 끝난 것도 몇 개 남긴다: 끝나는
+ * 순간 사라지면 방금 무엇을 알아냈는지 다시 볼 길이 사이드바에서 없어진다.
+ *
+ * **끝난 것은 지금 들어와 있는 워크스페이스에만 붙인다.** 사이드바는 "지금 무슨 일이 도는가" 를
+ * 보는 곳이고, 워크스페이스마다 지난 이력이 꼬리처럼 쌓이면 그 성격이 사라진다. 다른 워크스페이스
+ * 행에는 예전처럼 도는 것만 보인다.
  *
  * 워크스페이스 행 안이 아니라 형제로 렌더한다 — 행 자체가 role="button" 인 클릭·드래그 영역이라
  * 그 안에 버튼을 중첩하면 접기 클릭이 워크스페이스 선택으로 새고 드래그 정렬과도 충돌한다.
- *
- * 실행 중인 에이전트가 없으면 아무것도 렌더하지 않는다. 즉 이 블록이 보인다는 것 자체가
- * "이 워크트리에서 무언가 돌고 있다"는 신호다.
  */
 export function WorkspaceAgents({
   workspaceId,
@@ -22,8 +28,8 @@ export function WorkspaceAgents({
    * 이 워크트리를 구동하는 에이전트 백엔드. 네이티브 서브에이전트(Claude 의 Task · Codex 의
    * collab)는 정의상 부모와 같은 백엔드라 이 값이 곧 그 행의 백엔드다.
    *
-   * 위임(delegate)으로 띄운 교차 백엔드 실행만 `RunningAgent.backend` 를 따로 싣고, 그때는
-   * 그 값이 이 기본값을 이긴다 — 그래야 "Claude 워크스페이스인데 Codex 가 돌고 있다"가 보인다.
+   * 위임(delegate)으로 띄운 교차 백엔드 실행만 자기 백엔드를 따로 싣고, 그때는 그 값이 이
+   * 기본값을 이긴다 — 그래야 "Claude 워크스페이스인데 Codex 가 돌고 있다"가 보인다.
    */
   backend,
   now
@@ -33,22 +39,30 @@ export function WorkspaceAgents({
   backend: AgentBackendId
   now: number
 }): React.JSX.Element | null {
-  const agents = useStore((s) => s.runningAgents[workspaceId])
+  const live = useStore((s) => s.runningAgents[workspaceId])
+  const items = useStore((s) => s.transcripts[workspaceId])
+  const inThisWorkspace = useStore((s) => s.selectedWorkspaceId === workspaceId)
+  const openToolId = useStore((s) =>
+    s.selectedSubagent?.workspaceId === workspaceId ? s.selectedSubagent.toolId : null
+  )
   const collapsed = useStore((s) => s.agentsCollapsed[workspaceId] ?? false)
   const toggle = useStore((s) => s.toggleAgentsCollapsed)
   // 설정이 로드되기 전(app === null)에는 켜진 것으로 본다 — 기본값이 켜짐이므로 첫 프레임에
   // 목록이 깜빡이며 사라지는 일이 없다.
   const enabled = useStore((s) => s.app?.settings.showRunningAgents ?? true)
+  const open = useStore((s) => s.openSubagent)
 
   // 표시만 끈다 — main 은 계속 추적하므로 다시 켜면 지금 돌고 있는 것이 바로 나타난다.
   if (!enabled) return null
-  if (!agents || agents.length === 0) return null
 
-  // 오래 돌고 있는 것이 위로 — 멈춘 것이 눈에 먼저 띄어야 한다.
-  const rows = [...agents].sort((a, b) => a.startedAt - b.startedAt)
-  // 접었을 때도 "몇 개가 얼마나 돌고 있나"는 남긴다 — 접기가 정보를 감추기만 하면
-  // 접어 둔 채로 잊어버리게 된다.
-  const oldest = rows[0]
+  const rows = buildRows(items, live, inThisWorkspace)
+  if (rows.length === 0) return null
+
+  const running = rows.filter((row) => row.running)
+  // 접었을 때도 "몇 개가 얼마나 돌고 있나"는 남긴다 — 접기가 정보를 감추기만 하면 접어 둔 채로
+  // 잊어버리게 된다. 도는 것이 없으면 셈의 대상은 남은 기록이다.
+  const summary = running.length ? `${running.length} running` : `${rows.length} recent`
+  const oldest = running[0]
   // 워크스페이스 행은 paddingLeft: 12 + depth*14 에 StatusDot(8px)+gap(8px) 이 앞에 온다.
   // 에이전트 행을 그 이름 텍스트와 같은 기준선에 맞춰 하위 항목으로 읽히게 한다.
   const indent = 12 + depth * 14 + 16
@@ -59,11 +73,11 @@ export function WorkspaceAgents({
         onClick={() => toggle(workspaceId)}
         style={{ paddingLeft: indent }}
         className="w-full flex items-center gap-1 pr-2 py-0.5 rounded-md text-xs text-neutral-500 hover:bg-[var(--surface)] hover:text-neutral-300 transition-colors"
-        title={collapsed ? 'Show running work' : 'Hide running work'}
+        title={collapsed ? 'Show subagents' : 'Hide subagents'}
       >
         {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
-        <span className="flex-1 text-left">{rows.length} running</span>
-        {collapsed && (
+        <span className="flex-1 text-left">{summary}</span>
+        {collapsed && oldest && (
           <span className="tabular-nums text-neutral-600">
             {formatDuration(now - oldest.startedAt)}
           </span>
@@ -71,58 +85,88 @@ export function WorkspaceAgents({
       </button>
 
       {!collapsed &&
-        rows.map((agent) => {
+        rows.map((row) => {
           // 위임 실행은 자기 백엔드를 싣고 오고, 네이티브 서브에이전트는 부모의 것을 따른다.
-          const agentBackend = agent.backend ?? backend
-          const isTask = typeof agent.taskType === 'string'
+          const rowBackend = row.backend ?? backend
+          const selected = row.toolId != null && row.toolId === openToolId
+          const elapsed = row.running ? now - row.startedAt : row.durationMs
           return (
             <div
-              key={agent.taskId}
+              key={row.key}
               style={{ paddingLeft: indent + 12 }}
-              className="flex items-baseline gap-1.5 pr-2 py-0.5 text-xs"
+              className={
+                'flex items-baseline gap-1.5 pr-2 py-0.5 text-xs rounded-md ' +
+                (selected ? 'bg-[var(--surface-2)]' : '')
+              }
               title={[
-                isTask
-                  ? `Background task · ${agent.taskType}`
-                  : `${agent.agentType} · ${AGENT_BACKEND_LABELS[agentBackend]}`,
-                agent.description,
-                agent.lastToolName ? `Last tool: ${agent.lastToolName}` : null,
-                typeof agent.toolUses === 'number' ? `${agent.toolUses} tool uses` : null,
-                typeof agent.totalTokens === 'number'
-                  ? `${agent.totalTokens.toLocaleString()} tokens`
-                  : null
+                row.isTask
+                  ? `Background task · ${row.agentType}`
+                  : `${row.agentType} · ${AGENT_BACKEND_LABELS[rowBackend]}`,
+                row.description,
+                row.lastToolName ? `Last tool: ${row.lastToolName}` : null,
+                typeof row.toolUses === 'number' ? `${row.toolUses} tool uses` : null,
+                typeof row.totalTokens === 'number'
+                  ? `${row.totalTokens.toLocaleString()} tokens`
+                  : null,
+                row.toolId
+                  ? 'Click to open this subagent’s conversation'
+                  : 'This run has no conversation to open'
               ]
                 .filter(Boolean)
                 .join('\n')}
             >
-              {/* 좌측 마크가 "어떤 에이전트로 돌고 있나"(Claude Code / Codex)를, 옆 텍스트가
-                "어떤 서브에이전트인가"(Explore 등)를 나타낸다 — 두 축이 겹치지 않는다. */}
-              {isTask ? (
-                <span className="shrink-0 text-neutral-500">●</span>
-              ) : (
-                <span className="shrink-0 translate-y-0.5">
-                  <AgentBackendMark backend={agentBackend} size={10} />
+              {/* 이름과 설명 묶음만 버튼이다 — 행 전체를 버튼으로 만들면 옆의 중지 버튼이 버튼
+                  안에 중첩된다. */}
+              <button
+                type="button"
+                disabled={!row.toolId}
+                onClick={() => row.toolId && void open(workspaceId, row.toolId)}
+                aria-current={selected ? 'page' : undefined}
+                className={
+                  'min-w-0 flex-1 flex items-baseline gap-1.5 text-left ' +
+                  (row.toolId ? 'hover:text-neutral-300' : 'cursor-default')
+                }
+              >
+                {/* 좌측 마크가 "어떤 에이전트로 돌고 있나"(Claude Code / Codex)를, 옆 텍스트가
+                    "어떤 서브에이전트인가"(Explore 등)를 나타낸다 — 두 축이 겹치지 않는다. */}
+                {row.isTask ? (
+                  <span className="shrink-0 text-neutral-500">●</span>
+                ) : (
+                  <span className="shrink-0 translate-y-0.5">
+                    <AgentBackendMark backend={rowBackend} size={10} />
+                  </span>
+                )}
+                {/* 타입 이름도 결국 잘린다 — `humanize-korean:translationese-research-distiller`
+                    처럼 긴 이름이 오면 shrink-0 은 행을 사이드바 폭 밖으로 밀어내 경과 시간까지
+                    잘라 먹는다. 설명이 먼저 0 폭으로 줄고(basis 0), 그래도 모자라면 여기서 준다. */}
+                <span
+                  className={
+                    'min-w-0 truncate font-medium ' +
+                    (selected ? 'text-neutral-200' : 'text-neutral-400')
+                  }
+                >
+                  {row.agentType}
+                </span>
+                {/* 설명은 남는 폭만 차지하고 먼저 잘린다 — 타입·경과 시간이 항상 읽히는 쪽이 유용하다. */}
+                <span className="min-w-0 flex-1 truncate text-neutral-600">
+                  {row.lastToolName ? `${row.lastToolName} · ` : ''}
+                  {row.description}
+                </span>
+              </button>
+              {row.running && (
+                <Loader2 size={9} className="shrink-0 animate-spin text-neutral-600" />
+              )}
+              {typeof elapsed === 'number' && (
+                <span className="shrink-0 tabular-nums text-neutral-600">
+                  {formatDuration(elapsed)}
                 </span>
               )}
-              {/* 타입 이름도 결국 잘린다 — `humanize-korean:translationese-research-distiller`
-                  처럼 긴 이름이 오면 shrink-0 은 행을 사이드바 폭 밖으로 밀어내 경과 시간까지
-                  잘라 먹는다. 설명이 먼저 0 폭으로 줄고(basis 0), 그래도 모자라면 여기서 준다. */}
-              <span className="min-w-0 truncate font-medium text-neutral-400">
-                {agent.agentType}
-              </span>
-              {/* 설명은 남는 폭만 차지하고 먼저 잘린다 — 타입·경과 시간이 항상 읽히는 쪽이 유용하다. */}
-              <span className="min-w-0 flex-1 truncate text-neutral-600">
-                {agent.lastToolName ? `${agent.lastToolName} · ` : ''}
-                {agent.description}
-              </span>
-              <span className="shrink-0 tabular-nums text-neutral-600">
-                {formatDuration(now - agent.startedAt)}
-              </span>
-              {agent.canStop && (
+              {row.canStop && row.taskId && (
                 <button
                   type="button"
-                  aria-label={`Stop ${isTask ? 'background task' : 'agent'}: ${agent.description}`}
-                  title={`Stop ${isTask ? 'background task' : 'agent'}`}
-                  onClick={() => void window.api.chat.stopTask(workspaceId, agent.taskId)}
+                  aria-label={`Stop ${row.isTask ? 'background task' : 'agent'}: ${row.description}`}
+                  title={`Stop ${row.isTask ? 'background task' : 'agent'}`}
+                  onClick={() => void window.api.chat.stopTask(workspaceId, row.taskId!)}
                   className="shrink-0 rounded p-0.5 text-neutral-500 hover:bg-[var(--surface-2)] hover:text-[var(--danger-400)]"
                 >
                   <Square size={9} fill="currentColor" />

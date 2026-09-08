@@ -42,6 +42,7 @@ import {
   workspaceDisplayName
 } from '@shared/types'
 import { fileDiffHash, isFileViewed, viewedKey } from '@shared/reviewViewed'
+import { mainConversationItems } from '@shared/subagents'
 import { playNotification } from './lib/sound'
 import {
   carryMissingShownFlag,
@@ -477,6 +478,19 @@ interface UIState {
    * 리액트가 변화를 못 보고 두 번째 선택이 조용히 무시된다).
    */
   jumpTarget: { workspaceId: string; itemId: string; seq: number } | null
+  /**
+   * Agents 탭으로 데려갈 목적지(사이드바의 실행 중 행, 대화의 Task 카드에서 눌렀을 때).
+   *
+   * `toolId` 가 있으면 그 서브에이전트의 대화를 펼치고 그 자리로 스크롤한다. seq 는 jumpTarget 과
+   * 같은 이유의 토큰이다 — 같은 행을 연달아 눌러도 이동이 다시 일어나야 한다.
+   */
+  /**
+   * 지금 열어 보고 있는 서브에이전트. null 이면 워크스페이스의 본 대화를 보고 있다.
+   *
+   * 워크스페이스 선택과 **나란한 축**이 아니라 그 **안쪽**이다 — 서브에이전트는 언제나 어느
+   * 워크스페이스의 것이고, 워크스페이스를 옮기면 따라갈 곳이 없으므로 지워진다.
+   */
+  selectedSubagent: { workspaceId: string; toolId: string } | null
   toasts: Toast[]
   confirmState: ConfirmState | null
   /**
@@ -780,6 +794,10 @@ interface UIState {
    * 아카이브된 워크스페이스는 대화창이 없으므로 안내만 하고 이동하지 않는다.
    */
   jumpToTranscriptItem: (workspaceId: string, itemId: string) => Promise<void>
+  /** 그 워크스페이스를 고르고, 그 서브에이전트의 대화로 들어간다. */
+  openSubagent: (workspaceId: string, toolId: string) => Promise<void>
+  /** 서브에이전트에서 나와 부모 대화로 돌아간다. */
+  closeSubagent: () => void
   /** 이동이 끝났다(또는 대상을 못 찾았다) — 대기 중인 목적지를 지운다. */
   clearJumpTarget: () => void
   openFileViewer: (workspaceId: string, path: string, line?: number) => void
@@ -1008,6 +1026,8 @@ type PendingDelta = {
   id: string
   itemType: 'assistant' | 'thinking'
   text: string
+  /** 서브에이전트가 낸 것이면 그 부모 도구 호출 id. 메인 대화가 이 항목을 걸러 내는 근거다. */
+  parentToolId?: string
 }
 const pendingDeltas = new Map<string, PendingDelta>()
 let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
@@ -1033,7 +1053,10 @@ function applyPendingDeltas(workspaceId?: string): void {
             type: delta.itemType,
             text: delta.text,
             ts: Date.now(),
-            streaming: true
+            streaming: true,
+            // 항목을 처음 만드는 것은 델타다(권위 있는 항목은 나중에 온다). 여기서 부모를 싣지
+            // 않으면 서브에이전트의 말이 메인 대화에 잠깐 떴다가 뒤늦게 사라진다.
+            ...(delta.parentToolId ? { parentToolId: delta.parentToolId } : {})
           }
         ]
       } else {
@@ -1216,6 +1239,7 @@ export const useStore = create<UIState>((set, get) => ({
   fileViewer: null,
   fileViewerTreeWidth: 260,
   jumpTarget: null,
+  selectedSubagent: null,
   toasts: [],
   confirmState: null,
   overlayOpen: false,
@@ -1800,7 +1824,13 @@ export const useStore = create<UIState>((set, get) => ({
           return { contextUsage, promptSuggestions }
         })
       } else if (event.type === 'delta') {
-        scheduleDelta({ workspaceId, id: event.id, itemType: event.itemType, text: event.text })
+        scheduleDelta({
+          workspaceId,
+          id: event.id,
+          itemType: event.itemType,
+          text: event.text,
+          ...(event.parentToolId ? { parentToolId: event.parentToolId } : {})
+        })
       } else if (event.type === 'status' || event.type === 'session') {
         patchWorkspace(set, get, workspaceId, (w) => {
           if (event.type === 'status') {
@@ -2853,6 +2883,10 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   selectWorkspace: async (id, opts) => {
+    // 다른 워크스페이스로 옮기면 열어 두었던 서브에이전트는 따라갈 곳이 없다. 같은 워크스페이스를
+    // 다시 고르는 것은 "본 대화로 돌아간다" 는 뜻이므로 그때도 지운다 — 사이드바에서 워크스페이스
+    // 행을 눌렀는데 서브에이전트 대화가 그대로면 눌린 것으로 보이지 않는다.
+    if (get().selectedSubagent) set({ selectedSubagent: null })
     // 화면이 둘로 나뉘어 있으면 "고른다" 는 것은 **포커스된 칸을 갈아 끼운다** 는 뜻이다.
     // 아래의 "고르면 전체 화면을 닫는다" 는 화면이 하나일 때의 규칙이라, 분할에 그대로
     // 적용하면 사이드바를 한 번 누를 때마다 사용자가 방금 만든 짝이 무너진다. 판정은
@@ -2950,7 +2984,12 @@ export const useStore = create<UIState>((set, get) => ({
           ...s.transcriptPaging,
           [id]: {
             limit: TRANSCRIPT_INITIAL_LIMIT,
-            hasMore: hasMoreTranscriptHistory(history.length, TRANSCRIPT_INITIAL_LIMIT),
+            // 페이지 예산은 부모 대화 항목만 센다(main 의 loadTail 과 같은 셈) — 함께 실려 온
+            // 서브에이전트 항목까지 세면 대화의 머리에 닿고도 "더 있다" 로 남는다.
+            hasMore: hasMoreTranscriptHistory(
+              mainConversationItems(history).length,
+              TRANSCRIPT_INITIAL_LIMIT
+            ),
             loading: false
           }
         }
@@ -3345,7 +3384,7 @@ export const useStore = create<UIState>((set, get) => ({
           ...s.transcriptPaging,
           [workspaceId]: {
             limit,
-            hasMore: hasMoreTranscriptHistory(older.length, limit),
+            hasMore: hasMoreTranscriptHistory(mainConversationItems(older).length, limit),
             loading: false
           }
         }
@@ -3444,6 +3483,15 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   clearJumpTarget: () => set((s) => (s.jumpTarget ? { jumpTarget: null } : {})),
+
+  openSubagent: async (workspaceId, toolId) => {
+    // 목적지를 먼저 세운다 — 다른 워크스페이스에서 눌렀다면 화면은 선택이 끝난 뒤에 마운트되고,
+    // 그때 이 값을 보고 곧바로 그 서브에이전트의 대화를 그린다(부모 대화가 한 프레임 스치지 않는다).
+    set({ selectedSubagent: { workspaceId, toolId } })
+    if (get().selectedWorkspaceId !== workspaceId) await get().selectWorkspace(workspaceId)
+  },
+
+  closeSubagent: () => set((s) => (s.selectedSubagent ? { selectedSubagent: null } : {})),
 
   openFileViewer: (workspaceId, path, line) =>
     set((s) => {

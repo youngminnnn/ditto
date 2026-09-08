@@ -56,7 +56,10 @@ describe('병렬 위임', () => {
     const deps = {
       emitChatEvent: (_id: string, event: ChatEvent) => {
         if (event.type === 'agents') emitted.push(event.agents)
-      }
+      },
+      // Agents 패널의 행과 활동 항목이 이리로 나간다. 이 테스트가 보는 것은 사이드바 목록이라
+      // 내용은 버리지만, 없으면 실행 자체가 죽는다.
+      postToTranscript: () => {}
     } as never
 
     const claude = runDelegateTool('claude')(deps, 'ws1', { description: 'A', prompt: 'a' })
@@ -89,7 +92,7 @@ describe('병렬 위임', () => {
  */
 describe('위임 실행의 모델·강도', () => {
   const deps = (listModels = vi.fn(async () => [{ id: 'claude-haiku-4-5' }])): never =>
-    ({ emitChatEvent: () => {}, listModels }) as never
+    ({ emitChatEvent: () => {}, postToTranscript: () => {}, listModels }) as never
 
   beforeEach(() => {
     state.value = {
@@ -144,6 +147,7 @@ describe('위임 실행의 모델·강도', () => {
       emitChatEvent: (_id: string, event: ChatEvent) => {
         if (event.type === 'agents') emitted.push(event.agents)
       },
+      postToTranscript: () => {},
       listModels: vi.fn(async () => [{ id: 'claude-haiku-4-5' }])
     } as never
 

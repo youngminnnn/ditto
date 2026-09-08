@@ -3,6 +3,7 @@ import { copyFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:
 import { join } from 'node:path'
 import { writeFileAtomic, appendFileDurable } from './fsutil'
 import { searchTranscripts } from './transcriptSearch'
+import { isSubagentItem } from '@shared/subagents'
 import type { ChatItem, TranscriptSearchResult } from '@shared/types'
 
 /** 메모리 캐시에 동시에 보유할 최대 workspace 수. 초과 시 LRU 로 가장 오래된 것을 제거한다. */
@@ -85,12 +86,24 @@ class TranscriptStore {
    * 없다. 여기서 아끼는 것은 IPC 로 건너가는 양과 렌더러가 만드는 DOM 이고, 파싱 결과는 캐시에
    * 남아 다음 페이지 요청이 디스크를 다시 읽지 않는다.
    *
-   * 돌려준 개수가 `limit` 보다 적으면 그것이 곧 "더 오래된 것은 없다" 는 신호다.
+   * **limit 은 부모 대화에 그려지는 항목만 센다.** 서브에이전트의 항목은 같은 파일에 살지만
+   * Agents 패널의 몫이라 대화에는 나오지 않는다([[shared/subagents]]) — 예산에 함께 세면
+   * 서브에이전트를 많이 쓴 턴 하나가 한 페이지를 통째로 먹고, 워크스페이스를 열었을 때 대화가
+   * 텅 빈 것처럼 보인다. 그래도 그 구간의 서브에이전트 항목은 함께 실어 보낸다: 창 안의
+   * 도구 카드가 가리키는 대화가 패널에도 있어야 한다.
+   *
+   * 돌려준 것 중 **부모 대화 항목의 수**가 `limit` 보다 적으면 그것이 곧 "더 오래된 것은
+   * 없다" 는 신호다(렌더러의 hasMoreTranscriptHistory 가 그렇게 읽는다).
    */
   loadTail(workspaceId: string, limit: number): ChatItem[] {
     const all = this.load(workspaceId)
     if (limit <= 0 || limit >= all.length) return all
-    return all.slice(-limit)
+    let counted = 0
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (!isSubagentItem(all[i])) counted++
+      if (counted === limit) return all.slice(i)
+    }
+    return all
   }
 
   /**

@@ -149,6 +149,36 @@ describe('TranscriptStore.loadTail', () => {
     expect(getTranscripts().loadTail('ws-none', 300)).toEqual([])
   })
 
+  it('서브에이전트 항목은 페이지 예산에서 빼되 창 안에 함께 실어 보낸다', async () => {
+    const { getTranscripts } = await import('./transcripts')
+    const t = getTranscripts()
+    // 대화 한 줄마다 서브에이전트가 두 줄씩 남긴 상황. 예산을 함께 세면 3개를 요청했을 때
+    // 대화는 한 줄만 오고, 사용자는 워크스페이스를 열자마자 텅 빈 화면을 본다.
+    for (let i = 0; i < 6; i++) {
+      t.upsert('ws-sub', assistant(`a${i}`))
+      t.upsert('ws-sub', { ...assistant(`s${i}a`), parentToolId: 't1' } as ChatItem)
+      t.upsert('ws-sub', { ...assistant(`s${i}b`), parentToolId: 't1' } as ChatItem)
+    }
+
+    const page = t.loadTail('ws-sub', 3)
+    expect(page.filter((item) => !('parentToolId' in item && item.parentToolId))).toHaveLength(3)
+    // 그 구간의 서브에이전트 항목도 함께 온다 — 도구 카드가 가리키는 대화가 패널에도 있어야 한다.
+    expect(page.map((item) => item.id)).toContain('s5a')
+  })
+
+  it('대화의 머리에 닿으면 서브에이전트 항목이 많아도 예산을 못 채운다', async () => {
+    const { getTranscripts } = await import('./transcripts')
+    const t = getTranscripts()
+    t.upsert('ws-head', assistant('a0'))
+    for (let i = 0; i < 20; i++) {
+      t.upsert('ws-head', { ...assistant(`s${i}`), parentToolId: 't1' } as ChatItem)
+    }
+
+    // 파일에는 21줄이 있지만 대화는 한 줄뿐이다. 이 "예산을 못 채웠다" 가 곧 더 없다는 신호다.
+    const page = t.loadTail('ws-head', 3)
+    expect(page.filter((item) => !('parentToolId' in item && item.parentToolId))).toHaveLength(1)
+  })
+
   it('같은 id 가 갱신된 뒤에도 꼬리는 합쳐진 결과 기준이다', async () => {
     const { getTranscripts } = await import('./transcripts')
     const t = getTranscripts()

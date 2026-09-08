@@ -16,6 +16,7 @@ import { forgetWorkspaceUsage } from './usageLedger'
 import { forgetRunningAgents } from './runningAgentsCache'
 import { setSleepBlockerEnabled } from './sleepBlocker'
 import { getTranscripts } from './transcripts'
+import { relayOriginLabel, relayPrompt, relayedUserItem } from './subagentRelay'
 import { buildHandoffPrompt, estimateHandoffTokens, formatHandoffTokens } from '@shared/handoff'
 import { listDir, readFileInRoot, searchFiles, writeFileInRoot } from './fsbrowse'
 import { importMigration, scanMigration } from './migrate'
@@ -1412,6 +1413,34 @@ export function registerIpc(ctx: IpcContext): void {
     stackedWaits.resetUnproductive(workspaceId)
     ctx.sessions.sendMessage(workspaceId, text, images)
   })
+
+  /**
+   * 도는 서브에이전트에게 말을 건다 — **부모를 거치는 릴레이**다.
+   *
+   * 직접 넣을 방법이 없다. Agent SDK 가 호스트에게 준 것은 `stopTask` 하나뿐이고, 받는 쪽 inbox 에
+   * 메시지를 쓰는 `SendMessage` 는 모델이 부르는 도구다. 그래서 여기서 하는 일은 두 가지다.
+   *
+   * 1. 사용자의 말을 **그 서브에이전트의 대화에** 남긴다. 자기가 친 말이 화면에 안 남으면 보냈는지
+   *    알 수 없다. `parentToolId` 를 달아 두면 그 대화에만 나타나고 부모 대화는 그대로다.
+   * 2. 부모 세션에 릴레이 지시 턴을 넣는다. **감추지 않는다**(silent 가 아니다) — 사용자가 치지
+   *    않은 턴이 토큰을 쓰므로 왜 돌았는지가 대화에 남아야 한다는 규약을 따른다([[types]]
+   *    WooiTurnOrigin). 대신 접힌 한 줄로만 보인다.
+   *
+   * 부모가 그 지시를 그대로 따른다는 보장은 없다 — 그래서 화면도 이 한계를 감추지 않는다.
+   */
+  handle(
+    IPC.chatSendToSubagent,
+    (_e, workspaceId: string, toolId: string, address: string, text: string) => {
+      const item = relayedUserItem(toolId, text, Date.now())
+      getTranscripts().upsert(workspaceId, item)
+      dispatch(IPC.evtChat, { workspaceId, event: { type: 'item', item } })
+
+      stackedWaits.resetUnproductive(workspaceId)
+      ctx.sessions.sendMessage(workspaceId, relayPrompt(address, text), undefined, {
+        origin: { kind: 'wooi', label: relayOriginLabel(address) }
+      })
+    }
+  )
 
   handle(IPC.chatInterrupt, (_e, workspaceId: string) => {
     stackedWaits.cancel(workspaceId, true)

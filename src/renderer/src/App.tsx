@@ -35,6 +35,8 @@ import SplitPanes from './components/SplitPanes'
 import { useFeatureNudge } from './lib/featureNudge'
 import PrReviewStartModal from './components/review/PrReviewStartModal'
 import ChatView from './components/ChatView'
+import SubagentChatView from './components/SubagentChatView'
+import { nextSubagent, subagentCycle } from './lib/subagentRows'
 import ArchivedChatView from './components/ArchivedChatView'
 import FileViewerOverlay from './components/FileViewerOverlay'
 import FileQuickOpen from './components/FileQuickOpen'
@@ -93,6 +95,11 @@ export default function App(): React.JSX.Element {
   const init = useStore((s) => s.init)
   const app = useStore((s) => s.app)
   const selectedId = useStore((s) => s.selectedWorkspaceId)
+  // 사이드바나 대화의 Task 카드에서 골라 들어온 서브에이전트. 워크스페이스를 옮기면 지워진다
+  // (store 의 selectWorkspace) — 여기서는 지금 고른 것과 짝이 맞을 때만 읽는다.
+  const openSubagentId = useStore((s) =>
+    s.selectedSubagent?.workspaceId === s.selectedWorkspaceId ? s.selectedSubagent.toolId : null
+  )
   const authStatus = useStore((s) => s.authStatus)
   const rightWidth = useStore((s) => s.rightWidth)
   const setRightWidth = useStore((s) => s.setRightWidth)
@@ -554,6 +561,27 @@ export default function App(): React.JSX.Element {
           // 워크스페이스마다 따로 기억하므로 지금 보고 있는 워크스페이스에만 걸린다.
           if (focusedWorkspaceId) st.cycleTranscriptDensity(focusedWorkspaceId)
           return
+
+        case 'cycle-subagent': {
+          if (!focusedWorkspaceId) return
+          const cycle = subagentCycle(
+            st.transcripts[focusedWorkspaceId],
+            st.runningAgents[focusedWorkspaceId]
+          )
+          if (cycle.length === 0) {
+            // 조용히 아무 일도 안 하면 키가 고장난 것으로 읽힌다. 왜 갈 곳이 없는지 밝힌다.
+            st.pushToast('info', 'This workspace has not run any subagents yet.')
+            return
+          }
+          const current =
+            st.selectedSubagent?.workspaceId === focusedWorkspaceId
+              ? st.selectedSubagent.toolId
+              : null
+          const next = nextSubagent(cycle, current)
+          if (next) void st.openSubagent(focusedWorkspaceId, next)
+          else st.closeSubagent()
+          return
+        }
       }
     },
     [fileViewerVisible, toggleDevScript]
@@ -702,6 +730,16 @@ export default function App(): React.JSX.Element {
         if (typing() || !st.selectedWorkspaceId) return
         e.preventDefault()
         runPaletteAction('toggle-tool-results')
+        return
+      }
+
+      // ⌃A — 이 워크스페이스의 서브에이전트 대화를 차례로 열고, 마지막을 지나면 부모로 돌아온다.
+      // ⌃O 와 같은 "대화 표면" 계열의 키다. 입력 중에는 양보한다 — ⌃A 는 여러 입력 위젯에서
+      // 줄 맨 앞으로 가는 관습적 글쇠이고, 그것을 빼앗으면 타이핑이 망가진다.
+      if (e.code === 'KeyA' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        if (typing() || !st.selectedWorkspaceId) return
+        e.preventDefault()
+        runPaletteAction('cycle-subagent')
         return
       }
 
@@ -1118,8 +1156,21 @@ export default function App(): React.JSX.Element {
             <StackScreen key={activeStackWorkspaceId} workspaceId={activeStackWorkspaceId} />
           ) : selected ? (
             <>
+              {/*
+                서브에이전트를 골랐으면 그 대화가 이 자리에 선다 — 우측 작업 패널은 그대로 둔다.
+                서브에이전트는 부모와 **같은 worktree** 에서 일하므로, 그가 무엇을 고쳤는지는
+                여전히 그 워크스페이스의 Changes 에서 본다.
+              */}
               <div data-tour="chat" className="flex-1 min-w-0">
-                <ChatView key={selected.id} workspace={selected} />
+                {openSubagentId ? (
+                  <SubagentChatView
+                    key={`${selected.id}:${openSubagentId}`}
+                    workspace={selected}
+                    toolId={openSubagentId}
+                  />
+                ) : (
+                  <ChatView key={selected.id} workspace={selected} />
+                )}
               </div>
               {rightPanelOpen && !workPaneDetached && (
                 <>

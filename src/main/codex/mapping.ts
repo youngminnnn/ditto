@@ -125,7 +125,7 @@ export function mapNotification(
 
     // 실패한 턴도 여기로 온다(turn.status === 'failed'). 별도 turn/failed 알림은 없다.
     case NOTIFY.turnCompleted:
-      return mapTurnEnd(params as TurnParams, ts)
+      return mapTurnEnd(params as TurnParams, ts, state)
 
     case NOTIFY.itemStarted:
     case NOTIFY.itemCompleted:
@@ -337,13 +337,36 @@ function guardianAction(value: unknown): string | null {
 
 // ── 턴 종료 ─────────────────────────────────────────────────────────────
 
-function mapTurnEnd(params: TurnParams, ts: number): Mapped {
+function mapTurnEnd(params: TurnParams, ts: number, state: MapperState): Mapped {
   const turn = params?.turn
   const status = turn?.status
   const failed = status === 'failed'
 
   const events: ChatEvent[] = []
   const persist: ChatItem[] = []
+
+  // Codex 는 서브에이전트가 **끝났다**는 신호를 따로 주지 않는다 — 중단(interrupted)만 온다.
+  // 그래서 턴이 끝나는 지점을 상한으로 삼아 아직 열려 있는 행을 마감한다. 그러지 않으면 패널에
+  // 영원히 도는 것처럼 보이는 행이 남고, 그건 없는 것보다 나쁘다.
+  for (const agent of state.agents.values()) {
+    const row: ChatItem = {
+      id: `codex:subagent:${agent.taskId}`,
+      type: 'subagent',
+      toolId: agent.taskId,
+      backend: 'codex',
+      agentType: agent.agentType,
+      description: agent.description,
+      status: failed ? 'failed' : 'completed',
+      durationMs: ts - agent.startedAt,
+      ts: agent.startedAt
+    }
+    events.push({ type: 'item', item: row })
+    persist.push(row)
+  }
+  if (state.agents.size) {
+    state.agents.clear()
+    events.push({ type: 'agents', agents: [] })
+  }
 
   if (failed) {
     const text = errorText(turn?.error) ?? 'The turn failed.'
@@ -520,17 +543,40 @@ function mapItem(
 
     case 'subAgentActivity': {
       const agentId = item.agentThreadId ?? item.id ?? id
-      if (item.kind === 'interrupted') state.agents.delete(agentId)
+      const stopped = item.kind === 'interrupted'
+      const description = item.kind === 'interacted' ? 'Working with the parent agent' : 'Running'
+      const previous = state.agents.get(agentId)
+      if (stopped) state.agents.delete(agentId)
       else {
-        const previous = state.agents.get(agentId)
         state.agents.set(agentId, {
           taskId: agentId,
+          toolUseId: agentId,
           agentType: item.agentPath ?? 'Codex agent',
-          description: item.kind === 'interacted' ? 'Working with the parent agent' : 'Running',
+          description,
           startedAt: previous?.startedAt ?? ts
         })
       }
-      return { events: [{ type: 'agents', agents: [...state.agents.values()] }], persist: [] }
+      // Agents 패널의 행. Codex 는 서브에이전트의 **내부 대화**를 주지 않으므로(wire 에 있는
+      // 것은 kind·agentThreadId·agentPath 뿐) 펼쳐도 본문은 비어 있다 — 패널이 그 사실을
+      // 그대로 적는다. 그래도 어떤 에이전트가 언제 돌았는지는 남으므로, 끝나고 나면 흔적조차
+      // 없던 예전보다는 알 수 있는 것이 많다.
+      const row: ChatItem = {
+        id: `codex:subagent:${agentId}`,
+        type: 'subagent',
+        toolId: agentId,
+        backend: 'codex',
+        agentType: item.agentPath ?? previous?.agentType ?? 'Codex agent',
+        description: stopped ? (previous?.description ?? description) : description,
+        status: stopped ? 'stopped' : 'running',
+        ts: previous?.startedAt ?? ts
+      }
+      return {
+        events: [
+          { type: 'agents', agents: [...state.agents.values()] },
+          { type: 'item', item: row }
+        ],
+        persist: [row]
+      }
     }
 
     case 'hookPrompt': {

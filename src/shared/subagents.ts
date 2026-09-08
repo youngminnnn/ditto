@@ -46,7 +46,51 @@ export function subagentChildren(items: readonly ChatItem[], toolId: string): Ch
   return items.filter((item) => 'parentToolId' in item && item.parentToolId === toolId)
 }
 
-/** 지금 돌고 있는 서브에이전트 수. 탭 배지가 읽는다 — 0 이면 배지를 달지 않는다. */
+/** 지금 돌고 있는 서브에이전트 수. 사이드바 요약이 읽는다 — 0 이면 아무것도 그리지 않는다. */
 export function runningSubagentCount(items: ChatItem[] | undefined): number {
   return subagentRows(items ?? []).filter((row) => row.status === 'running').length
+}
+
+/** 그 서브에이전트 행 하나. 없으면 null. */
+export function subagentRow(items: readonly ChatItem[], toolId: string): SubagentRow | null {
+  return subagentRows(items).find((row) => row.toolId === toolId) ?? null
+}
+
+/**
+ * 이 서브에이전트에게 지금 말을 걸 수 있는가, 걸 수 있다면 어느 이름으로.
+ *
+ * ## 왜 이름이 필요한가
+ *
+ * Wooi 는 서브에이전트에게 **직접** 보낼 수 없다. Agent SDK 가 호스트에게 준 것은
+ * `stopTask(taskId)` 하나뿐이고, 메시지를 넣는 `SendMessage` 는 **모델이 부르는 도구**다.
+ * 그래서 보내기는 부모에게 대신 전해 달라고 시키는 릴레이가 되는데, 그 릴레이가 성립하려면
+ * 받는 쪽에 **주소**가 있어야 한다 — Claude Code 의 Agent 도구가 그렇게 정의한다:
+ * "Name for the spawned agent. Makes it addressable via SendMessage({to: name}) while running."
+ *
+ * 이름은 그 서브에이전트를 띄운 Task 도구 호출의 입력에 남아 있다. 우리가 따로 기록해 둘
+ * 필요가 없고, 옛 대화를 다시 열어도 그대로 읽힌다.
+ *
+ * ## 왜 이유까지 돌려주는가
+ *
+ * 못 보내는 경우가 두 가지인데(이름 없이 떴다 · 이미 끝났다) 둘은 사용자가 할 수 있는 일이
+ * 다르다. 입력창을 조용히 비활성만 시키면 어느 쪽인지 알 수 없어 고장으로 읽힌다.
+ */
+export type SubagentAddress =
+  { canSend: true; name: string } | { canSend: false; reason: 'finished' | 'unnamed' }
+
+export function subagentAddress(items: readonly ChatItem[], toolId: string): SubagentAddress {
+  const row = subagentRow(items, toolId)
+  if (!row || row.status !== 'running') return { canSend: false, reason: 'finished' }
+  const name = spawnName(items, toolId)
+  return name ? { canSend: true, name } : { canSend: false, reason: 'unnamed' }
+}
+
+/** 이 서브에이전트를 띄운 Task 도구 호출이 지어 준 이름(`Agent({name})`). 없으면 null. */
+function spawnName(items: readonly ChatItem[], toolId: string): string | null {
+  const use = items.find((item) => item.type === 'tool_use' && item.toolId === toolId)
+  if (!use || use.type !== 'tool_use') return null
+  const input = use.input
+  if (typeof input !== 'object' || input === null) return null
+  const name = (input as Record<string, unknown>).name
+  return typeof name === 'string' && name.trim() ? name : null
 }

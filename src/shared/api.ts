@@ -277,6 +277,18 @@ export interface WooiApi {
   chat: {
     /** 텍스트(+선택적 붙여넣기 이미지)를 보낸다. 이미지는 base64 로 세션에 직접 전달된다. */
     send(workspaceId: string, text: string, images?: ImageAttachment[]): Promise<void>
+    /**
+     * 도는 서브에이전트에게 말을 건다.
+     *
+     * 직접 넣는 것이 아니다 — SDK 는 호스트에게 그 채널을 주지 않는다(가진 것은 `stopTask`
+     * 하나뿐이고, 메시지를 넣는 `SendMessage` 는 모델이 부르는 도구다). 그래서 이 호출은
+     * **부모에게 대신 전하라고 시킨다**: 사용자의 말을 그 서브에이전트의 대화에 남기고,
+     * 부모 세션에 릴레이 지시 턴을 넣는다.
+     *
+     * `name` 은 그 서브에이전트의 주소다(`Agent({name})`). 주소가 없으면 부를 수 없다 —
+     * 부를 수 있는지는 렌더러가 `subagentAddress` 로 먼저 판정한다.
+     */
+    sendToSubagent(workspaceId: string, toolId: string, name: string, text: string): Promise<void>
     interrupt(workspaceId: string): Promise<void>
     stopTask(workspaceId: string, taskId: string): Promise<void>
     /**

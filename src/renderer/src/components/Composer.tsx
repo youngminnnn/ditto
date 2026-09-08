@@ -153,7 +153,23 @@ function readImage(blob: Blob): Promise<{ dataBase64: string; dataUrl: string }>
   })
 }
 
-export default function Composer({ workspace }: { workspace: Workspace }): React.JSX.Element {
+export default function Composer({
+  workspace,
+  subagent
+}: {
+  workspace: Workspace
+  /**
+   * 주면 이 입력창은 워크스페이스가 아니라 **그 서브에이전트에게** 말을 건다.
+   *
+   * 부를 수 있는지는 부르는 쪽이 이미 판정했다(`subagentAddress`) — 여기 값이 있다는 것은
+   * "지금 도는 중이고 주소가 있다" 는 뜻이다. 그래서 이 안에서는 다시 묻지 않는다.
+   *
+   * 초안·↑ 히스토리·저장 프롬프트·`@` 파일 멘션은 그대로 둔다. 그것이 "같은 대화창" 의 실체다.
+   * 대신 워크스페이스를 조종하는 경로(슬래시 명령·`!`bash·`#`메모리·되감기)는 타지 않는다 —
+   * 사용자가 고른 상대는 서브에이전트이지 이 워크스페이스가 아니다.
+   */
+  subagent?: { toolId: string; name: string }
+}): React.JSX.Element {
   // 초안은 store 에 보관해 workspace 전환에도 살아남는다(작성 중 메시지 분실 방지).
   const text = useStore((s) => s.drafts[workspace.id] ?? '')
   // 이 워크스페이스의 리포에 저장해 둔 프롬프트. 리포별 스코프뿐이라 전역 목록은 보지 않는다.
@@ -624,6 +640,25 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
     if (locked) return
     const trimmed = text.trim()
     if (!trimmed && !images.length) return // 텍스트도 첨부도 없으면 무시.
+
+    // 서브에이전트에게 거는 말은 여기서 끝난다 — 아래의 로컬 인터셉터(메모리·bash·선택 카드·
+    // 인터랙티브 명령)는 전부 이 **워크스페이스**를 조종하는 것들이라 상대가 다르면 뜻이 없다.
+    if (subagent) {
+      // 첨부는 릴레이에 실을 수 없다. 사용자의 말은 부모의 프롬프트 안에 글로 들어가는데
+      // (main 의 relayPrompt) 이미지는 그 길을 못 탄다. 조용히 버리면 보냈다고 믿게 되므로
+      // 보내지 않고 밝힌다 — 초안은 그대로 남아 지우고 다시 보낼 수 있다.
+      if (images.length) {
+        pushToast(
+          'error',
+          'Attachments cannot be relayed to a subagent — send them in the main conversation.'
+        )
+        return
+      }
+      void window.api.chat.sendToSubagent(workspace.id, subagent.toolId, subagent.name, trimmed)
+      setText('')
+      historyIdx.current = -1
+      return
+    }
 
     // "# 기억할 내용" 은 메시지가 아니라 CLAUDE.md 에 남긴다 — 어느 파일에 쓸지만 고르면 된다.
     // CLAUDE.md 를 읽는 백엔드에서만 가로챈다(Codex 는 규약이 다르므로 평범한 메시지로 보낸다).
@@ -1437,11 +1472,15 @@ export default function Composer({ workspace }: { workspace: Workspace }): React
               placeholder={
                 locked
                   ? 'Compacting the conversation…  (input resumes when it finishes)'
-                  : running
-                    ? 'Steer the agent while it works…  (Enter to send · ⌘Enter to stop the turn and send now)'
-                    : text === '' && promptSuggestion
-                      ? `⇥ ${promptSuggestion}`
-                      : 'Message your agent…  (Enter to send · @ for files · / for commands · ! for terminal)'
+                  : // 서브에이전트에게 거는 말은 슬래시 명령도 `!`터미널도 타지 않는다. 안내문에
+                    // 그대로 두면 눌러도 안 되는 것을 알려 주는 셈이라, 이 모드의 안내는 따로 쓴다.
+                    subagent
+                    ? `Message ${subagent.name}…  (Enter to send · @ for files)`
+                    : running
+                      ? 'Steer the agent while it works…  (Enter to send · ⌘Enter to stop the turn and send now)'
+                      : text === '' && promptSuggestion
+                        ? `⇥ ${promptSuggestion}`
+                        : 'Message your agent…  (Enter to send · @ for files · / for commands · ! for terminal)'
               }
               className="flex-1 bg-transparent resize-none outline-none text-base leading-relaxed text-neutral-200 placeholder:text-neutral-600 py-1 disabled:cursor-not-allowed"
             />

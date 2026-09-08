@@ -1997,6 +1997,14 @@ export type ChatItem =
       attachments?: ChatAttachment[]
       /** 없으면 사용자가 직접 보낸 기존 메시지다. */
       origin?: ChatUserOrigin
+      /**
+       * 사용자가 **그 서브에이전트에게** 건 말. 부모 대화가 아니라 그 대화에만 놓인다.
+       *
+       * 이 말이 실제로 전달되는 경로는 부모를 거치는 릴레이지만([[shared/api]] sendToSubagent),
+       * 화면에 남는 자리는 사용자가 보고 있던 대화여야 한다 — 부모 대화에 남기면 자기가 어디에
+       * 쳤는지와 어디에 남았는지가 어긋난다.
+       */
+      parentToolId?: string
     }
   | {
       id: string
@@ -3793,6 +3801,8 @@ export const IPC = {
   /** /add-dir — worktree 밖 디렉토리를 작업 루트로 더한다(세션 재시작). */
   workspaceAddDir: 'workspace:addDir',
   chatSend: 'chat:send',
+  /** 도는 서브에이전트에게 말을 건다 — 부모를 거치는 릴레이다([[shared/subagents]]). */
+  chatSendToSubagent: 'chat:sendToSubagent',
   chatInterrupt: 'chat:interrupt',
   chatStopTask: 'chat:stopTask',
   chatGetHistory: 'chat:getHistory',

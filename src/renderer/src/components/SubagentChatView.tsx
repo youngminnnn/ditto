@@ -114,7 +114,10 @@ export default function SubagentChatView({
 
       {address.canSend ? (
         <>
-          <Composer workspace={workspace} subagent={{ toolId, name: address.name }} />
+          <Composer
+            workspace={workspace}
+            subagent={{ toolId, address: address.address, label: row.agentType }}
+          />
           {/*
             릴레이의 한계를 감추지 않는다. 이 메시지는 서브에이전트에게 직접 들어가지 않는다 —
             Agent SDK 는 호스트에게 그 채널을 주지 않으므로 부모에게 대신 전하라고 시킨다. 그래서
@@ -130,8 +133,8 @@ export default function SubagentChatView({
         <div className="shrink-0 border-t border-[var(--border)] px-4 py-3 text-xs text-neutral-500">
           {address.reason === 'finished'
             ? 'This run has finished — there is nobody left to message.'
-            : // 이름이 없으면 주소가 없다. 고칠 방법이 있으므로 그것까지 적는다.
-              'This subagent was spawned without a name, so it has no address to message. Ask the main agent to spawn it with Agent({name: …}) next time.'}
+            : // 위임 실행·Codex collab 이 여기 걸린다 — SDK 의 task 가 아니라 부를 주소가 없다.
+              'This run has no address the main agent can send to, so it cannot be messaged.'}
         </div>
       )}
     </div>

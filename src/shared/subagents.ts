@@ -57,40 +57,37 @@ export function subagentRow(items: readonly ChatItem[], toolId: string): Subagen
 }
 
 /**
- * 이 서브에이전트에게 지금 말을 걸 수 있는가, 걸 수 있다면 어느 이름으로.
+ * 이 서브에이전트에게 지금 말을 걸 수 있는가, 걸 수 있다면 **어느 주소로**.
  *
- * ## 왜 이름이 필요한가
+ * ## 주소는 task id 다
  *
  * Wooi 는 서브에이전트에게 **직접** 보낼 수 없다. Agent SDK 가 호스트에게 준 것은
  * `stopTask(taskId)` 하나뿐이고, 메시지를 넣는 `SendMessage` 는 **모델이 부르는 도구**다.
- * 그래서 보내기는 부모에게 대신 전해 달라고 시키는 릴레이가 되는데, 그 릴레이가 성립하려면
- * 받는 쪽에 **주소**가 있어야 한다 — Claude Code 의 Agent 도구가 그렇게 정의한다:
- * "Name for the spawned agent. Makes it addressable via SendMessage({to: name}) while running."
+ * 그래서 보내기는 부모에게 대신 전해 달라고 시키는 릴레이가 되고, 그 릴레이에는 받는 쪽의
+ * 주소가 필요하다.
  *
- * 이름은 그 서브에이전트를 띄운 Task 도구 호출의 입력에 남아 있다. 우리가 따로 기록해 둘
- * 필요가 없고, 옛 대화를 다시 열어도 그대로 읽힌다.
+ * 주소로 무엇을 쓸지는 실물로 확인했다. Agent 도구의 `name` 파라미터가 "addressable via
+ * SendMessage({to: name})" 라고 적혀 있지만 **Wooi 세션의 Agent 도구에는 그 파라미터가 없다**
+ * (모델에게 직접 확인: description·prompt·subagent_type·model·run_in_background·isolation 뿐).
+ * 이름은 붙일 수가 없으니 이름으로 주소를 삼으면 이 기능은 영영 열리지 않는다.
+ *
+ * 대신 부모가 `ListAgents` 로 보는 주소가 곧 **SDK 의 task id** 다 — 실측한 목록이
+ * `a13dff7be7d2eef2f · Explore · running` 이었고 그 값이 우리 행의 `taskId` 와 같았다.
+ * 우리는 그것을 `task_started` 에서 이미 받아 적어 두므로 따로 캘 것이 없다.
  *
  * ## 왜 이유까지 돌려주는가
  *
- * 못 보내는 경우가 두 가지인데(이름 없이 떴다 · 이미 끝났다) 둘은 사용자가 할 수 있는 일이
- * 다르다. 입력창을 조용히 비활성만 시키면 어느 쪽인지 알 수 없어 고장으로 읽힌다.
+ * 못 보내는 경우가 둘인데(이미 끝났다 · 주소가 없다) 사용자가 할 수 있는 일이 다르다.
+ * 입력창을 조용히 비활성만 시키면 어느 쪽인지 알 수 없어 고장으로 읽힌다.
  */
 export type SubagentAddress =
-  { canSend: true; name: string } | { canSend: false; reason: 'finished' | 'unnamed' }
+  { canSend: true; address: string } | { canSend: false; reason: 'finished' | 'unaddressable' }
 
 export function subagentAddress(items: readonly ChatItem[], toolId: string): SubagentAddress {
   const row = subagentRow(items, toolId)
   if (!row || row.status !== 'running') return { canSend: false, reason: 'finished' }
-  const name = spawnName(items, toolId)
-  return name ? { canSend: true, name } : { canSend: false, reason: 'unnamed' }
-}
-
-/** 이 서브에이전트를 띄운 Task 도구 호출이 지어 준 이름(`Agent({name})`). 없으면 null. */
-function spawnName(items: readonly ChatItem[], toolId: string): string | null {
-  const use = items.find((item) => item.type === 'tool_use' && item.toolId === toolId)
-  if (!use || use.type !== 'tool_use') return null
-  const input = use.input
-  if (typeof input !== 'object' || input === null) return null
-  const name = (input as Record<string, unknown>).name
-  return typeof name === 'string' && name.trim() ? name : null
+  // taskId 가 없는 행은 SDK 의 task 가 아니다(위임 실행·Codex collab) — 부모가 부를 주소가 없다.
+  return row.taskId
+    ? { canSend: true, address: row.taskId }
+    : { canSend: false, reason: 'unaddressable' }
 }

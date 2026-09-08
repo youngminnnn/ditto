@@ -35,12 +35,13 @@ export default async function 서브에이전트의_대화를_사이드바에서
       ts: now - 20
     },
 
-    // 부모가 둘에게 위임한다. 한쪽은 이름을 지어 줬고(주소가 있다) 한쪽은 아니다.
+    // 부모가 둘에게 위임한다. 한쪽은 SDK task 라 주소(taskId)가 있고, 한쪽은 없다
+    // — 후자가 위임 실행·Codex collab 처럼 부를 수 없는 실행에 해당한다.
     {
       id: 'use-agent-1',
       type: 'tool_use',
       name: 'Agent',
-      input: { subagent_type: 'Explore', description: 'Find the config loader', name: 'explorer' },
+      input: { subagent_type: 'Explore', description: 'Find the config loader' },
       toolId: 'toolu_named',
       ts: now - 19
     },
@@ -164,10 +165,10 @@ export default async function 서브에이전트의_대화를_사이드바에서
         if (inside.includes(PARENT_TEXT)) {
           throw new Error(`the parent conversation should be replaced, not stacked`)
         }
-        // 이름이 있고 도는 중이므로 말을 걸 수 있다 — 릴레이라는 사실도 함께 밝혀야 한다.
+        // 주소가 있고 도는 중이므로 말을 걸 수 있다 — 릴레이라는 사실도 함께 밝혀야 한다.
         if (!inside.includes('Relayed through')) {
           throw new Error(
-            `a named running subagent should offer a composer:\n${inside.slice(0, 2000)}`
+            `an addressable running subagent should offer a composer:\n${inside.slice(0, 2000)}`
           )
         }
         // 대화가 길어도 화면 안에 갇혀 있어야 한다. Wooi 는 전체 화면을 채우는 고정 레이아웃이라
@@ -181,7 +182,7 @@ export default async function 서브에이전트의_대화를_사이드바에서
         }
         // 입력창이 화면 밖으로 밀려나지 않았는지도 함께 본다 — 넘침의 가장 아픈 증상이다.
         const composerBottom = await wooi.win
-          .getByPlaceholder(/^Message explorer/)
+          .getByPlaceholder(/^Message Explore/)
           .evaluate((el) => el.getBoundingClientRect().bottom)
         const viewportHeight = await wooi.win.evaluate(() => window.innerHeight)
         if (composerBottom > viewportHeight) {
@@ -192,7 +193,7 @@ export default async function 서브에이전트의_대화를_사이드바에서
 
         console.log(`[e2e] screenshot=${await wooi.shot('subagent-named')}`)
 
-        // ── 이름 없이 뜬 쪽은 잠기고, 이유가 보인다 ──────────────────────
+        // ── 주소 없이 뜬 쪽은 잠기고, 이유가 보인다 ──────────────────────
         await wooi.win
           .getByRole('button', { name: /Find the branch rule/ })
           .first()
@@ -203,9 +204,9 @@ export default async function 서브에이전트의_대화를_사이드바에서
             `switching subagents should swap the conversation:\n${unnamed.slice(0, 2000)}`
           )
         }
-        if (!unnamed.includes('spawned without a name')) {
+        if (!unnamed.includes('no address the main agent can send to')) {
           throw new Error(
-            `an unnamed subagent should say why it cannot be messaged:\n${unnamed.slice(0, 2000)}`
+            `an unaddressable subagent should say why it cannot be messaged:\n${unnamed.slice(0, 2000)}`
           )
         }
         console.log(`[e2e] screenshot=${await wooi.shot('subagent-unnamed')}`)

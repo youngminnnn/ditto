@@ -164,11 +164,15 @@ export default function Composer({
    * 부를 수 있는지는 부르는 쪽이 이미 판정했다(`subagentAddress`) — 여기 값이 있다는 것은
    * "지금 도는 중이고 주소가 있다" 는 뜻이다. 그래서 이 안에서는 다시 묻지 않는다.
    *
+   * `address` 는 부모가 `SendMessage({to})` 에 실을 값(SDK task id)이고, `label` 은 화면에
+   * 쓰는 이름이다. 둘을 나눈 것은 주소가 `a13dff7be7d2eef2f` 같은 해시라 안내문에 그대로
+   * 넣으면 읽을 수 없기 때문이다.
+   *
    * 초안·↑ 히스토리·저장 프롬프트·`@` 파일 멘션은 그대로 둔다. 그것이 "같은 대화창" 의 실체다.
    * 대신 워크스페이스를 조종하는 경로(슬래시 명령·`!`bash·`#`메모리·되감기)는 타지 않는다 —
    * 사용자가 고른 상대는 서브에이전트이지 이 워크스페이스가 아니다.
    */
-  subagent?: { toolId: string; name: string }
+  subagent?: { toolId: string; address: string; label: string }
 }): React.JSX.Element {
   // 초안은 store 에 보관해 workspace 전환에도 살아남는다(작성 중 메시지 분실 방지).
   const text = useStore((s) => s.drafts[workspace.id] ?? '')
@@ -654,7 +658,7 @@ export default function Composer({
         )
         return
       }
-      void window.api.chat.sendToSubagent(workspace.id, subagent.toolId, subagent.name, trimmed)
+      void window.api.chat.sendToSubagent(workspace.id, subagent.toolId, subagent.address, trimmed)
       setText('')
       historyIdx.current = -1
       return
@@ -1475,7 +1479,7 @@ export default function Composer({
                   : // 서브에이전트에게 거는 말은 슬래시 명령도 `!`터미널도 타지 않는다. 안내문에
                     // 그대로 두면 눌러도 안 되는 것을 알려 주는 셈이라, 이 모드의 안내는 따로 쓴다.
                     subagent
-                    ? `Message ${subagent.name}…  (Enter to send · @ for files)`
+                    ? `Message ${subagent.label}…  (Enter to send · @ for files)`
                     : running
                       ? 'Steer the agent while it works…  (Enter to send · ⌘Enter to stop the turn and send now)'
                       : text === '' && promptSuggestion

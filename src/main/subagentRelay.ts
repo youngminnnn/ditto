@@ -29,15 +29,20 @@ export function relayedUserItem(toolId: string, text: string, ts: number): ChatI
  * 모델은 친절하게도 그 일을 자기가 해 버린다 — 사용자가 고른 상대는 그 서브에이전트이고, 부모가
  * 대신 답하면 고른 의미가 사라진다.
  *
+ * `address` 는 SDK 의 task id 다 — 부모가 `ListAgents` 로 보는 주소가 정확히 그 값이라는 것을
+ * 실물로 확인했다([[shared/subagents]] subagentAddress). Agent 도구에 `name` 파라미터가 없어
+ * 이름은 붙일 수가 없다.
+ *
  * 사용자의 말은 따옴표가 아니라 구분선 안에 넣는다. 따옴표로 감싸면 사용자가 따옴표를 쓴 순간
  * 경계가 무너진다.
  */
-export function relayPrompt(name: string, text: string): string {
+export function relayPrompt(address: string, text: string): string {
   return [
-    `The user is looking at the subagent "${name}" and sent it this message.`,
-    `Relay it verbatim with SendMessage({to: "${name}"}). Do not answer it yourself and do not do`,
-    'the work — it was addressed to that subagent, not to you. If it cannot be delivered, say so',
-    'plainly and stop.',
+    `The user is looking at your running subagent whose agent id is ${address}, and sent it this`,
+    `message. Relay it verbatim with SendMessage({to: "${address}"}). Do not answer it yourself`,
+    'and do not do the work — it was addressed to that subagent, not to you. If the id is not',
+    'addressable, call ListAgents to find the right one and use that. If it still cannot be',
+    'delivered, say so plainly and stop.',
     '',
     '--- message ---',
     text,
@@ -46,6 +51,6 @@ export function relayPrompt(name: string, text: string): string {
 }
 
 /** 부모 대화에서 이 턴이 무엇이었는지 알려 주는 접힌 한 줄([[types]] WooiTurnOrigin). */
-export function relayOriginLabel(name: string): string {
-  return `Relaying a message to ${name}`
+export function relayOriginLabel(address: string): string {
+  return `Relaying a message to subagent ${address}`
 }

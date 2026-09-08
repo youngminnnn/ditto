@@ -85,7 +85,9 @@ describe('서브에이전트 대화 화면', () => {
     expect(screen.getByRole('textbox')).toBeInTheDocument()
   })
 
-  it('보내면 그 이름으로 릴레이를 부른다', () => {
+  it('보내면 그 task id 를 주소로 릴레이를 부른다', () => {
+    // 주소는 이름이 아니라 SDK 의 task id 다 — 화면에 보이는 이름(Explore)과 부모가
+    // SendMessage 에 실을 값이 다르다는 것이 이 단언의 요점이다.
     seed([spawn('t1', 'explorer'), row()])
     renderWithStore(<SubagentChatView workspace={ws()} toolId="t1" />)
 
@@ -95,15 +97,18 @@ describe('서브에이전트 대화 화면', () => {
 
     expect(fakeApi.calls).toContainEqual({
       path: 'chat.sendToSubagent',
-      args: [WS, 't1', 'explorer', 'check the loader again']
+      args: [WS, 't1', 'task-1', 'check the loader again']
     })
   })
 
-  it('이름 없이 떴으면 잠그고 이유와 고칠 방법을 적는다', () => {
-    seed([spawn('t1'), row()])
+  it('주소가 없으면 잠그고 이유를 적는다', () => {
+    // 위임 실행·Codex collab 이 여기 걸린다 — SDK 의 task 가 아니라 task id 가 없다.
+    const noTask = { ...row() } as Record<string, unknown>
+    delete noTask.taskId
+    seed([spawn('t1'), noTask as ChatItem])
     renderWithStore(<SubagentChatView workspace={ws()} toolId="t1" />)
 
-    expect(screen.getByText(/spawned without a name/)).toBeInTheDocument()
+    expect(screen.getByText(/no address the main agent can send to/)).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 

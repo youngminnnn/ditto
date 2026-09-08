@@ -15,9 +15,10 @@ describe('서브에이전트 릴레이', () => {
     })
   })
 
-  it('지시문은 전달할 상대와 "네가 하지 마라"를 함께 못박는다', () => {
-    const prompt = relayPrompt('explorer', 'look again')
-    expect(prompt).toContain('SendMessage({to: "explorer"})')
+  it('지시문은 전달할 주소와 "네가 하지 마라"를 함께 못박는다', () => {
+    // 주소는 SDK 의 task id 다 — 부모가 ListAgents 로 보는 값과 같다(실물 확인).
+    const prompt = relayPrompt('a13dff7be7d2eef2f', 'look again')
+    expect(prompt).toContain('SendMessage({to: "a13dff7be7d2eef2f"})')
     // 이 문장이 없으면 모델은 친절하게도 그 일을 자기가 해 버린다. 릴레이의 실질이 여기 있다.
     expect(prompt).toMatch(/Do not answer it yourself/)
     expect(prompt).toMatch(/do not do\s+the work/)
@@ -25,7 +26,7 @@ describe('서브에이전트 릴레이', () => {
 
   it('사용자의 말은 구분선 안에 그대로 실린다', () => {
     // 따옴표로 감싸면 사용자가 따옴표를 쓰는 순간 경계가 무너진다.
-    const prompt = relayPrompt('explorer', 'he said "stop" — then quit')
+    const prompt = relayPrompt('a13dff7be7d2eef2f', 'he said "stop" — then quit')
     expect(prompt).toContain('--- message ---\nhe said "stop" — then quit\n--- end message ---')
   })
 
@@ -45,6 +46,6 @@ describe('서브에이전트 릴레이', () => {
   })
 
   it('접힌 한 줄에 받는 이가 드러난다', () => {
-    expect(relayOriginLabel('explorer')).toContain('explorer')
+    expect(relayOriginLabel('a13dff7be7d2eef2f')).toContain('a13dff7be7d2eef2f')
   })
 })

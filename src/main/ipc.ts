@@ -1430,14 +1430,14 @@ export function registerIpc(ctx: IpcContext): void {
    */
   handle(
     IPC.chatSendToSubagent,
-    (_e, workspaceId: string, toolId: string, name: string, text: string) => {
+    (_e, workspaceId: string, toolId: string, address: string, text: string) => {
       const item = relayedUserItem(toolId, text, Date.now())
       getTranscripts().upsert(workspaceId, item)
       dispatch(IPC.evtChat, { workspaceId, event: { type: 'item', item } })
 
       stackedWaits.resetUnproductive(workspaceId)
-      ctx.sessions.sendMessage(workspaceId, relayPrompt(name, text), undefined, {
-        origin: { kind: 'wooi', label: relayOriginLabel(name) }
+      ctx.sessions.sendMessage(workspaceId, relayPrompt(address, text), undefined, {
+        origin: { kind: 'wooi', label: relayOriginLabel(address) }
       })
     }
   )

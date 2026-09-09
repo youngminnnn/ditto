@@ -43,6 +43,7 @@ import type {
   McpInventory,
   McpOauthLoginCompletedEvent,
   McpServerInfo,
+  MenuCommand,
   ModelOption,
   MemoryScope,
   NotificationSkip,
@@ -874,6 +875,8 @@ export interface WooiApi {
   onSelectWorkspace(cb: (workspaceId: string) => void): () => void
   /** 분리한 패널 창이 요청한 리포 설정 열기(메인 창이 모달을 띄운다). */
   onOpenRepoSettings(cb: (repoId: string) => void): () => void
+  /** 애플리케이션 메뉴에서 고른 항목. 메인 창에만 온다. */
+  onMenuCommand(cb: (command: MenuCommand) => void): () => void
   /** main 창이 포커스를 얻었을 때의 알림(미확인 표시 해제 트리거). */
   onWindowFocus(cb: () => void): () => void
   /** main 창이 포커스를 잃었을 때의 알림(이후 완료를 미확인으로 잡는 신뢰 신호). */

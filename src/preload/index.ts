@@ -364,6 +364,7 @@ const api: WooiApi = {
   onReview: (cb) => subscribe(IPC.evtReview, cb),
   onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb),
   onOpenRepoSettings: (cb) => subscribe(IPC.evtOpenRepoSettings, cb),
+  onMenuCommand: (cb) => subscribe(IPC.evtMenuCommand, cb),
   onWindowFocus: (cb) => subscribe(IPC.evtWindowFocus, () => cb()),
   onWindowBlur: (cb) => subscribe(IPC.evtWindowBlur, () => cb()),
   onClaudeLogin: (cb) => subscribe(IPC.evtClaudeLogin, cb),

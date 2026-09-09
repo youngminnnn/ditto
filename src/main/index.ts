@@ -1,6 +1,7 @@
 import { app, BrowserWindow, session } from 'electron'
 import { IPC } from '@shared/types'
 import { applyDevPaths, isDevIsolated, toolShimPath, wooiHome } from './paths'
+import { installAppMenu } from './appMenu'
 import { AgentOrchestrator } from './agent/orchestrator'
 import { initAgentTools } from './agent/tools'
 import { writeWooiPlugins } from './agent/plugin'
@@ -332,6 +333,13 @@ app.whenReady().then(() => {
   // 미설치로 보이거나 child 프로세스가 토큰/설정을 못 읽는 일이 없게 한다.
   hydrateEnvFromLoginShell()
   applyContentSecurityPolicy()
+  // 메뉴는 창보다 먼저 깐다 — 기본 메뉴가 한 번이라도 붙으면 그 사이에 눌린 `⌘R` 이
+  // 렌더러를 통째로 새로 읽는다. 명령은 방송하지 않고 메인 창에만 보낸다(메뉴 항목은
+  // 전부 메인 창 UI 에 대한 것이고, 분리한 패널 창이 포커스를 쥐고 있어도 동작해야 한다).
+  installAppMenu((command) => {
+    showMainWindow()
+    mainWindow?.webContents.send(IPC.evtMenuCommand, command)
+  })
   // Preview 게스트의 울타리는 창보다 먼저 세운다 — will-attach-webview 를 놓치면 그 webview 는
   // 우리가 강제하려던 설정 없이 붙는다([[preview]]).
   initPreview(dispatch)

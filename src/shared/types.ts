@@ -4090,6 +4090,13 @@ export const IPC = {
   evtReview: 'evt:review',
   /** OS 알림 클릭 등으로 특정 workspace 를 선택하도록 renderer 에 요청. */
   evtSelectWorkspace: 'evt:selectWorkspace',
+  /**
+   * 애플리케이션 메뉴에서 고른 항목. 페이로드는 `MenuCommand`.
+   *
+   * 방송(`dispatch`)이 아니라 **메인 창에만** 보낸다 — 메뉴 항목은 메인 창 UI 에 대한
+   * 것이고, 원격(폰)에는 메뉴가 없어 미러할 대상도 아니다. `evtWindowFocus` 와 같은 부류다.
+   */
+  evtMenuCommand: 'evt:menuCommand',
   /** main 창이 포커스를 얻었을 때의 알림 — 보고 있는 workspace 의 미확인 표시 해제 트리거. */
   evtWindowFocus: 'evt:windowFocus',
   /** main 창이 포커스를 잃었을 때의 알림 — 이후 완료를 미확인(Dock 배지)으로 잡는 신뢰 신호. */
@@ -5023,6 +5030,33 @@ export const MENTION_DROP_HINT_BYTES = 256 * 1024
 // ── 인터랙티브 터미널 (worktree PTY) ──────────────────────────────────────
 
 /** 터미널 탭 하나 = PTY 하나. 셸 세션은 영속하지 않고 이 메타데이터만 저장한다. */
+/**
+ * 애플리케이션 메뉴가 렌더러에 보낼 수 있는 명령.
+ *
+ * 렌더러의 `PaletteActionId` 부분집합이라 그대로 `runPaletteAction` 에 넘긴다 — 캐스팅이
+ * 필요 없고, 여기서 오타를 내면 렌더러 쪽에서 컴파일이 깨진다. 메뉴가 자기 동작을 따로
+ * 구현하지 않는 이유이기도 하다: 구현은 하나이고 입구만 셋(글쇠·팔레트·메뉴)이다.
+ *
+ * `PaletteActionId` 를 여기로 옮기지 않는 것은 그쪽이 렌더러 전용 개념이기 때문이다 —
+ * 메뉴가 부를 수 없는 항목(타건 제스처 등)까지 공유 타입에 끌어오면 경계가 흐려진다.
+ */
+export type MenuCommand =
+  | 'open-settings'
+  | 'open-shortcuts'
+  | 'toggle-work-panel'
+  | 'toggle-scripts-panel'
+  | 'close-focused-pane'
+  | 'new-workspace'
+  | 'new-workspace-choose-agent'
+  | 'search-conversations'
+  | 'open-file'
+  | 'review-pull-request'
+  | 'open-stack-view'
+  | 'open-in-editor'
+  | 'reveal-in-finder'
+  | 'export-conversation'
+  | 'archive-workspace'
+
 export interface TerminalTab {
   id: string
   /** 사용자가 탭을 더블클릭해 붙인 이름. 없으면 화면이 순번으로 이름을 만든다(Terminal, Terminal 2 …). */

@@ -1031,6 +1031,11 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [anyModalOpen, fileViewerVisible, runPaletteAction])
 
+  // 애플리케이션 메뉴는 글쇠·명령 팔레트와 **같은 구현**을 부른다. 메뉴가 자기 동작을 따로
+  // 들면 세 입구가 조금씩 다르게 굴어서, 어느 것으로 했느냐에 따라 결과가 갈린다.
+  // `MenuCommand` 가 `PaletteActionId` 의 부분집합이라 캐스팅 없이 그대로 넘어간다.
+  useEffect(() => window.api.onMenuCommand(runPaletteAction), [runPaletteAction])
+
   if (!ready || !app) {
     return (
       <div className="h-full grid place-items-center bg-[var(--bg)]">

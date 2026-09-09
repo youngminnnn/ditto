@@ -44,6 +44,9 @@ import type {
   McpOauthLoginCompletedEvent,
   McpServerInfo,
   MenuCommand,
+  HostedViewEvent,
+  HostedViewKind,
+  HostedViewLayout,
   ModelOption,
   MemoryScope,
   NotificationSkip,
@@ -875,6 +878,27 @@ export interface WooiApi {
   onSelectWorkspace(cb: (workspaceId: string) => void): () => void
   /** 분리한 패널 창이 요청한 리포 설정 열기(메인 창이 모달을 띄운다). */
   onOpenRepoSettings(cb: (repoId: string) => void): () => void
+  /**
+   * main 이 소유하는 웹 뷰(dev 프리뷰·웹 탭).
+   *
+   * 명령만 이쪽으로 가고, 뷰가 **어디에 얼마나** 그려질지는 렌더러가 재서 `setLayout` 으로
+   * 흘린다 — 네이티브 뷰는 CSS 레이아웃을 모르기 때문이다.
+   */
+  views: {
+    ensure(tabId: string, workspaceId: string, kind: HostedViewKind): Promise<void>
+    /** 이 창에 붙인다. 어느 창인지는 main 이 보낸 쪽에서 읽는다(렌더러가 정하지 않는다). */
+    attach(tabId: string): Promise<void>
+    detach(tabId: string): Promise<void>
+    load(tabId: string, url: string): Promise<void>
+    reload(tabId: string): Promise<void>
+    stop(tabId: string): Promise<void>
+    goBack(tabId: string): Promise<void>
+    goForward(tabId: string): Promise<void>
+    destroy(tabId: string): Promise<void>
+    /** 프레임마다 나가는 자리 갱신. 회신이 없다. */
+    setLayout(layouts: HostedViewLayout[]): void
+    onEvent(cb: (e: HostedViewEvent) => void): () => void
+  }
   /** 애플리케이션 메뉴에서 고른 항목. 메인 창에만 온다. */
   onMenuCommand(cb: (command: MenuCommand) => void): () => void
   /** main 창이 포커스를 얻었을 때의 알림(미확인 표시 해제 트리거). */

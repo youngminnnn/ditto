@@ -4090,6 +4090,28 @@ export const IPC = {
   evtReview: 'evt:review',
   /** OS 알림 클릭 등으로 특정 workspace 를 선택하도록 renderer 에 요청. */
   evtSelectWorkspace: 'evt:selectWorkspace',
+  /** 탭에 뷰를 붙여 준다(이미 있으면 그대로). 한 번도 보지 않은 탭에는 뷰를 만들지 않는다. */
+  viewEnsure: 'view:ensure',
+  /** 자리표시자가 마운트됐다 — 이 창에 뷰를 붙인다. */
+  viewAttach: 'view:attach',
+  /** 자리표시자가 사라졌다 — 창에서 뗀다(파괴하지 않는다). */
+  viewDetach: 'view:detach',
+  viewLoad: 'view:load',
+  viewReload: 'view:reload',
+  viewStop: 'view:stop',
+  viewGoBack: 'view:goBack',
+  viewGoForward: 'view:goForward',
+  viewDestroy: 'view:destroy',
+  /**
+   * 렌더러가 잰 뷰들의 자리. **`invoke` 가 아니라 `send` 다.**
+   *
+   * 분할바를 끄는 동안 프레임마다 나가는 값이라, 회신을 기다릴 이유가 없는데 Promise 를
+   * 만들고 큐에 쌓는 비용만 든다. 관례(`handle` 래퍼)의 의도적 예외이고, 그래서 원격
+   * 레지스트리에도 올라가지 않는다 — 폰에는 창이 없어 뷰가 성립하지 않는다.
+   */
+  viewSetLayout: 'view:setLayout',
+  /** 게스트의 내비게이션 상태·실패·소멸. 페이로드는 `HostedViewEvent`. */
+  evtHostedView: 'evt:hostedView',
   /**
    * 애플리케이션 메뉴에서 고른 항목. 페이로드는 `MenuCommand`.
    *
@@ -5030,6 +5052,47 @@ export const MENTION_DROP_HINT_BYTES = 256 * 1024
 // ── 인터랙티브 터미널 (worktree PTY) ──────────────────────────────────────
 
 /** 터미널 탭 하나 = PTY 하나. 셸 세션은 영속하지 않고 이 메타데이터만 저장한다. */
+/**
+ * main 이 소유해 화면에 얹는 웹 콘텐츠의 종류.
+ *
+ * 탭 종류 전부가 아니라 **네이티브 뷰가 필요한 것만** 여기 온다 — 파일·스택 탭은 DOM 으로
+ * 그리므로 자리·가림 문제가 애초에 없다. 아티팩트는 자기 프로토콜과 파티션이 붙은 뒤에 는다.
+ */
+export type HostedViewKind = 'dev' | 'web'
+
+/** 렌더러가 잰 뷰 하나의 자리. 창 콘텐츠 영역 기준 DIP 좌표다(스케일 환산은 하지 않는다). */
+export interface HostedViewLayout {
+  tabId: string
+  x: number
+  y: number
+  width: number
+  height: number
+  /** 모달이 덮었거나 탭이 감춰졌으면 거짓. 자리를 못 재도 거짓이다(잘못된 자리에 남기지 않는다). */
+  visible: boolean
+}
+
+/** 게스트의 내비게이션 상태. 이벤트 여섯 개를 접어 한 번에 보낸다. */
+export interface HostedViewState {
+  tabId: string
+  url: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  ready: boolean
+}
+
+/** main → 렌더러로 가는 뷰 소식. `gone` 은 동면·크래시로 뷰가 사라졌다는 뜻이다. */
+export type HostedViewEvent =
+  | ({ type: 'state' } & HostedViewState)
+  | {
+      type: 'fail'
+      tabId: string
+      errorCode: number
+      errorDescription: string
+      isMainFrame: boolean
+    }
+  | { type: 'gone'; tabId: string }
+
 /**
  * 애플리케이션 메뉴가 렌더러에 보낼 수 있는 명령.
  *

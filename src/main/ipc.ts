@@ -1,4 +1,4 @@
-import { app, dialog, shell, BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -214,6 +214,8 @@ import type {
   StackTrainResult,
   UpdateFromBaseResult,
   DiscardHunkResult,
+  HostedViewKind,
+  HostedViewLayout,
   Workspace
 } from '@shared/types'
 import type { AgentOrchestrator } from './agent/orchestrator'
@@ -231,6 +233,7 @@ import {
 } from './preview'
 import type { ScriptRunner } from './scripts'
 import type { TerminalManager } from './terminal'
+import type { HostedViewManager } from './webViews'
 
 /** 단방향 이벤트를 모든 창에 방송하는 함수. main 엔트리가 소유한 것 하나를 공유한다. */
 type Dispatch = (channel: string, payload: unknown) => void
@@ -239,6 +242,7 @@ interface IpcContext {
   sessions: AgentOrchestrator
   scripts: ScriptRunner
   terminals: TerminalManager
+  views: HostedViewManager
   panes: PaneWindows
   /**
    * main 엔트리의 dispatch 를 그대로 받는다. registerIpc 가 자체 dispatch 를 갖고 있으면
@@ -1606,6 +1610,32 @@ export function registerIpc(ctx: IpcContext): void {
 
   handle(IPC.scriptGetOutput, (_e, workspaceId: string, scriptId: string) => {
     return ctx.scripts.getOutput(workspaceId, scriptId)
+  })
+
+  // ── 얹은 웹 뷰(dev 프리뷰·웹 탭) ────────────────────────────────────────
+
+  handle(IPC.viewEnsure, (_e, tabId: string, workspaceId: string, kind: HostedViewKind) =>
+    ctx.views.ensure(tabId, workspaceId, kind)
+  )
+  // 어느 창에 붙일지는 **보낸 쪽에서 읽는다.** 렌더러가 창 id 를 골라 보내면, 다른 창의
+  // 레이아웃에 뷰를 얹어 달라는 요청이 성립한다.
+  handle(IPC.viewAttach, (e, tabId: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win) ctx.views.attach(tabId, win.id)
+  })
+  handle(IPC.viewDetach, (_e, tabId: string) => ctx.views.detach(tabId))
+  handle(IPC.viewLoad, (_e, tabId: string, url: string) => ctx.views.load(tabId, url))
+  handle(IPC.viewReload, (_e, tabId: string) => ctx.views.reload(tabId))
+  handle(IPC.viewStop, (_e, tabId: string) => ctx.views.stop(tabId))
+  handle(IPC.viewGoBack, (_e, tabId: string) => ctx.views.goBack(tabId))
+  handle(IPC.viewGoForward, (_e, tabId: string) => ctx.views.goForward(tabId))
+  handle(IPC.viewDestroy, (_e, tabId: string) => ctx.views.destroy(tabId))
+
+  // `handle` 이 아니라 `ipcMain.on` 인 유일한 채널이다. 분할바를 끄는 동안 프레임마다
+  // 나가는 값이라 회신을 만들 이유가 없다(채널 정의의 주석 참고).
+  ipcMain.on(IPC.viewSetLayout, (e, layouts: HostedViewLayout[]) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win) ctx.views.applyLayout(win.id, layouts)
   })
 
   // ── Preview 패널 ───────────────────────────────────────────────────────

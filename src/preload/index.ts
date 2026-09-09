@@ -364,6 +364,21 @@ const api: WooiApi = {
   onReview: (cb) => subscribe(IPC.evtReview, cb),
   onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb),
   onOpenRepoSettings: (cb) => subscribe(IPC.evtOpenRepoSettings, cb),
+  views: {
+    ensure: (tabId, workspaceId, kind) =>
+      ipcRenderer.invoke(IPC.viewEnsure, tabId, workspaceId, kind),
+    attach: (tabId) => ipcRenderer.invoke(IPC.viewAttach, tabId),
+    detach: (tabId) => ipcRenderer.invoke(IPC.viewDetach, tabId),
+    load: (tabId, url) => ipcRenderer.invoke(IPC.viewLoad, tabId, url),
+    reload: (tabId) => ipcRenderer.invoke(IPC.viewReload, tabId),
+    stop: (tabId) => ipcRenderer.invoke(IPC.viewStop, tabId),
+    goBack: (tabId) => ipcRenderer.invoke(IPC.viewGoBack, tabId),
+    goForward: (tabId) => ipcRenderer.invoke(IPC.viewGoForward, tabId),
+    destroy: (tabId) => ipcRenderer.invoke(IPC.viewDestroy, tabId),
+    // 프레임마다 나가는 값이라 invoke 가 아니라 send 다 — 채널 정의의 주석을 본다.
+    setLayout: (layouts) => ipcRenderer.send(IPC.viewSetLayout, layouts),
+    onEvent: (cb) => subscribe(IPC.evtHostedView, cb)
+  },
   onMenuCommand: (cb) => subscribe(IPC.evtMenuCommand, cb),
   onWindowFocus: (cb) => subscribe(IPC.evtWindowFocus, () => cb()),
   onWindowBlur: (cb) => subscribe(IPC.evtWindowBlur, () => cb()),

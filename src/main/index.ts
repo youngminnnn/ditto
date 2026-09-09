@@ -2,6 +2,7 @@ import { app, BrowserWindow, session } from 'electron'
 import { IPC } from '@shared/types'
 import { applyDevPaths, isDevIsolated, toolShimPath, wooiHome } from './paths'
 import { installAppMenu } from './appMenu'
+import { HostedViewManager } from './webViews'
 import { AgentOrchestrator } from './agent/orchestrator'
 import { initAgentTools } from './agent/tools'
 import { writeWooiPlugins } from './agent/plugin'
@@ -186,6 +187,9 @@ process.env.WOOI_TOOL_SHIM = toolShimPath()
 initToolPermission({ dispatch: (request) => dispatch(IPC.evtPermission, request) })
 
 const terminals = new TerminalManager(dispatch)
+// 얹은 웹 뷰(dev 프리뷰·웹 탭)의 소유자. 창보다 오래 살아야 한다 — 패널을 분리한 창으로
+// 떼었다 붙이는 동안 뷰가 살아 있어야 페이지가 처음부터 다시 로드되지 않는다.
+const views = new HostedViewManager(dispatch)
 
 const stackedWaits = initStackedWaits({
   sendMessage: (workspaceId, text, opts) =>
@@ -357,7 +361,7 @@ app.whenReady().then(() => {
     (workspaceId) => dispatch(IPC.evtRemoteRead, workspaceId),
     remoteOverride || getStore().getState().settings.remoteAccessAvailable
   )
-  registerIpc({ sessions, scripts, terminals, panes, dispatch, getWindow: () => mainWindow })
+  registerIpc({ sessions, scripts, terminals, views, panes, dispatch, getWindow: () => mainWindow })
   // 기동 시점에는 도는 워크스페이스가 없다(store 가 남은 'running' 을 'idle' 로 씻는다) —
   // 설정만 물려주고, 실제 판단은 첫 방송부터 시작한다.
   initSleepBlocker(getStore().getState().settings.keepAwakeWhileRunning)

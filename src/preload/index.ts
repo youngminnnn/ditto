@@ -125,10 +125,10 @@ const api: WooiApi = {
     pickElement: (workspaceId, tabId) =>
       ipcRenderer.invoke(IPC.previewPickElement, workspaceId, tabId),
     cancelPick: (tabId) => ipcRenderer.invoke(IPC.previewCancelPick, tabId),
-    listIssues: (workspaceId) => ipcRenderer.invoke(IPC.previewListIssues, workspaceId),
-    clearIssues: (workspaceId) => ipcRenderer.invoke(IPC.previewClearIssues, workspaceId),
-    sendIssues: (workspaceId, issueIds) =>
-      ipcRenderer.invoke(IPC.previewSendIssues, workspaceId, issueIds),
+    listIssues: (tabId) => ipcRenderer.invoke(IPC.previewListIssues, tabId),
+    clearIssues: (tabId) => ipcRenderer.invoke(IPC.previewClearIssues, tabId),
+    sendIssues: (workspaceId, tabId, issueIds) =>
+      ipcRenderer.invoke(IPC.previewSendIssues, workspaceId, tabId, issueIds),
     onOpen: (cb) => subscribe(IPC.evtPreviewOpen, cb),
     onIssues: (cb) => subscribe(IPC.evtPreviewIssues, cb)
   },

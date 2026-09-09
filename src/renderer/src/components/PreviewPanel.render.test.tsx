@@ -203,7 +203,12 @@ describe('PreviewPanel', () => {
     render(<PreviewPanel workspace={ws} navTarget={null} active />)
 
     act(() => {
-      fakeApi.dispatch('preview.onIssues', { workspaceId: ws.id, errors: 2, warnings: 1 })
+      fakeApi.dispatch('preview.onIssues', {
+        tabId: TAB_ID,
+        workspaceId: ws.id,
+        errors: 2,
+        warnings: 1
+      })
     })
 
     const badge = screen.getByTitle('Console and network errors from this page')
@@ -211,6 +216,22 @@ describe('PreviewPanel', () => {
     expect(badge).toHaveTextContent('1')
 
     fireEvent.click(badge)
-    expect(fakeApi.called('preview.listIssues').at(-1)?.args).toEqual([ws.id])
+    expect(fakeApi.called('preview.listIssues').at(-1)?.args).toEqual([TAB_ID])
+  })
+
+  it('다른 탭의 이슈 방송은 무시한다 — 같은 워크스페이스라도 탭이 다르면 이 배지를 건드리지 않는다', () => {
+    const ws = workspace()
+    render(<PreviewPanel workspace={ws} navTarget={null} active />)
+
+    act(() => {
+      fakeApi.dispatch('preview.onIssues', {
+        tabId: 'dev:other-tab',
+        workspaceId: ws.id,
+        errors: 5,
+        warnings: 5
+      })
+    })
+
+    expect(screen.queryByTitle('Console and network errors from this page')).not.toBeInTheDocument()
   })
 })

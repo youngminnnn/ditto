@@ -368,11 +368,16 @@ export interface WooiApi {
     pickElement(workspaceId: string, tabId: string): Promise<PreviewCaptureResult>
     /** 진행 중인 픽을 취소한다. 켜져 있지 않으면 아무 일도 하지 않는다. */
     cancelPick(tabId: string): Promise<void>
-    /** 모아 둔 문제 목록. 개수만 방송되므로 패널을 열 때 이걸로 채운다. */
-    listIssues(workspaceId: string): Promise<PreviewIssue[]>
-    clearIssues(workspaceId: string): Promise<void>
+    /** 모아 둔 문제 목록. 개수만 방송되므로 패널을 열 때 이걸로 채운다. 워크스페이스가 아니라
+     *  tabId 로 찾는다 — 한 워크스페이스에 탭이 여럿일 수 있어서다. */
+    listIssues(tabId: string): Promise<PreviewIssue[]>
+    clearIssues(tabId: string): Promise<void>
     /** 고른 문제들을 컴포저에 넣는다(결과는 onComposerAttach 로 온다). */
-    sendIssues(workspaceId: string, issueIds: string[]): Promise<PreviewCaptureResult>
+    sendIssues(
+      workspaceId: string,
+      tabId: string,
+      issueIds: string[]
+    ): Promise<PreviewCaptureResult>
     onOpen(cb: (e: PreviewOpenEvent) => void): () => void
     onIssues(cb: (e: PreviewIssueCountEvent) => void): () => void
   }

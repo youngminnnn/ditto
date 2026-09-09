@@ -192,8 +192,11 @@ const terminals = new TerminalManager(dispatch)
 const views = new HostedViewManager(dispatch, {
   // 콘솔·네트워크 수집을 뷰 수명에 묶는다. 첫 loadURL 보다 먼저 붙어야 페이지의 첫 콘솔
   // 줄부터 잡히는데, 그 시점을 아는 것은 뷰를 만드는 쪽뿐이다([[main/webViews]]).
-  onCreated: (_tabId, workspaceId, contents) => previewIssues().watch(workspaceId, contents),
-  onDestroyed: (_tabId, workspaceId) => previewIssues().disposeWorkspace(workspaceId)
+  onCreated: (tabId, workspaceId, contents) => previewIssues().watch(tabId, workspaceId, contents),
+  // 뷰(캐시) 하나가 죽는 것과 워크스페이스가 통째로 사라지는 것은 다르다 — 여기서는 이 탭의
+  // 수집만 멈추고 모아 둔 문제는 남긴다(탭이 다시 뷰를 얻으면 이어서 보인다). 워크스페이스
+  // 전체 정리는 disposeWorkspace 가 따로 있다.
+  onDestroyed: (tabId) => previewIssues().unwatch(tabId)
 })
 
 const stackedWaits = initStackedWaits({

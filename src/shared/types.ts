@@ -2731,8 +2731,10 @@ export interface ComposerAttachment {
 /** 컴포저에 넣을 것이 도착했다(evtComposerAttach 페이로드). */
 export type ComposerAttachEvent = ComposerAttachment & { workspaceId: string }
 
-/** Preview 가 모은 문제의 개수(evtPreviewIssues 페이로드). */
+/** Preview 가 모은 문제의 개수(evtPreviewIssues 페이로드). 탭 단위로 모으지만, 사이드바
+ *  배지가 조회 테이블 없이 그릴 수 있도록 workspaceId 도 함께 싣는다. */
 export interface PreviewIssueCountEvent {
+  tabId: string
   workspaceId: string
   errors: number
   warnings: number
@@ -4046,9 +4048,9 @@ export const IPC = {
   previewPickElement: 'preview:pickElement',
   /** 진행 중인 요소 픽을 취소한다(Esc·패널 언마운트). */
   previewCancelPick: 'preview:cancelPick',
-  /** 모아 둔 문제 목록을 읽는다(개수만 방송되므로 패널을 열 때 한 번 가져간다). */
+  /** 모아 둔 문제 목록을 읽는다(개수만 방송되므로 패널을 열 때 한 번 가져간다). 인자는 tabId. */
   previewListIssues: 'preview:listIssues',
-  /** 모아 둔 문제를 비운다. */
+  /** 모아 둔 문제를 비운다. 인자는 tabId. */
   previewClearIssues: 'preview:clearIssues',
   /** 고른 문제들을 컴포저에 넣는다. */
   previewSendIssues: 'preview:sendIssues',

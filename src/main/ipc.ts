@@ -1686,18 +1686,19 @@ export function registerIpc(ctx: IpcContext): void {
   // — 매 콘솔 줄을 IPC 로 밀면 폭주하는 dev 로그가 메인 힙을 밀어 올린다([[main/previewIssues]]).
   // 수집을 시작·중단하는 IPC 는 없다. 뷰를 만든 쪽이 곧 아는 쪽이라 webViews 의 수명 훅이
   // 직접 붙이고 뗀다([[main/webViews]]) — 렌더러가 dom-ready 에서 알려 주던 우회가 사라졌다.
-  handle(IPC.previewListIssues, (_e, workspaceId: string) => previewIssues().list(workspaceId))
+  // 워크스페이스가 아니라 tabId 로 키를 잡는다 — 한 워크스페이스에 탭이 여럿일 수 있어서다.
+  handle(IPC.previewListIssues, (_e, tabId: string) => previewIssues().list(tabId))
 
-  handle(IPC.previewClearIssues, (_e, workspaceId: string) => {
-    previewIssues().clear(workspaceId)
+  handle(IPC.previewClearIssues, (_e, tabId: string) => {
+    previewIssues().clear(tabId)
   })
 
-  handle(IPC.previewSendIssues, (_e, workspaceId: string, issueIds: string[]) => {
+  handle(IPC.previewSendIssues, (_e, workspaceId: string, tabId: string, issueIds: string[]) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return { error: 'That workspace is gone.' }
     const wanted = new Set(issueIds)
     const picked = previewIssues()
-      .list(workspaceId)
+      .list(tabId)
       .filter((i) => wanted.has(i.id))
     if (!picked.length) return { error: 'Nothing to send.' }
     dispatch(IPC.evtComposerAttach, {

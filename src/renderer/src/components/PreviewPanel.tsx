@@ -123,20 +123,20 @@ export default function PreviewPanel({
   // [[main/previewIssues]] 참고 — 폭주하는 dev 로그가 IPC 홍수가 된다).
   useEffect(() => {
     return window.api.preview.onIssues((e) => {
-      if (e.workspaceId !== workspace.id) return
+      if (e.tabId !== tabId) return
       setIssueCount({ errors: e.errors, warnings: e.warnings })
       // 목록을 펼쳐 둔 채라면 새로 들어온 것까지 보이게 갱신한다.
       setIssues((prev) => {
         if (prev === null) return prev
-        void window.api.preview.listIssues(workspace.id).then(setIssues)
+        void window.api.preview.listIssues(tabId).then(setIssues)
         return prev
       })
     })
-  }, [workspace.id])
+  }, [tabId])
 
   const toggleIssues = (): void => {
     if (issues !== null) return setIssues(null)
-    void window.api.preview.listIssues(workspace.id).then(setIssues)
+    void window.api.preview.listIssues(tabId).then(setIssues)
   }
 
   /** 모아 둔 문제를 컴포저로 보낸다. */
@@ -144,6 +144,7 @@ export default function PreviewPanel({
     if (!list.length) return
     const { error } = await window.api.preview.sendIssues(
       workspace.id,
+      tabId,
       list.map((i) => i.id)
     )
     if (error) {
@@ -346,7 +347,7 @@ export default function PreviewPanel({
           issues={issues}
           onSend={() => void sendIssues(issues)}
           onClear={() => {
-            void window.api.preview.clearIssues(workspace.id)
+            void window.api.preview.clearIssues(tabId)
             setIssues(null)
           }}
           onClose={() => setIssues(null)}

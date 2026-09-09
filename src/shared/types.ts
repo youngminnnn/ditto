@@ -1071,6 +1071,14 @@ export interface Workspace {
   terminalTabs?: TerminalTab[]
   /** 마지막으로 보고 있던 터미널 탭. terminalTabs 에 없는 값이면 첫 탭으로 되돌린다. */
   activeTerminalTabId?: string
+  /**
+   * 콘텐츠 영역 맨 위 탭 스트립(대화 + dev 프리뷰 + 웹 + 파일 + 아티팩트 + 스택)의 탭 목록.
+   * 없거나 비어 있으면 첫 조회 때 대화 탭 하나로 채운다 — 레거시 워크스페이스는 마이그레이션
+   * 없이 "대화 탭 1개" 로 읽힌다. 대화 탭(id='chat')은 언제나 이 배열의 첫 항목이다.
+   */
+  tabs?: WorkspaceTab[]
+  /** 마지막으로 보고 있던 탭. tabs 에 없는 값이면 대화 탭으로 되돌린다. */
+  activeTabId?: string
   createdAt: number
   lastActiveAt: number
 }
@@ -4019,6 +4027,19 @@ export const IPC = {
   terminalExec: 'terminal:exec',
   /** 진행 중인 인라인 `!명령`(execInline)을 중단한다. 인자로 workspaceId 와 대상 아이템 id 를 받는다. */
   terminalKillInline: 'terminal:killInline',
+  // 워크스페이스 콘텐츠 탭 (대화 위 크롬형 탭 스트립 — 대화·dev 프리뷰·웹·파일·아티팩트·스택)
+  /** 탭 구성을 읽는다(없으면 대화 탭 하나로 채워 돌려준다). */
+  tabsGet: 'tabs:get',
+  /** 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 활성화한다. */
+  tabsOpen: 'tabs:open',
+  /** 탭을 닫는다. 대화 탭(chat)은 조용히 무시한다. */
+  tabsClose: 'tabs:close',
+  /** 보고 있는 탭을 바꾼다. */
+  tabsSelect: 'tabs:select',
+  /** 탭 이름을 바꾼다(빈 문자열이면 기본 이름으로 되돌린다). */
+  tabsRename: 'tabs:rename',
+  /** 가장 최근에 닫은 탭을 되살린다(워크스페이스별 최대 10개까지 기억, 영속하지 않는다). */
+  tabsReopen: 'tabs:reopen',
   // 분리한 패널 창 (work / scripts)
   /** 해당 패널을 별도 창으로 띄운다(이미 떠 있으면 앞으로 가져온다). */
   paneOpen: 'pane:open',
@@ -4127,6 +4148,8 @@ export const IPC = {
   evtTerminalExit: 'evt:terminalExit',
   /** 터미널 탭 구성 변경(생성·닫기·이름 변경·선택). 메인 창과 분리한 패널 창이 함께 따라간다. */
   evtTerminalTabs: 'evt:terminalTabs',
+  /** 워크스페이스 콘텐츠 탭 구성 변경(열기·닫기·선택·이름 변경·되살리기). 모든 창이 함께 따라간다. */
+  evtWorkspaceTabs: 'evt:workspaceTabs',
   /** 앱 내부 Claude 로그인 진행 이벤트(인증 URL 노출 / 코드 입력 요청 / 완료). */
   evtClaudeLogin: 'evt:claudeLogin',
   /** 앱 내부 Codex 로그인 진행 이벤트(브라우저 인증 URL 노출 / 완료). */
@@ -5129,6 +5152,30 @@ export interface TerminalTabsState {
   workspaceId: string
   tabs: TerminalTab[]
   /** 지금 보고 있는 탭. tabs 가 비어 있지 않은 한 항상 그중 하나를 가리킨다. */
+  activeId: string
+}
+
+/**
+ * 콘텐츠 영역 맨 위 탭 스트립의 탭 종류. **`HostedViewKind`(`'dev' | 'web'`)와 다르다** — 그쪽은
+ * 네이티브(BrowserView) 렌더링이 필요한 종류만 담고, 여기는 파일·아티팩트·스택처럼 DOM 으로
+ * 그리는 탭까지 포함한 전체 목록이다. 대화(chat)는 늘 첫 탭이고 닫을 수 없다([[main/workspaceTabs]]).
+ */
+export type WorkspaceTabKind = 'chat' | 'dev' | 'web' | 'file' | 'artifact' | 'stack'
+
+export interface WorkspaceTab {
+  id: string
+  kind: WorkspaceTabKind
+  /** dev·web: 현재 주소. file: 워크트리 상대 경로(+#L42). artifact: artifactId@version. stack: 앵커 workspaceId. */
+  target?: string
+  /** 사용자가 바꾼 이름. 없으면 화면이 target 에서 만든다. */
+  title?: string
+}
+
+/** 한 워크스페이스의 콘텐츠 탭 구성. 탭이 바뀔 때마다 모든 창에 이 형태로 방송된다. */
+export interface WorkspaceTabsState {
+  workspaceId: string
+  tabs: WorkspaceTab[]
+  /** 지금 보고 있는 탭. 대화 탭이 항상 있으므로 tabs 는 비지 않고, activeId 는 늘 그중 하나를 가리킨다. */
   activeId: string
 }
 

@@ -255,6 +255,17 @@ const api: WooiApi = {
     onTabs: (cb) => subscribe(IPC.evtTerminalTabs, cb)
   },
 
+  tabs: {
+    get: (workspaceId) => ipcRenderer.invoke(IPC.tabsGet, workspaceId),
+    open: (workspaceId, opts) => ipcRenderer.invoke(IPC.tabsOpen, workspaceId, opts),
+    close: (workspaceId, tabId) => ipcRenderer.invoke(IPC.tabsClose, workspaceId, tabId),
+    select: (workspaceId, tabId) => ipcRenderer.invoke(IPC.tabsSelect, workspaceId, tabId),
+    rename: (workspaceId, tabId, title) =>
+      ipcRenderer.invoke(IPC.tabsRename, workspaceId, tabId, title),
+    reopen: (workspaceId) => ipcRenderer.invoke(IPC.tabsReopen, workspaceId),
+    onTabs: (cb) => subscribe(IPC.evtWorkspaceTabs, cb)
+  },
+
   pane: {
     open: (kind, workspaceId) => ipcRenderer.invoke(IPC.paneOpen, kind, workspaceId),
     close: (kind) => ipcRenderer.invoke(IPC.paneClose, kind),

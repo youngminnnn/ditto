@@ -99,7 +99,8 @@ import type {
   MigrationScan,
   MigrationScanArgs,
   ReviewVerdict,
-  TranscriptSearchResult
+  TranscriptSearchResult,
+  WorkspaceTabKind
 } from '@shared/types'
 import {
   cascadeRetarget,
@@ -226,6 +227,7 @@ import type { PaneWindows } from './paneWindows'
 import { cancelPreviewPick, capturePreview, pickPreviewElement, previewIssues } from './preview'
 import type { ScriptRunner } from './scripts'
 import type { TerminalManager } from './terminal'
+import type { WorkspaceTabManager } from './workspaceTabs'
 import type { HostedViewManager } from './webViews'
 
 /** 단방향 이벤트를 모든 창에 방송하는 함수. main 엔트리가 소유한 것 하나를 공유한다. */
@@ -235,6 +237,7 @@ interface IpcContext {
   sessions: AgentOrchestrator
   scripts: ScriptRunner
   terminals: TerminalManager
+  tabs: WorkspaceTabManager
   views: HostedViewManager
   panes: PaneWindows
   /**
@@ -533,6 +536,9 @@ export function registerIpc(ctx: IpcContext): void {
     sessions: ctx.sessions,
     scripts: ctx.scripts,
     terminals: ctx.terminals,
+    tabs: ctx.tabs,
+    views: ctx.views,
+    previewIssues: previewIssues(),
     broadcastState
   }
   /** 삭제는 store 에서 레코드를 없애므로 그 id 를 들고 있던 fan-out 그룹까지 정리한다. */
@@ -3422,6 +3428,30 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.terminalTabSelect, (_e, workspaceId: string, terminalId: string) =>
     ctx.terminals.selectTab(workspaceId, terminalId)
   )
+
+  // 워크스페이스 콘텐츠 탭(대화 위 크롬형 탭 스트립) — 터미널 탭과 같은 이유로 얇은 위임이다.
+
+  handle(IPC.tabsGet, (_e, workspaceId: string) => ctx.tabs.tabs(workspaceId))
+
+  handle(
+    IPC.tabsOpen,
+    (_e, workspaceId: string, opts: { kind: WorkspaceTabKind; target?: string; title?: string }) =>
+      ctx.tabs.openTab(workspaceId, opts)
+  )
+
+  handle(IPC.tabsClose, (_e, workspaceId: string, tabId: string) =>
+    ctx.tabs.closeTab(workspaceId, tabId)
+  )
+
+  handle(IPC.tabsSelect, (_e, workspaceId: string, tabId: string) =>
+    ctx.tabs.selectTab(workspaceId, tabId)
+  )
+
+  handle(IPC.tabsRename, (_e, workspaceId: string, tabId: string, title: string) =>
+    ctx.tabs.renameTab(workspaceId, tabId, title)
+  )
+
+  handle(IPC.tabsReopen, (_e, workspaceId: string) => ctx.tabs.reopenTab(workspaceId))
 
   // ── Dock 미확인 배지 ─────────────────────────────────────────────────────
 

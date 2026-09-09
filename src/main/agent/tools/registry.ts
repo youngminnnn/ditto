@@ -104,6 +104,13 @@ export interface AgentToolDeps {
   }
   terminals: { disposeWorkspace: (workspaceId: string) => void }
   /**
+   * 아카이브·삭제 도구가 워크스페이스의 콘텐츠 탭 스트립·웹 뷰·Preview 문제 수집기를 함께
+   * 정리하는 데 쓴다([[workspaces]] archiveWorkspace·deleteWorkspace 가 요구하는 것과 같은 모양).
+   */
+  tabs: { disposeWorkspace: (workspaceId: string) => void }
+  views: { destroyWorkspace: (workspaceId: string) => void }
+  previewIssues: { disposeWorkspace: (workspaceId: string) => void }
+  /**
    * 삭제된 워크스페이스 id 를 들고 있던 fan-out 그룹을 정리한다([[workspaces]] deleteWorkspace).
    *
    * [[fanout]] 이 [[workspaces]] 를 부르므로 반대 방향 import 가 순환이 된다 — 그래서 주입한다.

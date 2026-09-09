@@ -65,6 +65,12 @@ export interface ArchiveWorkspaceDeps {
   sessions: { dispose: (workspaceId: string) => void }
   scripts: Pick<ScriptRunner, 'disposeWorkspace' | 'runOnce'>
   terminals: { disposeWorkspace: (workspaceId: string) => void }
+  /** 콘텐츠 탭 스트립([[main/workspaceTabs]])의 워크스페이스별 메모리 상태(닫은 탭 스택)를 정리한다. */
+  tabs: { disposeWorkspace: (workspaceId: string) => void }
+  /** 얹은 웹 뷰(dev 프리뷰·웹 탭)를 정리한다([[main/webViews]]). */
+  views: { destroyWorkspace: (workspaceId: string) => void }
+  /** Preview 가 모아 둔 콘솔·네트워크 문제를 정리한다([[main/previewIssues]]). */
+  previewIssues: { disposeWorkspace: (workspaceId: string) => void }
   broadcastState: () => void
 }
 
@@ -544,6 +550,9 @@ export async function archiveWorkspace(
   deps.sessions.dispose(workspaceId)
   deps.scripts.disposeWorkspace(workspaceId)
   deps.terminals.disposeWorkspace(workspaceId)
+  deps.tabs.disposeWorkspace(workspaceId)
+  deps.views.destroyWorkspace(workspaceId)
+  deps.previewIssues.disposeWorkspace(workspaceId)
   // 아카이브 스크립트는 worktree 가 아직 살아 있을 때 실행한다.
   // 실패해도 멈추지 않는다 — 정리를 중간에 세우면 worktree 만 남아 상태가 더 나빠진다.
   const archiveScriptFailure = repo
@@ -614,6 +623,9 @@ export async function deleteWorkspace(
   deps.sessions.dispose(workspaceId)
   deps.scripts.disposeWorkspace(workspaceId)
   deps.terminals.disposeWorkspace(workspaceId)
+  deps.tabs.disposeWorkspace(workspaceId)
+  deps.views.destroyWorkspace(workspaceId)
+  deps.previewIssues.disposeWorkspace(workspaceId)
   const archiveScriptFailure =
     !ws.archived && repo
       ? await runArchiveScript(deps.scripts, repo.archiveScript, ws.worktreePath)

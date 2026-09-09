@@ -19,6 +19,7 @@ import { getTranscripts } from './transcripts'
 import { flushPendingSyncs } from './fsutil'
 import { initHealthLogging } from './health'
 import { TerminalManager } from './terminal'
+import { WorkspaceTabManager } from './workspaceTabs'
 import {
   applyNavigationGuards,
   loadRenderer,
@@ -187,6 +188,8 @@ process.env.WOOI_TOOL_SHIM = toolShimPath()
 initToolPermission({ dispatch: (request) => dispatch(IPC.evtPermission, request) })
 
 const terminals = new TerminalManager(dispatch)
+// 콘텐츠 영역 맨 위 탭 스트립(대화·dev 프리뷰·웹·파일·아티팩트·스택)의 소유자([[main/workspaceTabs]]).
+const tabs = new WorkspaceTabManager(dispatch)
 // 얹은 웹 뷰(dev 프리뷰·웹 탭)의 소유자. 창보다 오래 살아야 한다 — 패널을 분리한 창으로
 // 떼었다 붙이는 동안 뷰가 살아 있어야 페이지가 처음부터 다시 로드되지 않는다.
 const views = new HostedViewManager(dispatch, {
@@ -216,6 +219,13 @@ initAgentTools({
   scripts,
   sessions,
   terminals,
+  tabs,
+  views,
+  // previewIssues() 는 initPreview()(app.whenReady 안)가 불려야 채워진다. 여기 initAgentTools 는
+  // 그보다 먼저 모듈 로드 시점에 도니, 값을 지금 캡처하지 않고 실제 호출 시점까지 늦춘다.
+  previewIssues: {
+    disposeWorkspace: (workspaceId) => previewIssues().disposeWorkspace(workspaceId)
+  },
   pruneFanoutGroups,
   broadcastState: () => dispatch(IPC.evtState, getStore().getState()),
   sendMessage: (workspaceId, text, opts) =>
@@ -369,7 +379,16 @@ app.whenReady().then(() => {
     (workspaceId) => dispatch(IPC.evtRemoteRead, workspaceId),
     remoteOverride || getStore().getState().settings.remoteAccessAvailable
   )
-  registerIpc({ sessions, scripts, terminals, views, panes, dispatch, getWindow: () => mainWindow })
+  registerIpc({
+    sessions,
+    scripts,
+    terminals,
+    tabs,
+    views,
+    panes,
+    dispatch,
+    getWindow: () => mainWindow
+  })
   // 기동 시점에는 도는 워크스페이스가 없다(store 가 남은 'running' 을 'idle' 로 씻는다) —
   // 설정만 물려주고, 실제 판단은 첫 방송부터 시작한다.
   initSleepBlocker(getStore().getState().settings.keepAwakeWhileRunning)

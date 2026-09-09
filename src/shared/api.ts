@@ -91,7 +91,9 @@ import type {
   UpdateFromBaseResult,
   UpdateStatus,
   WorkspaceCompareBase,
-  WorkspaceDiff
+  WorkspaceDiff,
+  WorkspaceTabKind,
+  WorkspaceTabsState
 } from './types'
 import type { PreviewIssue } from './previewIssues'
 
@@ -692,6 +694,30 @@ export interface WooiApi {
     onExit(cb: (e: TerminalExitEvent) => void): () => void
     /** 탭 구성 변경 방송 — 다른 창(분리한 작업 패널)에서 바꾼 것도 여기로 들어온다. */
     onTabs(cb: (e: TerminalTabsState) => void): () => void
+  }
+
+  /**
+   * 콘텐츠 영역 맨 위 탭 스트립(대화 + dev 프리뷰 + 웹 + 파일 + 아티팩트 + 스택). 목록의 단일
+   * 진실 원천은 main 이고, 변경은 모든 창에 방송된다([[main/workspaceTabs]]).
+   */
+  tabs: {
+    /** 탭 구성을 읽는다. 탭이 하나도 없으면 메인이 대화 탭 하나로 채워 돌려준다. */
+    get(workspaceId: string): Promise<WorkspaceTabsState>
+    /** 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 활성화한다. */
+    open(
+      workspaceId: string,
+      opts: { kind: WorkspaceTabKind; target?: string; title?: string }
+    ): Promise<WorkspaceTabsState>
+    /** 탭을 닫는다. 대화 탭(chat)은 조용히 무시된다. */
+    close(workspaceId: string, tabId: string): Promise<WorkspaceTabsState>
+    /** 보고 있는 탭을 바꾼다. */
+    select(workspaceId: string, tabId: string): Promise<WorkspaceTabsState>
+    /** 탭 이름을 바꾼다(빈 문자열이면 기본 이름으로 되돌린다). */
+    rename(workspaceId: string, tabId: string, title: string): Promise<WorkspaceTabsState>
+    /** 가장 최근에 닫은 탭을 되살린다(워크스페이스별 최대 10개까지 기억, 영속하지 않는다). */
+    reopen(workspaceId: string): Promise<WorkspaceTabsState>
+    /** 탭 구성 변경 방송 — 다른 창(분리한 작업 패널)에서 바꾼 것도 여기로 들어온다. */
+    onTabs(cb: (e: WorkspaceTabsState) => void): () => void
   }
 
   /**

@@ -2699,7 +2699,7 @@ export type ScriptRunState = 'idle' | 'running' | 'exited'
 // ── Preview 패널(워크트리의 dev 서버를 앱 안에서 보는 탭) ────────────────
 
 /**
- * Preview `<webview>` 가 쓰는 Electron 세션 파티션.
+ * Preview 게스트가 쓰는 Electron 세션 파티션.
  *
  * 앱의 기본 세션과 **반드시** 갈라 둔다. 이유가 둘이다:
  *  1. 격리 — 미리보는 페이지가 앱이 들고 있는 쿠키·스토리지·자격증명에 닿지 못한다.
@@ -4037,7 +4037,7 @@ export const IPC = {
   previewSetUrl: 'preview:setUrl',
   /** 이 워크스페이스의 Preview 를 특정 주소로 연다(스크립트 패널의 "Open in Preview"). */
   previewOpen: 'preview:open',
-  /** Preview 화면을 캡처해 컴포저 첨부로 흘려보낸다. 인자는 webview 게스트의 webContents id. */
+  /** Preview 화면을 캡처해 컴포저 첨부로 흘려보낸다. 인자는 그 화면을 그리는 탭의 id. */
   previewCapture: 'preview:capture',
   /**
    * 요소 픽커를 켠다. 사용자가 미리보는 페이지에서 요소를 고를 때까지 기다렸다가,
@@ -4046,10 +4046,6 @@ export const IPC = {
   previewPickElement: 'preview:pickElement',
   /** 진행 중인 요소 픽을 취소한다(Esc·패널 언마운트). */
   previewCancelPick: 'preview:cancelPick',
-  /** 이 게스트의 콘솔·네트워크 문제를 이 워크스페이스 것으로 모으기 시작한다(dom-ready 에서). */
-  previewWatchIssues: 'preview:watchIssues',
-  /** 수집을 멈춘다(패널이 사라질 때). */
-  previewUnwatchIssues: 'preview:unwatchIssues',
   /** 모아 둔 문제 목록을 읽는다(개수만 방송되므로 패널을 열 때 한 번 가져간다). */
   previewListIssues: 'preview:listIssues',
   /** 모아 둔 문제를 비운다. */

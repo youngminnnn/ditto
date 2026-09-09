@@ -223,14 +223,7 @@ import { deliverApprovedPeerMessage } from './agent/tools/peer'
 import { resolvePeerMessage } from './agent/tools/peerLedger'
 import { stackedWaits } from './stackedWait'
 import type { PaneWindows } from './paneWindows'
-import {
-  cancelPreviewPick,
-  capturePreview,
-  forgetPreviewGuest,
-  pickPreviewElement,
-  previewIssues,
-  watchPreviewIssues
-} from './preview'
+import { cancelPreviewPick, capturePreview, pickPreviewElement, previewIssues } from './preview'
 import type { ScriptRunner } from './scripts'
 import type { TerminalManager } from './terminal'
 import type { HostedViewManager } from './webViews'
@@ -1665,10 +1658,10 @@ export function registerIpc(ctx: IpcContext): void {
 
   // 캡처는 main 이 한다(renderer 에는 webContents 가 없다). 찍은 이미지는 호출자에게 돌려주지
   // 않고 방송한다 — 컴포저는 메인 창에만 있고, 캡처를 누른 창은 분리된 work 창일 수 있다.
-  handle(IPC.previewCapture, async (_e, workspaceId: string, webContentsId: number) => {
+  handle(IPC.previewCapture, async (_e, workspaceId: string, tabId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return { error: 'That workspace is gone.' }
-    const { image, error } = await capturePreview(ws.previewUrl ?? '', webContentsId)
+    const { image, error } = await capturePreview(ws.previewUrl ?? '', tabId)
     if (error || !image) return { error: error ?? 'Could not capture the preview.' }
     dispatch(IPC.evtComposerAttach, { workspaceId, image })
     return {}
@@ -1676,31 +1669,23 @@ export function registerIpc(ctx: IpcContext): void {
 
   // 요소 픽커. 사용자가 고를 때까지(또는 취소·타임아웃까지) 이 핸들러가 매달려 있는다 —
   // 렌더러는 그동안 "고르는 중" 을 보여 주고, 결과는 캡처와 같은 우편함으로 흘러간다.
-  handle(IPC.previewPickElement, async (_e, workspaceId: string, webContentsId: number) => {
+  handle(IPC.previewPickElement, async (_e, workspaceId: string, tabId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return { error: 'That workspace is gone.' }
-    const { attachment, error } = await pickPreviewElement(ws.previewUrl ?? '', webContentsId)
+    const { attachment, error } = await pickPreviewElement(ws.previewUrl ?? '', tabId)
     if (error || !attachment) return { error: error ?? 'Could not read that element.' }
     dispatch(IPC.evtComposerAttach, { workspaceId, ...attachment })
     return {}
   })
 
-  handle(IPC.previewCancelPick, (_e, webContentsId: number) => {
-    cancelPreviewPick(webContentsId)
+  handle(IPC.previewCancelPick, (_e, tabId: string) => {
+    cancelPreviewPick(tabId)
   })
 
   // 콘솔·네트워크 문제 수집. 목록은 여기서 당겨 가고, 개수만 evtPreviewIssues 로 방송된다
   // — 매 콘솔 줄을 IPC 로 밀면 폭주하는 dev 로그가 메인 힙을 밀어 올린다([[main/previewIssues]]).
-  handle(IPC.previewWatchIssues, (_e, workspaceId: string, webContentsId: number) => {
-    watchPreviewIssues(workspaceId, webContentsId)
-  })
-
-  handle(IPC.previewUnwatchIssues, (_e, webContentsId: number) => {
-    previewIssues().unwatch(webContentsId)
-    // 에이전트 도구가 이 워크스페이스의 게스트를 찾는 표도 같은 자리에서 지운다([[main/preview]]).
-    forgetPreviewGuest(webContentsId)
-  })
-
+  // 수집을 시작·중단하는 IPC 는 없다. 뷰를 만든 쪽이 곧 아는 쪽이라 webViews 의 수명 훅이
+  // 직접 붙이고 뗀다([[main/webViews]]) — 렌더러가 dom-ready 에서 알려 주던 우회가 사라졌다.
   handle(IPC.previewListIssues, (_e, workspaceId: string) => previewIssues().list(workspaceId))
 
   handle(IPC.previewClearIssues, (_e, workspaceId: string) => {

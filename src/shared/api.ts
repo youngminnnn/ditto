@@ -357,20 +357,17 @@ export interface WooiApi {
     open(workspaceId: string, url: string): Promise<void>
     /**
      * Preview 화면을 캡처해 컴포저 첨부로 보낸다. 성공하면 이미지는 onComposerAttach 로 온다.
-     * webContentsId 는 `<webview>.getWebContentsId()` — main 이 그 게스트가 정말 Preview 인지 확인한다.
+     * tabId 는 우리가 발급한 것이라 main 은 자기 레지스트리에서 찾기만 하면 된다 — 렌더러가
+     * 준 숫자를 검증하던 관문이 필요 없어졌다([[main/webViews]]).
      */
-    capture(workspaceId: string, webContentsId: number): Promise<PreviewCaptureResult>
+    capture(workspaceId: string, tabId: string): Promise<PreviewCaptureResult>
     /**
      * 요소 픽커를 켜고 사용자가 고를 때까지 기다린다. 고르면 결과는 onComposerAttach 로 오고,
      * 여기서는 끝났다는 것(또는 실패 사유)만 돌려준다. 취소·타임아웃도 error 로 온다.
      */
-    pickElement(workspaceId: string, webContentsId: number): Promise<PreviewCaptureResult>
+    pickElement(workspaceId: string, tabId: string): Promise<PreviewCaptureResult>
     /** 진행 중인 픽을 취소한다. 켜져 있지 않으면 아무 일도 하지 않는다. */
-    cancelPick(webContentsId: number): Promise<void>
-    /** 이 게스트의 콘솔·네트워크 문제를 이 워크스페이스 것으로 모으기 시작한다. */
-    watchIssues(workspaceId: string, webContentsId: number): Promise<void>
-    /** 수집을 멈춘다(패널이 사라질 때). */
-    unwatchIssues(webContentsId: number): Promise<void>
+    cancelPick(tabId: string): Promise<void>
     /** 모아 둔 문제 목록. 개수만 방송되므로 패널을 열 때 이걸로 채운다. */
     listIssues(workspaceId: string): Promise<PreviewIssue[]>
     clearIssues(workspaceId: string): Promise<void>

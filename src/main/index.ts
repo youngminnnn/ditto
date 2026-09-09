@@ -40,7 +40,7 @@ import { captureRunningTurns } from './shutdownResume'
 import { setWindowOpener } from './notifications'
 import { initNotice } from './notice'
 import { initFeatures } from './features'
-import { initPreview } from './preview'
+import { initPreview, previewIssues } from './preview'
 import { disposeAuthSessions } from './auth'
 import { reapDescendants } from './reaper'
 
@@ -189,7 +189,12 @@ initToolPermission({ dispatch: (request) => dispatch(IPC.evtPermission, request)
 const terminals = new TerminalManager(dispatch)
 // 얹은 웹 뷰(dev 프리뷰·웹 탭)의 소유자. 창보다 오래 살아야 한다 — 패널을 분리한 창으로
 // 떼었다 붙이는 동안 뷰가 살아 있어야 페이지가 처음부터 다시 로드되지 않는다.
-const views = new HostedViewManager(dispatch)
+const views = new HostedViewManager(dispatch, {
+  // 콘솔·네트워크 수집을 뷰 수명에 묶는다. 첫 loadURL 보다 먼저 붙어야 페이지의 첫 콘솔
+  // 줄부터 잡히는데, 그 시점을 아는 것은 뷰를 만드는 쪽뿐이다([[main/webViews]]).
+  onCreated: (_tabId, workspaceId, contents) => previewIssues().watch(workspaceId, contents),
+  onDestroyed: (_tabId, workspaceId) => previewIssues().disposeWorkspace(workspaceId)
+})
 
 const stackedWaits = initStackedWaits({
   sendMessage: (workspaceId, text, opts) =>
@@ -344,9 +349,9 @@ app.whenReady().then(() => {
     showMainWindow()
     mainWindow?.webContents.send(IPC.evtMenuCommand, command)
   })
-  // Preview 게스트의 울타리는 창보다 먼저 세운다 — will-attach-webview 를 놓치면 그 webview 는
-  // 우리가 강제하려던 설정 없이 붙는다([[preview]]).
-  initPreview(dispatch)
+  // Preview 세션 정책(권한 전면 거부)을 창보다 먼저 세운다. 게스트 울타리는 뷰를 만드는
+  // 자리에서 걸리므로([[main/webViews]]) 여기서 놓칠 일이 없다.
+  initPreview(dispatch, views)
   // 원격 브리지는 IPC 등록보다 **먼저** 만들어야 한다 — 핸들러가 getRemoteBridge() 를 부른다.
   // 만드는 것 자체는 아무 자원도 잡지 않는다(설정을 읽을 뿐이다). 실제 연결은 아래에서
   // 사용자가 켜 둔 경우에만 일어난다.

@@ -1,3 +1,4 @@
+import { useSuppressAllViews } from '../lib/viewSuppress'
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
@@ -176,6 +177,9 @@ export default function FileViewerOverlay({
     setDraft(workspace.id, appendMention(draft, token))
     pushToast('info', `Added ${token.trim()} to the message box`)
   }
+
+  // 얹은 웹 뷰는 네이티브라 DOM 위에 그려진다 — 덮는 것만으로는 안 가려진다([[lib/viewSuppress]]).
+  useSuppressAllViews(!!state && !!path)
 
   if (!state || !path) return <></>
 

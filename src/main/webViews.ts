@@ -77,10 +77,26 @@ function guestWebPreferences(partition: string): Electron.WebPreferences {
   }
 }
 
+/**
+ * 뷰의 수명에 얹는 배선.
+ *
+ * 콘솔·네트워크 수집이 여기 붙는다. 예전에는 렌더러가 `dom-ready` 를 보고 "이 게스트를
+ * 지켜봐 달라" 고 알려 줬는데, 그건 게스트가 렌더러 손에서 태어났기 때문에 어쩔 수 없던
+ * 우회였다 — 첫 콘솔 줄을 놓치지 않으려면 실제 페이지가 로드되기 **전**에 붙어야 하는데,
+ * 그 시점을 아는 것은 이제 이쪽이다.
+ */
+export interface HostedViewHooks {
+  onCreated?(tabId: string, workspaceId: string, contents: WebContents): void
+  onDestroyed?(tabId: string, workspaceId: string): void
+}
+
 export class HostedViewManager {
   private entries = new Map<string, Entry>()
 
-  constructor(private dispatch: (channel: string, payload: unknown) => void) {}
+  constructor(
+    private dispatch: (channel: string, payload: unknown) => void,
+    private hooks: HostedViewHooks = {}
+  ) {}
 
   /**
    * 탭에 뷰를 붙여 준다. 이미 있으면 그대로 쓴다.
@@ -107,6 +123,8 @@ export class HostedViewManager {
     }
     this.entries.set(tabId, entry)
     this.watchNavigation(tabId, view.webContents)
+    // 첫 loadURL 보다 먼저다 — 이 순서라야 페이지의 첫 콘솔 줄부터 잡힌다.
+    this.hooks.onCreated?.(tabId, workspaceId, view.webContents)
   }
 
   /**
@@ -240,6 +258,22 @@ export class HostedViewManager {
     return { guest: entry.view.webContents }
   }
 
+  /**
+   * 이 워크스페이스의 그 종류 뷰. 없으면 null.
+   *
+   * 에이전트 도구가 쓰는 입구다 — 도구는 tabId 를 모르고 워크스페이스만 안다. 지금은
+   * 워크스페이스당 dev 뷰가 하나뿐이라 첫 번째를 돌려주면 되고, 탭이 여럿이 되는 단계에서
+   * "활성 탭" 규칙이 여기로 들어온다.
+   */
+  viewForWorkspace(workspaceId: string, kind: HostedViewKind): WebContents | null {
+    for (const entry of this.entries.values()) {
+      if (entry.workspaceId !== workspaceId || entry.kind !== kind) continue
+      if (entry.view.webContents.isDestroyed()) continue
+      return entry.view.webContents
+    }
+    return null
+  }
+
   /** 화면에 그려지고 있는가. 캡처는 그려지는 뷰에서만 유효하다. */
   isVisible(tabId: string): boolean {
     const entry = this.entries.get(tabId)
@@ -296,6 +330,7 @@ export class HostedViewManager {
     if (entry.busy > 0) return
     this.detach(tabId)
     this.entries.delete(tabId)
+    this.hooks.onDestroyed?.(tabId, entry.workspaceId)
     if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close()
     this.dispatch(IPC.evtHostedView, { type: 'gone', tabId })
   }

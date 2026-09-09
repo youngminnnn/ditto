@@ -121,14 +121,10 @@ const api: WooiApi = {
   preview: {
     setUrl: (workspaceId, url) => ipcRenderer.invoke(IPC.previewSetUrl, workspaceId, url),
     open: (workspaceId, url) => ipcRenderer.invoke(IPC.previewOpen, workspaceId, url),
-    capture: (workspaceId, webContentsId) =>
-      ipcRenderer.invoke(IPC.previewCapture, workspaceId, webContentsId),
-    pickElement: (workspaceId, webContentsId) =>
-      ipcRenderer.invoke(IPC.previewPickElement, workspaceId, webContentsId),
-    cancelPick: (webContentsId) => ipcRenderer.invoke(IPC.previewCancelPick, webContentsId),
-    watchIssues: (workspaceId, webContentsId) =>
-      ipcRenderer.invoke(IPC.previewWatchIssues, workspaceId, webContentsId),
-    unwatchIssues: (webContentsId) => ipcRenderer.invoke(IPC.previewUnwatchIssues, webContentsId),
+    capture: (workspaceId, tabId) => ipcRenderer.invoke(IPC.previewCapture, workspaceId, tabId),
+    pickElement: (workspaceId, tabId) =>
+      ipcRenderer.invoke(IPC.previewPickElement, workspaceId, tabId),
+    cancelPick: (tabId) => ipcRenderer.invoke(IPC.previewCancelPick, tabId),
     listIssues: (workspaceId) => ipcRenderer.invoke(IPC.previewListIssues, workspaceId),
     clearIssues: (workspaceId) => ipcRenderer.invoke(IPC.previewClearIssues, workspaceId),
     sendIssues: (workspaceId, issueIds) =>

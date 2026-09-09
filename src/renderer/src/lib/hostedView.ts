@@ -101,20 +101,45 @@ export function useHostedView(opts: {
   kind: HostedViewKind
   /** 거짓이면 뷰를 숨긴다 — 빈 화면·실패 화면을 그 자리에 그리는 동안. */
   enabled?: boolean
-}): { ref: React.RefObject<HTMLDivElement | null>; state: HostedViewState | null } {
+}): {
+  ref: React.RefObject<HTMLDivElement | null>
+  state: HostedViewState | null
+  /** 메인 프레임 로드 실패. 다음 로드가 시작되면 저절로 지워진다. */
+  failure: string | null
+  /**
+   * 뷰가 만들어져 명령을 받을 준비가 됐는가.
+   *
+   * `state` 로는 알 수 없다 — 갓 만든 뷰는 아직 아무 데도 가지 않아서 내비게이션 이벤트가
+   * 하나도 없고, 따라서 `state` 가 null 인 채로 남는다. 첫 주소를 언제 밀어 넣을지 아는
+   * 신호가 따로 필요하다.
+   */
+  attached: boolean
+} {
   const { tabId, workspaceId, kind, enabled = true } = opts
   const ref = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<HostedViewState | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [attached, setAttached] = useState(false)
 
   // main 이 접어 보내는 상태 스냅샷. 이벤트 여섯 개를 각각 구독하던 것을 하나로 줄인 자리다.
   useEffect(() => {
     if (!tabId) return
     return window.api.views.onEvent((e: HostedViewEvent) => {
       if (e.tabId !== tabId) return
-      if (e.type === 'state') setState(e)
+      if (e.type === 'state') {
+        setState(e)
+        // 다음 로드가 시작되면 지난 실패는 더 이상 화면을 덮지 않아야 한다.
+        if (e.loading) setFailure(null)
+      } else if (e.type === 'fail') {
+        // 서브리소스 실패(이미지 404 등)로 화면 전체를 에러로 덮지 않는다.
+        if (e.isMainFrame) setFailure(e.errorDescription || `Load failed (${e.errorCode})`)
+      }
       // 뷰가 동면·크래시로 사라지면 화면은 "다시 열기" 를 그려야 한다. 빈 화면으로 두면
       // 사용자는 페이지가 로드에 실패했다고 읽는다.
-      else if (e.type === 'gone') setState(null)
+      else if (e.type === 'gone') {
+        setState(null)
+        setFailure(null)
+      }
     })
   }, [tabId])
 
@@ -123,10 +148,11 @@ export function useHostedView(opts: {
     if (!tabId || !el) return
 
     let cancelled = false
-    void window.api.views.ensure(tabId, workspaceId, kind).then(() => {
+    void window.api.views.ensure(tabId, workspaceId, kind).then(async () => {
       if (cancelled) return
       // attach 는 ensure 뒤에 와야 한다 — 아직 없는 뷰는 붙일 수 없다.
-      void window.api.views.attach(tabId)
+      await window.api.views.attach(tabId)
+      if (!cancelled) setAttached(true)
     })
 
     registry.set(tabId, { el, enabled })
@@ -134,6 +160,7 @@ export function useHostedView(opts: {
 
     return () => {
       cancelled = true
+      setAttached(false)
       registry.delete(tabId)
       stopLoopIfIdle()
       void window.api.views.detach(tabId)
@@ -148,7 +175,7 @@ export function useHostedView(opts: {
     if (reg) reg.enabled = enabled
   }, [tabId, enabled])
 
-  return { ref, state }
+  return { ref, state, failure, attached }
 }
 
 /** 테스트용 — 케이스 사이에 루프와 등록이 새지 않게 한다. */

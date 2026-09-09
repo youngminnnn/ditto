@@ -12,34 +12,21 @@ import {
   TriangleAlert,
   X
 } from 'lucide-react'
-import { PREVIEW_PARTITION } from '@shared/types'
 import { isLocalUrl, normalizeInputUrl } from '@shared/devUrl'
 import type { PreviewIssue } from '@shared/previewIssues'
 import { useStore } from '../store'
 import { isPaneWindow } from '../lib/paneWindow'
-import type { PreviewWebview, WebviewFailLoadEvent, WebviewNavigateEvent } from '../lib/webview'
+import { useHostedView } from '../lib/hostedView'
+import { useSuppressViewsOver } from '../lib/viewSuppress'
 import type { Workspace } from '@shared/types'
 
 /**
- * 게스트에게 넘길 webPreferences. main 의 will-attach-webview 가 어차피 같은 값을 강제하지만
- * ([[main/preview]]) 여기에도 적어 둔다 — 태그만 읽는 사람에게도 "이 뷰는 격리돼 있다" 가
- * 보여야 하고, 둘 중 하나가 지워져도 나머지가 남는다.
+ * 이 단계의 탭 id. 아직 탭 모델이 없어서 "워크스페이스당 dev 뷰 하나" 라는 현재 전제를 그대로
+ * 합성한다 — 탭 목록이 생기면 진짜 탭 id 가 이 자리에 온다.
  */
-const GUEST_PREFS = 'contextIsolation=yes,sandbox=yes,nodeIntegration=no,javascript=yes'
-
-/** 사용자가 이동을 끊었을 때(-3 ABORTED) 나는 코드. 실패로 보여 줄 일이 아니다. */
-const ERR_ABORTED = -3
-
-/**
- * 게스트를 붙이기 위한 최초 `src`. **반드시 있어야 한다** — Electron 의 webview 구현은 `src` 가
- * 비어 있으면 `createGuest()` 자체를 부르지 않아(web-view-attributes 의 `SrcAttribute.parse`),
- * 게스트가 영영 안 생기고 `loadURL`·`getWebContentsId` 가 "not attached" 로 던진다.
- *
- * 그러면서도 **상수여야 한다**. 게스트가 이동하면 Electron 이 `src` DOM 속성을 현재 주소로
- * 바꿔 놓는데, React 가 렌더할 때마다 자기 prop 값을 다시 써 넣으면 그때마다 페이지가 처음으로
- * 되감긴다. prop 이 늘 같은 값이면 React 는 속성을 건드리지 않는다.
- */
-const BOOT_URL = 'about:blank'
+function devTabId(workspaceId: string): string {
+  return `dev:${workspaceId}`
+}
 
 /**
  * Preview 탭 — 이 워크트리가 띄운 dev 서버를 앱 안에서 본다.
@@ -47,9 +34,9 @@ const BOOT_URL = 'about:blank'
  * 범용 브라우저가 아니다. 여러 워크스페이스의 dev 서버를 오가며 "지금 이 브랜치의 화면" 을
  * 보는 것이 전부라, 주소 하나·앞뒤·새로고침·캡처만 있다. 탭도 북마크도 없다.
  *
- * 주소는 mount 시 한 번만 `loadURL` 로 밀어 넣고, 이후 이동도 전부 명령형으로 한다. `src`
- * prop 에 매달면 상태 방송(evtState)이 한 번 올 때마다 prop 이 같은 값으로 다시 흘러 들어와
- * 보고 있던 페이지가 처음부터 다시 로드된다 — 폼에 뭘 입력하던 중이었다면 그게 날아간다.
+ * 게스트는 main 이 소유한다([[main/webViews]]). 이 컴포넌트가 놓는 것은 자리표시자 `<div>`
+ * 하나이고, 뷰는 그 자리에 네이티브로 그려진다. 그래서 예전에 있던 `src` 되감김 함정 —
+ * 렌더할 때마다 prop 이 다시 쓰여 페이지가 처음으로 돌아가던 것 — 이 애초에 성립하지 않는다.
  */
 export default function PreviewPanel({
   workspace,
@@ -62,23 +49,27 @@ export default function PreviewPanel({
   /** 지금 이 탭이 보이는지. 감춰져 있는 동안에는 캡처하지 않는다. */
   active: boolean
 }): React.JSX.Element {
-  const viewRef = useRef<PreviewWebview | null>(null)
   const pushToast = useStore((s) => s.pushToast)
+  const tabId = devTabId(workspace.id)
 
-  // 게스트가 붙기 전에는 loadURL 이 던진다. dom-ready 를 본 뒤에만 명령을 보낸다.
-  const [ready, setReady] = useState(false)
   // 화면에 보이는 주소(게스트가 실제로 있는 곳). 편집 중에는 draft 가 이걸 가린다.
   const [url, setUrl] = useState(workspace.previewUrl ?? '')
   const [draft, setDraft] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [failure, setFailure] = useState<string | null>(null)
-  const [nav, setNav] = useState({ back: false, forward: false })
   const [capturing, setCapturing] = useState(false)
   // 요소 픽커가 켜져 있는 동안(사용자가 게스트에서 요소를 고르는 중).
   const [picking, setPicking] = useState(false)
   // 콘솔·네트워크 문제. 개수만 방송되므로(폭주 방지) 목록은 패널을 열 때 당겨 온다.
   const [issueCount, setIssueCount] = useState({ errors: 0, warnings: 0 })
   const [issues, setIssues] = useState<PreviewIssue[] | null>(null)
+
+  const { ref, state, failure, attached } = useHostedView({
+    tabId,
+    workspaceId: workspace.id,
+    kind: 'dev'
+  })
+  const ready = attached
+  const loading = state?.loading ?? false
+  const nav = { back: state?.canGoBack ?? false, forward: state?.canGoForward ?? false }
 
   /** 첫 로드 주소. mount 이후 prop 이 바뀌어도 다시 로드하지 않도록 처음 값을 고정한다. */
   const initialUrl = useRef(navTarget?.url ?? workspace.previewUrl ?? '')
@@ -91,91 +82,34 @@ export default function PreviewPanel({
     void window.api.preview.setUrl(workspace.id, next)
   }
 
-  /** 게스트를 이 주소로 보낸다(붙기 전이면 dom-ready 가 대신 처리한다). */
+  /** 게스트를 이 주소로 보낸다(뷰가 아직 없으면 아래 첫 로드 effect 가 대신 처리한다). */
   const navigate = (next: string): void => {
     setUrl(next)
     setDraft(null)
-    setFailure(null)
     initialUrl.current = next
-    const view = viewRef.current
-    if (view && ready) void view.loadURL(next).catch(() => setFailure('Could not load that URL.'))
+    if (attached) void window.api.views.load(tabId, next)
   }
 
-  // 게스트 이벤트 구독. webview 의 이벤트는 React 합성 이벤트가 아니라 DOM 커스텀 이벤트라
-  // addEventListener 로 받는다.
+  // 게스트가 실제로 간 곳을 주소창과 워크스페이스에 반영한다. main 이 접어 보내는 상태
+  // 스냅샷 하나가 예전의 did-navigate·did-navigate-in-page 구독을 대신한다.
   useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-
-    const syncNav = (): void => {
-      // 게스트가 사라지는 중이면 이 호출들이 던진다 — 상태 갱신 하나 때문에 패널이 죽지 않게 감싼다.
-      try {
-        setNav({ back: view.canGoBack(), forward: view.canGoForward() })
-      } catch {
-        setNav({ back: false, forward: false })
-      }
-    }
-
-    const onDomReady = (): void => {
-      setReady(true)
-      syncNav()
-      // 실제 페이지가 로드되기 **전**(about:blank 단계)에 등록해야 첫 콘솔 줄부터 잡힌다.
-      try {
-        void window.api.preview.watchIssues(workspace.id, view.getWebContentsId())
-      } catch {
-        /* 게스트가 이미 사라졌다. */
-      }
-    }
-    const onStart = (): void => {
-      setLoading(true)
-      setFailure(null)
-    }
-    const onStop = (): void => {
-      setLoading(false)
-      syncNav()
-    }
-    const onNavigate = (e: Event): void => {
-      const next = (e as WebviewNavigateEvent).url
-      // 부팅용 about:blank 는 사용자가 간 곳이 아니다 — 주소창에 비치지도, 기억되지도 않게 한다.
-      if (!next || next === BOOT_URL) return
-      setUrl(next)
-      setDraft(null)
-      syncNav()
-      remember(next)
-    }
-    const onFail = (e: Event): void => {
-      const { errorCode, errorDescription, isMainFrame } = e as WebviewFailLoadEvent
-      // 서브리소스 실패(이미지 404 등)로 화면 전체를 에러로 덮지 않는다.
-      if (!isMainFrame || errorCode === ERR_ABORTED) return
-      setLoading(false)
-      setFailure(errorDescription || `Load failed (${errorCode})`)
-    }
-
-    view.addEventListener('dom-ready', onDomReady)
-    view.addEventListener('did-start-loading', onStart)
-    view.addEventListener('did-stop-loading', onStop)
-    view.addEventListener('did-navigate', onNavigate)
-    view.addEventListener('did-navigate-in-page', onNavigate)
-    view.addEventListener('did-fail-load', onFail)
-    return () => {
-      view.removeEventListener('dom-ready', onDomReady)
-      view.removeEventListener('did-start-loading', onStart)
-      view.removeEventListener('did-stop-loading', onStop)
-      view.removeEventListener('did-navigate', onNavigate)
-      view.removeEventListener('did-navigate-in-page', onNavigate)
-      view.removeEventListener('did-fail-load', onFail)
-    }
-    // 구독은 mount 당 한 번. workspace 가 바뀌면 WorkPanel 이 key 로 통째로 새로 만든다.
+    const next = state?.url
+    if (!next) return
+    setUrl(next)
+    setDraft(null)
+    remember(next)
+    // remember 는 매 렌더 새로 만들어지지만 하는 일은 저장 하나다 — deps 에 넣으면 주소가
+    // 그대로여도 매 렌더 다시 돈다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [state?.url])
 
-  // 게스트가 붙는 순간 첫 주소를 밀어 넣는다(`src` 를 쓰지 않는 이유는 컴포넌트 주석 참고).
+  // 뷰가 준비되면 첫 주소를 밀어 넣는다. 갓 만든 뷰는 아직 아무 데도 가 있지 않다.
+  const loadedInitial = useRef(false)
   useEffect(() => {
-    const view = viewRef.current
-    if (!ready || !view || !initialUrl.current) return
-    // 첫 로드는 한 번뿐이다 — 이후 이동은 navigate() 가 직접 한다(그래서 deps 는 ready 뿐이다).
-    void view.loadURL(initialUrl.current).catch(() => setFailure('Could not load that URL.'))
-  }, [ready])
+    if (!attached || loadedInitial.current || !initialUrl.current) return
+    loadedInitial.current = true
+    void window.api.views.load(tabId, initialUrl.current)
+  }, [attached, tabId])
 
   // "Open in Preview" 로 들어온 이동 명령.
   useEffect(() => {
@@ -199,19 +133,6 @@ export default function PreviewPanel({
       })
     })
   }, [workspace.id])
-
-  // 패널이 사라지면 수집도 멈춘다 — 안 그러면 죽은 게스트의 리스너가 main 에 남는다.
-  const unwatchRef = useRef<() => void>(() => {})
-  unwatchRef.current = () => {
-    const view = viewRef.current
-    if (!view) return
-    try {
-      void window.api.preview.unwatchIssues(view.getWebContentsId())
-    } catch {
-      /* 게스트가 이미 사라졌다 — main 의 destroyed 처리가 알아서 치운다. */
-    }
-  }
-  useEffect(() => () => unwatchRef.current(), [])
 
   const toggleIssues = (): void => {
     if (issues !== null) return setIssues(null)
@@ -254,11 +175,10 @@ export default function PreviewPanel({
    * 이 호출은 고르거나 취소할 때까지 돌아오지 않는다 — 그동안 화면에 안내줄을 띄운다.
    */
   const pick = async (): Promise<void> => {
-    const view = viewRef.current
-    if (!view || !ready || picking) return
+    if (!ready || picking) return
     setPicking(true)
     try {
-      const { error } = await window.api.preview.pickElement(workspace.id, view.getWebContentsId())
+      const { error } = await window.api.preview.pickElement(workspace.id, tabId)
       // 취소는 사용자가 한 일이라 에러로 떠들지 않는다.
       if (error && error !== 'cancelled') pushToast('error', error)
       else if (!error)
@@ -274,8 +194,7 @@ export default function PreviewPanel({
   }
 
   const cancelPick = (): void => {
-    const view = viewRef.current
-    if (view && picking) void window.api.preview.cancelPick(view.getWebContentsId())
+    if (picking) void window.api.preview.cancelPick(tabId)
   }
 
   // 픽커를 켠 채 패널이 사라지면(탭·워크스페이스 전환, 창 닫기) main 쪽 CDP 세션이 매달린다.
@@ -297,11 +216,10 @@ export default function PreviewPanel({
 
   /** 지금 화면을 찍어 컴포저에 첨부한다. 이미지는 main 을 거쳐 컴포저가 있는 창으로 간다. */
   const capture = async (): Promise<void> => {
-    const view = viewRef.current
-    if (!view || !ready || capturing) return
+    if (!ready || capturing) return
     setCapturing(true)
     try {
-      const { error } = await window.api.preview.capture(workspace.id, view.getWebContentsId())
+      const { error } = await window.api.preview.capture(workspace.id, tabId)
       if (error) pushToast('error', error)
       else if (isPaneWindow)
         // 이 창에는 컴포저가 없다 — 어디로 갔는지 말해 주지 않으면 아무 일도 안 한 것처럼 보인다.
@@ -321,19 +239,21 @@ export default function PreviewPanel({
         <NavButton
           label="Back"
           disabled={!nav.back}
-          onClick={() => viewRef.current?.goBack()}
+          onClick={() => void window.api.views.goBack(tabId)}
           icon={ArrowLeft}
         />
         <NavButton
           label="Forward"
           disabled={!nav.forward}
-          onClick={() => viewRef.current?.goForward()}
+          onClick={() => void window.api.views.goForward(tabId)}
           icon={ArrowRight}
         />
         <NavButton
           label={loading ? 'Stop' : 'Reload'}
           disabled={!ready || !url}
-          onClick={() => (loading ? viewRef.current?.stop() : viewRef.current?.reload())}
+          onClick={() =>
+            loading ? void window.api.views.stop(tabId) : void window.api.views.reload(tabId)
+          }
           icon={loading ? X : RotateCw}
         />
 
@@ -434,20 +354,13 @@ export default function PreviewPanel({
       )}
 
       <div className="relative flex-1 min-h-0 bg-white">
-        {/* 게스트는 항상 붙여 둔다 — 빈 화면일 때 안내를 그 위에 덮는다. 여기서 언마운트하면
-            dev 서버를 다시 붙일 때마다 페이지가 처음부터 로드된다. */}
-        <webview
-          ref={(el) => {
-            viewRef.current = el
-          }}
-          src={BOOT_URL}
-          partition={PREVIEW_PARTITION}
-          webpreferences={GUEST_PREFS}
-          className="absolute inset-0"
-          style={{ width: '100%', height: '100%' }}
-        />
+        {/* 자리표시자다. 실제 화면은 main 이 소유한 뷰가 이 사각형 위에 네이티브로 그린다 —
+            그래서 여기서 언마운트해도 페이지는 죽지 않고 창에서 떨어지기만 한다. */}
+        <div ref={ref} data-hosted-view={tabId} className="absolute inset-0" />
         {!url && <EmptyState />}
-        {failure && <FailureState message={failure} onRetry={() => viewRef.current?.reload()} />}
+        {failure && (
+          <FailureState message={failure} onRetry={() => void window.api.views.reload(tabId)} />
+        )}
       </div>
     </div>
   )
@@ -573,9 +486,18 @@ function IssueList({
   )
 }
 
+/**
+ * 안내 화면들은 게스트 자리를 덮어 그린다. 네이티브 뷰는 DOM 위에 그려지므로 덮는 것만으로는
+ * 안 보인다 — 그래서 오버레이 자신이 가림을 든다([[lib/viewSuppress]]).
+ */
 function EmptyState(): React.JSX.Element {
+  const box = useRef<HTMLDivElement>(null)
+  useSuppressViewsOver(box)
   return (
-    <div className="absolute inset-0 grid place-items-center bg-[var(--bg)] px-8 text-center">
+    <div
+      ref={box}
+      className="absolute inset-0 grid place-items-center bg-[var(--bg)] px-8 text-center"
+    >
       <div className="max-w-sm space-y-2">
         <p className="text-sm text-neutral-300">Nothing to preview yet.</p>
         <p className="text-xs leading-relaxed text-neutral-500">
@@ -595,8 +517,13 @@ function FailureState({
   message: string
   onRetry: () => void
 }): React.JSX.Element {
+  const box = useRef<HTMLDivElement>(null)
+  useSuppressViewsOver(box)
   return (
-    <div className="absolute inset-0 grid place-items-center bg-[var(--bg)] px-8 text-center">
+    <div
+      ref={box}
+      className="absolute inset-0 grid place-items-center bg-[var(--bg)] px-8 text-center"
+    >
       <div className="max-w-sm space-y-3">
         <p className="text-sm text-neutral-300">Could not load that page.</p>
         <p className="text-xs font-mono text-[var(--danger-400)] break-words">{message}</p>

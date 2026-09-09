@@ -1,3 +1,4 @@
+import { useSuppressAllViews } from '../lib/viewSuppress'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { primaryBtn, ghostBtn } from './Modal'
@@ -252,6 +253,9 @@ export default function FeatureTour({ onDone }: { onDone: () => void }): React.J
       </div>
     </div>
   )
+
+  // 얹은 웹 뷰는 네이티브라 DOM 위에 그려진다 — 덮는 것만으로는 안 가려진다([[lib/viewSuppress]]).
+  useSuppressAllViews()
 
   return (
     <div className="fixed inset-0 z-50">

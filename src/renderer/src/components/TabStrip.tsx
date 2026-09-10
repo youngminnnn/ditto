@@ -1,4 +1,4 @@
-import { MessageSquare, Globe, FileCode, Plus, X } from 'lucide-react'
+import { MessageSquare, Globe, FileCode, Layers, Plus, X } from 'lucide-react'
 import type { WorkspaceTab } from '@shared/types'
 
 /**
@@ -110,12 +110,15 @@ function TabIcon({ tab }: { tab: WorkspaceTab }): React.JSX.Element {
   if (tab.kind === 'dev')
     return <span className="shrink-0 h-[7px] w-[7px] rounded-full bg-[var(--success-400)]" />
   if (tab.kind === 'file') return <FileCode size={12} className="shrink-0" />
+  if (tab.kind === 'stack') return <Layers size={12} className="shrink-0" />
   return <Globe size={12} className="shrink-0" />
 }
 
 /** 이름을 안 붙인 탭의 기본 표기. 주소가 있으면 그걸 줄여 쓰고, 없으면 종류를 쓴다. */
 function tabLabel(tab: WorkspaceTab): string {
   if (tab.kind === 'work') return 'Work'
+  // target 은 앵커 워크스페이스 id라 그대로 쓰면 읽을 수 없다 — 종류 이름으로 대신한다.
+  if (tab.kind === 'stack') return 'Stack'
   if (!tab.target) return tab.kind
   try {
     const url = new URL(tab.target)

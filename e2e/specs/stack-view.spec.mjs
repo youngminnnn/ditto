@@ -91,7 +91,8 @@ export default async function 스택_화면이_층과_base_어긋남을_한_눈�
       }
       console.log(`[e2e] open=${await wooi.shot('stack-view-drift')}`)
 
-      // 5. 닫으면 원래 보던 자리로 돌아온다(전체 화면 축이므로 대화가 다시 나타난다).
+      // 5. 닫으면 원래 보던 자리로 돌아온다(스택 화면은 탭이라, 닫으면 그 탭도 사라지고
+      //    남은 탭 중 이웃 — 보통 대화가 있는 작업 탭 — 으로 옮겨 간다).
       await win.locator('[aria-label="Close the stack view"]').click()
       await layers.first().waitFor({ state: 'detached' })
       console.log(`[e2e] closed=${await wooi.shot('stack-view-closed')}`)

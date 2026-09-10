@@ -232,16 +232,6 @@ describe('나란히 편 두 칸', () => {
     expect(s.selectedWorkspaceId).toBe(child.id)
   })
 
-  it('전체 화면 스택 뷰를 열면 분할은 접힌다 — 한 화면을 통째로 쓰는 축 옆에는 자리가 없다', () => {
-    stackApp()
-    useStore.getState().openSplitPane({ kind: 'workspace', workspaceId: child.id })
-
-    useStore.getState().openStackView(parent.id)
-
-    expect(useStore.getState().splitPane).toBeNull()
-    expect(useStore.getState().activeStackWorkspaceId).toBe(parent.id)
-  })
-
   it('Overview 로 나가면 분할도 함께 접는다', async () => {
     stackApp()
     useStore.getState().openSplitPane({ kind: 'workspace', workspaceId: child.id })

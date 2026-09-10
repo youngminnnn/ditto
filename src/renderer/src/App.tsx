@@ -31,7 +31,6 @@ import { NoticeBanner } from './components/NoticeBanner'
 import Sidebar from './components/Sidebar'
 import PrReviewScreen from './components/review/PrReviewScreen'
 import FanoutCompareScreen from './components/fanout/FanoutCompareScreen'
-import StackScreen from './components/stack/StackScreen'
 import SplitPanes from './components/SplitPanes'
 import { useFeatureNudge } from './lib/featureNudge'
 import PrReviewStartModal from './components/review/PrReviewStartModal'
@@ -45,6 +44,7 @@ import Splitter from './components/Splitter'
 import TabStrip from './components/TabStrip'
 import BrowserTab from './components/tabs/BrowserTab'
 import FileTab from './components/tabs/FileTab'
+import StackTab from './components/tabs/StackTab'
 import { useWorkspaceTabs } from './lib/workspaceTabs'
 import EmptyState from './components/EmptyState'
 import Overview from './components/Overview'
@@ -76,10 +76,11 @@ import type { ExportConversationDetail } from './components/ExportMenu'
  * 리뷰 화면·팬아웃 비교는 대화를 통째로 덮는다. 그 위에서 친 글자를 뒤쪽 textarea 에 몰래
  * 넣으면 사용자는 자기 글이 어디로 갔는지 알 수 없다 — ⌘L 이 같은 이유로 같은 판정을 쓴다.
  *
- * 파일 탭은(dev·web 탭과 마찬가지로) 여기서 따로 가리지 않는다 — 대화를 덮는 오버레이가
+ * 파일 탭은(dev·web·스택 탭과 마찬가지로) 여기서 따로 가리지 않는다 — 대화를 덮는 오버레이가
  * 아니라 그 자리를 통째로 갈아 끼우는 탭이라 ChatView 자체가 마운트되지 않고, 대신 자기
- * 컴포저를 들고 있다([[components/tabs/FileTab]]). 전역 타이핑 리다이렉트·⌘L 이 그 컴포저로
- * 가도 안전한 이유도 같다 — 워크스페이스가 같으면 어느 탭의 컴포저든 같은 초안을 공유한다.
+ * 컴포저를 들고 있다([[components/tabs/FileTab]], [[components/tabs/StackTab]]). 전역 타이핑
+ * 리다이렉트·⌘L 이 그 컴포저로 가도 안전한 이유도 같다 — 워크스페이스가 같으면 어느 탭의
+ * 컴포저든 같은 초안을 공유한다.
  *
  * 열린 모달(`overlayOpen`)은 보지 않는다. 부르는 쪽 둘 다 이미 그 답을 알고 있다 — 전역
  * keydown 은 모달이 떠 있으면 위에서 return 하고, ⌘K 팔레트는 항목을 고르는 즉시 닫힌다.
@@ -88,10 +89,9 @@ import type { ExportConversationDetail } from './components/ExportMenu'
 function chatComposerReachable(
   st: Parameters<typeof paneState>[0] & {
     activeFanoutGroupId: string | null
-    activeStackWorkspaceId: string | null
   }
 ): boolean {
-  if (st.activeFanoutGroupId || st.activeStackWorkspaceId) return false
+  if (st.activeFanoutGroupId) return false
   // 나란히 두 칸을 띄웠으면 "닿는" 입력창은 포커스된 칸의 것 하나뿐이다. 리뷰 칸을 보는 중에
   // 뒤쪽 대화의 입력창을 채우면, 분할이 아닐 때와 똑같이 글이 어디로 갔는지 알 수 없게 된다.
   return focusedPane(paneState(st))?.kind === 'workspace'
@@ -213,7 +213,6 @@ export default function App(): React.JSX.Element {
   const [quickOpenFile, setQuickOpenFile] = useState(false)
   const activeReviewId = useStore((s) => s.activeReviewId)
   const activeFanoutGroupId = useStore((s) => s.activeFanoutGroupId)
-  const activeStackWorkspaceId = useStore((s) => s.activeStackWorkspaceId)
   const splitPane = useStore((s) => s.splitPane)
   const splitFocus = useStore((s) => s.splitFocus)
   // openFileViewer 가 활성 파일 탭에 보내는 이동 명령(줄 번호) — 탭 자체를 여는 것은
@@ -508,7 +507,7 @@ export default function App(): React.JSX.Element {
             st.pushToast('info', 'This workspace is not stacked on anything.')
             return
           }
-          st.openStackView(anchorId)
+          wsTabs.open({ kind: 'stack', target: anchorId })
           return
         }
 
@@ -764,7 +763,6 @@ export default function App(): React.JSX.Element {
       selectedWorkspaceId: selectedId,
       activeReviewId,
       activeFanoutGroupId,
-      activeStackWorkspaceId,
       splitPane,
       splitFocus
     }
@@ -790,7 +788,6 @@ export default function App(): React.JSX.Element {
     selectedId,
     activeReviewId,
     activeFanoutGroupId,
-    activeStackWorkspaceId,
     splitPane,
     splitFocus,
     approvablePermissionCount,
@@ -1308,8 +1305,6 @@ export default function App(): React.JSX.Element {
             <FanoutCompareScreen key={activeFanoutGroupId} groupId={activeFanoutGroupId} />
           ) : activeReviewId ? (
             <PrReviewScreen key={activeReviewId} reviewId={activeReviewId} />
-          ) : activeStackWorkspaceId ? (
-            <StackScreen key={activeStackWorkspaceId} workspaceId={activeStackWorkspaceId} />
           ) : selected ? (
             <div className="flex-1 min-w-0 flex flex-col">
               <TabStrip
@@ -1330,6 +1325,15 @@ export default function App(): React.JSX.Element {
                 // key 를 일부러 안 건다 — 이유는 FileTab 자신의 주석 참고(파일 탭 사이를
                 // 오가는 동안 저장하지 않은 초안을 잃지 않기 위해서다).
                 <FileTab workspace={selected} path={wsTabs.active.target ?? ''} nav={fileNav} />
+              ) : wsTabs.active?.kind === 'stack' ? (
+                // StackScreen 은 초안 같은 걸 들고 있지 않아 리마운트가 싸다 — FileTab 과 달리
+                // key 를 걸어 탭이 바뀔 때마다 깨끗하게 새로 그린다.
+                <StackTab
+                  key={wsTabs.active.id}
+                  workspace={selected}
+                  target={wsTabs.active.target ?? ''}
+                  onClose={() => wsTabs.close(wsTabs.activeId)}
+                />
               ) : (
                 <div className="flex-1 min-h-0 flex">
                   {/*

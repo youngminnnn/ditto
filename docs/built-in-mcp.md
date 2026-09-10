@@ -470,8 +470,7 @@ reading is enough to close the check-your-own-work loop.
 
 ### `open_preview`
 
-Opens Wooi's Preview panel on this workspace's dev server and waits for the page to
-load. The origin is not an input: Wooi takes it from the run script that is currently
+Opens a preview tab on this workspace's dev server and waits for the page to load. The origin is not an input: Wooi takes it from the run script that is currently
 running in this workspace — its printed local address first, then the port Wooi assigned
 it, and finally the address the preview last showed. A `path` that resolves to any other
 origin is rejected, so the tool cannot reach past this workspace's dev server.

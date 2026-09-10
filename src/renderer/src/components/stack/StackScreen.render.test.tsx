@@ -57,7 +57,7 @@ describe('스택 화면', () => {
   it('스택의 모든 층을 바닥부터 세로로 늘어놓는다', async () => {
     useStore.setState({ app: app(stack()) })
 
-    renderWithStore(<StackScreen workspaceId="w-mid" />)
+    renderWithStore(<StackScreen workspaceId="w-mid" onClose={() => {}} />)
 
     expect(screen.getByText('Layer 1 of 3')).toBeInTheDocument()
     expect(screen.getByText('Layer 3 of 3')).toBeInTheDocument()
@@ -74,7 +74,7 @@ describe('스택 화면', () => {
       gitStatus: { 'w-mid': git({ behind: 3 }) }
     })
 
-    renderWithStore(<StackScreen workspaceId="w-mid" />)
+    renderWithStore(<StackScreen workspaceId="w-mid" onClose={() => {}} />)
 
     expect(screen.getByTitle('PR #12 — Ready to merge. Open in your browser.')).toBeInTheDocument()
     expect(screen.getByTitle('This layer is 3 commits behind feat/schema')).toBeInTheDocument()
@@ -86,7 +86,7 @@ describe('스택 화면', () => {
   it('base 가 아래 층과 어긋나면 그 층에 표시하고 머리글에서도 센다', () => {
     useStore.setState({ app: app(stack({ midBase: 'main' })) })
 
-    renderWithStore(<StackScreen workspaceId="w-mid" />)
+    renderWithStore(<StackScreen workspaceId="w-mid" onClose={() => {}} />)
 
     expect(
       screen.getByTitle(
@@ -101,7 +101,7 @@ describe('스택 화면', () => {
   it('머지 트레인 계획을 층별 상태로 옮겨 준다', async () => {
     useStore.setState({ app: app(stack()) })
 
-    renderWithStore(<StackScreen workspaceId="w-mid" />)
+    renderWithStore(<StackScreen workspaceId="w-mid" onClose={() => {}} />)
 
     await waitFor(() =>
       expect(screen.getByTitle('The merge train would merge this layer')).toBeInTheDocument()
@@ -112,7 +112,7 @@ describe('스택 화면', () => {
   it('열려 있는 PR 이 둘 미만이면 스택 리뷰를 잠근다', () => {
     useStore.setState({ app: app(stack()), prStatus: { 'w-bottom': pr('open', { number: 12 }) } })
 
-    renderWithStore(<StackScreen workspaceId="w-mid" />)
+    renderWithStore(<StackScreen workspaceId="w-mid" onClose={() => {}} />)
 
     expect(
       screen.getByTitle('Reviewing a stack needs at least two open pull requests')
@@ -122,7 +122,7 @@ describe('스택 화면', () => {
   it('스택이 아니면 층을 그리지 않고 이유를 말한다', () => {
     useStore.setState({ app: app([workspace({ id: 'w-solo', name: 'solo' })]) })
 
-    renderWithStore(<StackScreen workspaceId="w-solo" />)
+    renderWithStore(<StackScreen workspaceId="w-solo" onClose={() => {}} />)
 
     expect(screen.getByText(/is not stacked on anything/)).toBeInTheDocument()
     expect(document.querySelector('[data-stack-layer]')).toBeNull()

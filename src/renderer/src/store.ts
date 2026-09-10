@@ -51,7 +51,6 @@ import {
   readUiFlag,
   setUiFlag
 } from './lib/uiFlags'
-import { buildStackLayers } from './lib/stackView'
 import {
   DEFAULT_SPLIT_FRACTION,
   clampSplitFraction,
@@ -514,12 +513,6 @@ interface UIState {
    */
   activeFanoutGroupId: string | null
   /**
-   * 열려 있는 스택 화면의 앵커 워크스페이스 id. 리뷰·fan-out 과 같은 자리를 쓰므로 셋은
-   * 서로를 밀어낸다. 스택은 워크스페이스에 매여 있지만 **선택과는 다른 축**이다 —
-   * 화면은 앵커가 속한 스택 전체를 그리고, 선택은 그중 한 층만 가리킨다.
-   */
-  activeStackWorkspaceId: string | null
-  /**
    * 나란히 편 두 번째 칸. null 이면 화면은 예전처럼 하나다.
    *
    * 위의 세 축(리뷰·fan-out·스택)은 서로를 밀어내는 **전체 화면**이다. 이 축만 다르다 —
@@ -592,14 +585,6 @@ interface UIState {
   openFanoutCompare: (groupId: string) => void
   /** 비교 화면을 닫고 원래 보던 워크스페이스로 돌아간다. */
   closeFanoutCompare: () => void
-  /**
-   * 스택 화면을 연다(리뷰·fan-out 화면과 자리를 다투므로 그쪽은 닫는다).
-   * 앵커가 속한 스택의 모든 층에 대해 git·PR 을 한 번 새로 고친다 — 층마다 따로 열어 본 적이
-   * 없으면 behind·PR 칸이 비어 있고, 비어 있는 칸은 "문제 없음" 처럼 읽힌다.
-   */
-  openStackView: (workspaceId: string) => void
-  /** 스택 화면을 닫는다. */
-  closeStackView: () => void
   /**
    * 승자를 채택한다(확인 후). 나머지 형제는 아카이브되고 — 되살릴 수 있지만 미커밋 변경은
    * 사라지므로 — 무엇을 잃는지 먼저 센다.
@@ -1222,7 +1207,6 @@ export const useStore = create<UIState>((set, get) => ({
   undoableArchive: null,
   activeReviewId: null,
   activeFanoutGroupId: null,
-  activeStackWorkspaceId: null,
   splitPane: null,
   splitFocus: 'main',
   splitFraction: readRememberedSplitFraction(),
@@ -2284,7 +2268,6 @@ export const useStore = create<UIState>((set, get) => ({
     set({
       activeFanoutGroupId: groupId,
       activeReviewId: null,
-      activeStackWorkspaceId: null,
       ...collapsedSplit
     })
     // 비교 화면의 후보 카드는 git 요약(N changed · ↑ahead)을 그대로 읽어 쓴다. 진입 시 한 번
@@ -2294,26 +2277,6 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   closeFanoutCompare: () => set({ activeFanoutGroupId: null }),
-
-  openStackView: (workspaceId) => {
-    set({
-      activeStackWorkspaceId: workspaceId,
-      activeReviewId: null,
-      activeFanoutGroupId: null,
-      ...collapsedSplit
-    })
-    // 층마다 워크트리가 따로인 모델 A 는 여기서 전부 새로 고쳐야 한 화면에 같은 시점이 모인다.
-    // 모델 B 는 층이 워크스페이스 하나를 나눠 쓰므로 한 번으로 끝난다(브랜치별 PR 은 화면이 읽는다).
-    const targets = new Set(
-      buildStackLayers(get().app?.workspaces ?? [], workspaceId).map((l) => l.workspaceId)
-    )
-    for (const id of targets) {
-      void get().refreshGit(id)
-      void get().refreshPr(id)
-    }
-  },
-
-  closeStackView: () => set({ activeStackWorkspaceId: null }),
 
   openSplitPane: (view) => {
     const st = get()
@@ -2335,12 +2298,11 @@ export const useStore = create<UIState>((set, get) => ({
       return
     }
     const next = openSplit(st.app?.workspaces ?? [], state, view)
-    // fan-out·스택 화면은 전체 화면이라 옆에 칸을 세울 자리가 없다 — 짝을 여는 김에 닫는다.
+    // fan-out 화면은 전체 화면이라 옆에 칸을 세울 자리가 없다 — 짝을 여는 김에 닫는다.
     set({
       splitPane: next.split,
       splitFocus: next.focus,
-      activeFanoutGroupId: null,
-      activeStackWorkspaceId: null
+      activeFanoutGroupId: null
     })
     get().hydratePaneView(view)
   },
@@ -2903,8 +2865,7 @@ export const useStore = create<UIState>((set, get) => ({
       // 나온다" 는 뜻이다(그룹 자체는 남아 사이드바에서 다시 열 수 있다).
       const closed = {
         activeReviewId: null,
-        activeFanoutGroupId: null,
-        activeStackWorkspaceId: null
+        activeFanoutGroupId: null
       }
       if (!id || !s.unread[id])
         return {
@@ -3544,7 +3505,6 @@ export const useStore = create<UIState>((set, get) => ({
       const id = res.reviewId
       set({
         activeReviewId: id,
-        activeStackWorkspaceId: null,
         ...collapsedSplit,
         reviewViews: { ...get().reviewViews, [id]: emptyView() }
       })
@@ -3563,7 +3523,7 @@ export const useStore = create<UIState>((set, get) => ({
         return
       }
     }
-    set({ activeReviewId: reviewId, activeStackWorkspaceId: null })
+    set({ activeReviewId: reviewId })
     void get().loadReview(reviewId)
     // 열어서 봤으므로 미확인 점을 끈다.
     void window.api.review.markSeen(reviewId)

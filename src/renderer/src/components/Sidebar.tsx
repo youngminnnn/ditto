@@ -554,7 +554,6 @@ function WorkspaceRow({
   const reportArchiveScriptFailure = useStore((s) => s.reportArchiveScriptFailure)
   const requestDelete = useStore((s) => s.requestDeleteWorkspace)
   const requireGithub = useStore((s) => s.requireGithub)
-  const openStackView = useStore((s) => s.openStackView)
   const openSplitPane = useStore((s) => s.openSplitPane)
   // 이 행 위에 층이 더 쌓여 있는가. 모델 A 는 살아 있는 자식 워크스페이스, 모델 B 는 워크트리
   // 안의 브랜치 스택이 그 조건이다. 불리언만 돌려주므로 셀렉터가 매 렌더 새 값을 만들지 않는다.
@@ -1099,12 +1098,19 @@ function WorkspaceRow({
             )}
             {/* 스택의 부모 행에서만 지도를 연다 — 아래 층이 없으면 펼칠 스택이 없다.
               들여쓰기는 "무엇이 무엇 위에 있는가" 만 말해 주므로, 어긋남·behind·트레인까지
-              한 화면에서 보려면 여기서 들어간다. */}
+              한 화면에서 보려면 여기서 들어간다. 스택 화면은 이제 이 워크스페이스의 탭이라 —
+              행 클릭(선택)을 막아 둔 stopPropagation 뒤에도, 탭이 보이려면 먼저 이 워크스페이스를
+              선택해야 한다. */}
             {isStackParent && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openStackView(workspace.id)
+                  // 스택 화면이 탭이 되면서 이 버튼은 워크스페이스 전환을 겸한다 — 탭은
+                  // 워크스페이스에 속하고, 그 탭을 보려면 그 워크스페이스에 있어야 한다.
+                  // 전체화면 축이던 시절에는 선택과 무관했지만, 어차피 그 스택을 보러 가는
+                  // 것이므로 거기 도착하는 편이 앞뒤가 맞는다.
+                  void select(workspace.id)
+                  void window.api.tabs.open(workspace.id, { kind: 'stack', target: workspace.id })
                 }}
                 className="h-6 w-6 grid place-items-center rounded shrink-0 text-[var(--accent-400)] hover:bg-[var(--surface-2)] hover:text-[var(--accent-300)]"
                 aria-label="Show this stack"

@@ -1,4 +1,4 @@
-import { MessageSquare, Globe, X } from 'lucide-react'
+import { MessageSquare, Globe, Plus, X } from 'lucide-react'
 import type { WorkspaceTab } from '@shared/types'
 
 /**
@@ -15,12 +15,15 @@ export default function TabStrip({
   tabs,
   activeId,
   onSelect,
-  onClose
+  onClose,
+  onNew
 }: {
   tabs: WorkspaceTab[]
   activeId: string
   onSelect: (tabId: string) => void
   onClose: (tabId: string) => void
+  /** 빈 웹 탭을 연다. 주소창에 커서가 가 있으니 다음 동작은 주소를 치는 것뿐이다. */
+  onNew: () => void
 }): React.JSX.Element {
   return (
     <div
@@ -37,6 +40,14 @@ export default function TabStrip({
           onClose={() => onClose(tab.id)}
         />
       ))}
+      <button
+        onClick={onNew}
+        aria-label="New tab"
+        title="New tab"
+        className="shrink-0 mb-[3px] grid h-6 w-6 place-items-center rounded-md text-neutral-500 hover:bg-[var(--surface)] hover:text-neutral-200"
+      >
+        <Plus size={13} />
+      </button>
     </div>
   )
 }

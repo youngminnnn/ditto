@@ -2719,6 +2719,17 @@ export type ScriptRunState = 'idle' | 'running' | 'exited'
  */
 export const PREVIEW_PARTITION = 'persist:wooi-preview'
 
+/**
+ * 일반 웹 탭이 쓰는 파티션. dev 프리뷰와 **갈라 둔다.**
+ *
+ * 문서 사이트에 로그인해 둔 쿠키가 우리 dev 서버 요청에 실려 나가면 안 되고, 반대로 dev 앱이
+ * 심는 스토리지가 바깥 사이트에 보여도 안 된다. 둘 다 우리가 만든 게 아니라 남의 페이지다.
+ *
+ * 워크스페이스별로 나누지 않는다 — 문서를 읽으려고 워크스페이스마다 다시 로그인하게 만들
+ * 이유가 없다. 격리의 경계는 "앱 : 바깥" 과 "dev : 바깥" 이지 워크스페이스 사이가 아니다.
+ */
+export const BROWSER_PARTITION = 'persist:wooi-browser'
+
 /** Preview 를 특정 주소로 열라는 신호(evtPreviewOpen 페이로드). */
 export interface PreviewOpenEvent {
   workspaceId: string

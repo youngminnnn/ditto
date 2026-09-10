@@ -15,8 +15,11 @@ const dev: WorkspaceTab = { id: 't1', kind: 'dev', target: 'http://localhost:517
 function renderStrip(tabs: WorkspaceTab[], activeId = 'work') {
   const onSelect = vi.fn()
   const onClose = vi.fn()
-  render(<TabStrip tabs={tabs} activeId={activeId} onSelect={onSelect} onClose={onClose} />)
-  return { onSelect, onClose }
+  const onNew = vi.fn()
+  render(
+    <TabStrip tabs={tabs} activeId={activeId} onSelect={onSelect} onClose={onClose} onNew={onNew} />
+  )
+  return { onSelect, onClose, onNew }
 }
 
 describe('TabStrip', () => {
@@ -55,6 +58,12 @@ describe('TabStrip', () => {
   it('주소가 URL 이 아니면 마지막 경로 조각을 쓴다', () => {
     renderStrip([work, { id: 't2', kind: 'file', target: 'src/main/preview.ts' }])
     expect(screen.getByRole('tab', { name: 'preview.ts' })).toBeInTheDocument()
+  })
+
+  it('새 탭 버튼은 빈 웹 탭을 요청한다', () => {
+    const { onNew } = renderStrip([work])
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
+    expect(onNew).toHaveBeenCalled()
   })
 
   it('사용자가 붙인 이름이 있으면 그것이 이긴다', () => {

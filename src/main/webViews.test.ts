@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PREVIEW_PARTITION } from '@shared/types'
+import { BROWSER_PARTITION, PREVIEW_PARTITION } from '@shared/types'
 import type { HostedViewLayout } from '@shared/types'
 
 const { webContentsViews, browserWindows } = vi.hoisted(() => ({
@@ -121,6 +121,18 @@ describe('HostedViewManager', () => {
     expect(prefs.webviewTag).toBe(false)
     // preload 는 여기서 아예 안 넣는 것이 요점이다 — 지웠는지가 아니라 애초에 없는지를 본다.
     expect('preload' in prefs).toBe(false)
+  })
+
+  it('웹 탭은 dev 와 다른 파티션을 쓴다 — 문서 사이트 쿠키가 dev 서버 요청에 실려 나가면 안 된다', async () => {
+    const manager = await makeManager()
+    manager.ensure('tab-dev', 'ws-1', 'dev')
+    manager.ensure('tab-web', 'ws-1', 'web')
+
+    const dev = webContentsViews[0].webPreferences.partition
+    const web = webContentsViews[1].webPreferences.partition
+    expect(dev).toBe(PREVIEW_PARTITION)
+    expect(web).toBe(BROWSER_PARTITION)
+    expect(dev).not.toBe(web)
   })
 
   it('같은 tabId 로 두 번 ensure 해도 뷰는 하나다', async () => {

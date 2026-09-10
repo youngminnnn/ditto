@@ -43,7 +43,7 @@ import FileQuickOpen from './components/FileQuickOpen'
 import WorkArea from './components/WorkArea'
 import Splitter from './components/Splitter'
 import TabStrip from './components/TabStrip'
-import DevTab from './components/tabs/DevTab'
+import BrowserTab from './components/tabs/BrowserTab'
 import { useWorkspaceTabs } from './lib/workspaceTabs'
 import EmptyState from './components/EmptyState'
 import Overview from './components/Overview'
@@ -1189,13 +1189,14 @@ export default function App(): React.JSX.Element {
                 activeId={wsTabs.activeId}
                 onSelect={wsTabs.select}
                 onClose={wsTabs.close}
+                onNew={() => wsTabs.open({ kind: 'web' })}
               />
-              {wsTabs.active?.kind === 'dev' ? (
-                <DevTab
+              {wsTabs.active && (wsTabs.active.kind === 'dev' || wsTabs.active.kind === 'web') ? (
+                <BrowserTab
                   key={wsTabs.active.id}
                   workspace={selected}
                   tab={wsTabs.active}
-                  navTarget={previewNav}
+                  navTarget={wsTabs.active.kind === 'dev' ? previewNav : null}
                 />
               ) : (
                 <div className="flex-1 min-h-0 flex">

@@ -1,6 +1,6 @@
 import { session } from 'electron'
 import type { WebContents } from 'electron'
-import { IPC, PREVIEW_PARTITION } from '@shared/types'
+import { BROWSER_PARTITION, IPC, PREVIEW_PARTITION } from '@shared/types'
 import { addIssue, countIssues, type PreviewIssue } from '@shared/previewIssues'
 import { log } from './logger'
 
@@ -63,7 +63,14 @@ export class PreviewIssueCollector {
    * Preview 파티션에 한 번만 걸고 요청의 webContentsId 로 주인을 되찾는다.
    */
   initSession(): void {
-    const wr = session.fromPartition(PREVIEW_PARTITION).webRequest
+    // dev 와 웹은 파티션이 다르다([[shared/types]] BROWSER_PARTITION) — 둘 다 걸어야 웹 탭의
+    // 404·연결 실패도 같은 배지에 모인다. 콘솔은 webContents 단위라 여기와 무관하다.
+    for (const partition of [PREVIEW_PARTITION, BROWSER_PARTITION])
+      this.watchSession(session.fromPartition(partition))
+  }
+
+  private watchSession(target: Electron.Session): void {
+    const wr = target.webRequest
 
     wr.onErrorOccurred((details) => {
       if (IGNORED_RESOURCES.has(details.resourceType)) return

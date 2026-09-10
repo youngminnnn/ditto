@@ -18,7 +18,7 @@ import { useStore } from '../store'
 import { isPaneWindow } from '../lib/paneWindow'
 import { useHostedView } from '../lib/hostedView'
 import { useSuppressViewsOver } from '../lib/viewSuppress'
-import type { Workspace } from '@shared/types'
+import type { HostedViewKind, Workspace } from '@shared/types'
 
 /**
  * Preview 탭 — 이 워크트리가 띄운 dev 서버를 앱 안에서 본다.
@@ -33,6 +33,7 @@ import type { Workspace } from '@shared/types'
 export default function PreviewPanel({
   workspace,
   tabId,
+  kind,
   navTarget,
   active
 }: {
@@ -44,6 +45,11 @@ export default function PreviewPanel({
    * 만든 탭의 방송을 자기 것으로 알아보지 못해 주소창이 빈 채로 남는다.
    */
   tabId: string
+  /**
+   * dev 서버인가 바깥 웹인가. 쓰이는 곳은 셋이다 — 세션 파티션(쿠키가 서로 안 새게),
+   * 빈 화면 안내 문구, 그리고 주소가 없을 때 주소창에 포커스를 줄지.
+   */
+  kind: HostedViewKind
   /** WorkPanel 이 넘기는 이동 명령("Open in Preview"). seq 가 바뀔 때만 이동한다. */
   navTarget: { url: string; seq: number } | null
   /** 지금 이 탭이 보이는지. 감춰져 있는 동안에는 캡처하지 않는다. */
@@ -69,7 +75,7 @@ export default function PreviewPanel({
   const { ref, state, failure, attached } = useHostedView({
     tabId,
     workspaceId: workspace.id,
-    kind: 'dev',
+    kind,
     // 뷰를 처음 만들 때만 쓰인다. 여기서 "붙었으니 로드하자" 를 판단하면 탭을 오갈 때마다
     // 그 판단이 다시 일어나 보고 있던 페이지가 처음으로 되감긴다([[lib/hostedView]]).
     initialUrl: initialUrl.current || undefined
@@ -258,7 +264,10 @@ export default function PreviewPanel({
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => setDraft(null)}
             spellCheck={false}
-            placeholder="localhost:3000"
+            // 주소 없는 웹 탭은 사용자가 방금 연 빈 탭이다 — 다음 동작이 주소를 치는 것뿐이라
+            // 커서를 미리 그 자리에 둔다. dev 탭은 대개 주소가 이미 있어 가로채면 방해가 된다.
+            autoFocus={kind === 'web' && !url}
+            placeholder={kind === 'web' ? 'Search or type a URL' : 'localhost:3000'}
             aria-label="Preview address"
             className="w-full h-6 px-2 rounded-md bg-[var(--surface-2)] text-xs font-mono text-neutral-200 placeholder:text-neutral-600 outline-none focus:ring-1 focus:ring-[var(--focus-ring)]"
           />
@@ -352,7 +361,7 @@ export default function PreviewPanel({
         {/* 자리표시자다. 실제 화면은 main 이 소유한 뷰가 이 사각형 위에 네이티브로 그린다 —
             그래서 여기서 언마운트해도 페이지는 죽지 않고 창에서 떨어지기만 한다. */}
         <div ref={ref} data-hosted-view={tabId} className="absolute inset-0" />
-        {!url && <EmptyState />}
+        {!url && <EmptyState kind={kind} />}
         {failure && (
           <FailureState message={failure} onRetry={() => void window.api.views.reload(tabId)} />
         )}
@@ -485,7 +494,7 @@ function IssueList({
  * 안내 화면들은 게스트 자리를 덮어 그린다. 네이티브 뷰는 DOM 위에 그려지므로 덮는 것만으로는
  * 안 보인다 — 그래서 오버레이 자신이 가림을 든다([[lib/viewSuppress]]).
  */
-function EmptyState(): React.JSX.Element {
+function EmptyState({ kind }: { kind: HostedViewKind }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null)
   useSuppressViewsOver(box)
   return (
@@ -494,12 +503,24 @@ function EmptyState(): React.JSX.Element {
       className="absolute inset-0 grid place-items-center bg-[var(--bg)] px-8 text-center"
     >
       <div className="max-w-sm space-y-2">
-        <p className="text-sm text-neutral-300">Nothing to preview yet.</p>
-        <p className="text-xs leading-relaxed text-neutral-500">
-          Start this workspace’s dev server from the Scripts panel and use “Open in Preview”, or
-          type a port (like <span className="font-mono text-neutral-400">3000</span>) in the address
-          bar above.
-        </p>
+        {kind === 'web' ? (
+          <>
+            <p className="text-sm text-neutral-300">Type an address to start.</p>
+            <p className="text-xs leading-relaxed text-neutral-500">
+              This tab has its own cookies, separate from your dev server and from your everyday
+              browser — signing in here signs in nowhere else.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-neutral-300">Nothing to preview yet.</p>
+            <p className="text-xs leading-relaxed text-neutral-500">
+              Start this workspace’s dev server from the Scripts panel and use “Open in Preview”, or
+              type a port (like <span className="font-mono text-neutral-400">3000</span>) in the
+              address bar above.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

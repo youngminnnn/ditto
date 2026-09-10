@@ -1,6 +1,6 @@
 import { BrowserWindow, WebContentsView, shell } from 'electron'
 import type { WebContents } from 'electron'
-import { IPC, PREVIEW_PARTITION } from '@shared/types'
+import { BROWSER_PARTITION, IPC, PREVIEW_PARTITION } from '@shared/types'
 import type { HostedViewKind, HostedViewLayout } from '@shared/types'
 import { windowBackgroundColor } from './windows'
 import { log } from './logger'
@@ -63,6 +63,11 @@ export function applyGuestGuards(contents: WebContents): void {
   })
 }
 
+/** 이 종류의 게스트가 쓸 세션 파티션. dev 와 웹을 갈라 쿠키가 서로 새지 않게 한다. */
+export function partitionFor(kind: HostedViewKind): string {
+  return kind === 'web' ? BROWSER_PARTITION : PREVIEW_PARTITION
+}
+
 /** 뷰 하나를 만들 때 강제하는 설정. 예전 `will-attach-webview` 가 하던 일을 그대로 옮겼다. */
 function guestWebPreferences(partition: string): Electron.WebPreferences {
   return {
@@ -114,7 +119,7 @@ export class HostedViewManager {
       return
     }
 
-    const view = new WebContentsView({ webPreferences: guestWebPreferences(PREVIEW_PARTITION) })
+    const view = new WebContentsView({ webPreferences: guestWebPreferences(partitionFor(kind)) })
     // 첫 프레임 전과 리사이즈로 드러나는 가장자리에 흰 판이 번쩍이지 않게 앱 배경을 깔아 둔다.
     view.setBackgroundColor(windowBackgroundColor())
     applyGuestGuards(view.webContents)

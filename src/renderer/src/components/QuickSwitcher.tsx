@@ -88,8 +88,8 @@ export default function QuickSwitcher({
         label,
         prefix: repo,
         detail: ws.branch ?? undefined,
-        // 사이드바와 같은 ⌘1–9 번호(상위 9개에만 부여).
-        keys: i < 9 ? [`⌘${i + 1}`] : undefined,
+        // 사이드바와 같은 ⌥⌘1–9 번호(상위 9개에만 부여).
+        keys: i < 9 ? [`⌥⌘${i + 1}`] : undefined,
         haystack: `${repo} ${label} ${ws.branch} ${ws.prNumber ?? ''}`.toLowerCase(),
         effect: { type: 'select-workspace' as const, workspaceId: ws.id }
       }

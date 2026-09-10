@@ -155,7 +155,8 @@ export default function FileViewerOverlay({
         setSearchOpen(true)
         return
       }
-      // ⌘⌥←/→: 뒤로/앞으로. ⌘[ 는 워크스페이스 뒤로가기라 겹치지 않게 macOS 관례를 따랐다.
+      // ⌘⌥←/→: 뒤로/앞으로. ⌘[ 는 이제 탭 페이지 뒤로가기, ⌥⌘[ 는 워크스페이스 방문 기록이라
+      // 어느 쪽과도 안 겹치게 화살표 조합의 macOS 관례를 그대로 따랐다.
       if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault()
         navigate(e.key === 'ArrowLeft' ? -1 : 1)

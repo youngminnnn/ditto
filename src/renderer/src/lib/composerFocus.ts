@@ -2,6 +2,15 @@
 export const FOCUS_COMPOSER_EVENT = 'wooi:focus-composer'
 
 /**
+ * 지금 열려 있는 dev·web 탭의 주소창으로 포커스를 옮긴다(⌘L 이 그 탭일 때 쓰는 경로).
+ *
+ * 게스트가 포커스를 쥐면 렌더러 keydown 이 죽으므로 ⌘L 은 메뉴 accelerator 로 들어온다
+ * (`App.tsx` runPaletteAction 의 `focus-address-bar`). 대상 탭이 하나만(활성 탭) 그려지므로
+ * `PreviewPanel` 은 탭 id 를 가리지 않고 그냥 듣는다.
+ */
+export const FOCUS_ADDRESS_BAR_EVENT = 'wooi:focus-address-bar'
+
+/**
  * 입력창의 caret 위치에 글자를 끼워 넣고 포커스까지 옮긴다. `detail` 이 넣을 글자다.
  *
  * 포커스만 옮기는 이벤트와 나눠 둔 이유는 Backspace 때문이다 — 그 키는 데려가기만 하고

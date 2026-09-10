@@ -509,11 +509,11 @@ interface UIState {
     workspaceId: string
   ) => Promise<{ archiveScriptFailure?: ArchiveScriptFailure }>
   /**
-   * ⇧⌘T 로 다시 열 수 있는, 최근 아카이브한 워크스페이스들(오래된 것이 앞).
+   * ⇧⌘Z 로 다시 열 수 있는, 최근 아카이브한 워크스페이스들(오래된 것이 앞).
    * 영구 삭제는 되살릴 수 없으므로 여기 쌓이지 않는다.
    */
   reopenableArchives: string[]
-  /** ⇧⌘T — 가장 최근에 아카이브한 워크스페이스를 되살려 연다. */
+  /** ⇧⌘Z — 가장 최근에 아카이브한 워크스페이스를 되살려 연다. */
   reopenLastArchivedWorkspace: () => Promise<void>
   /** 마지막 일괄 아카이브. 바로 뒤의 ⌘Z 또는 토스트 Undo 로만 한 번 복원한다. */
   undoableArchive: { workspaceIds: string[]; at: number } | null
@@ -644,7 +644,7 @@ interface UIState {
   requestDeleteWorkspace: (workspaceId: string) => Promise<void>
   /**
    * 확인 없이 즉시 영구 삭제한다 — 물어보는 것은 호출부의 몫이다.
-   * 지운 워크스페이스를 보고 있었다면 ⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
+   * 지운 워크스페이스를 보고 있었다면 ⌥⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
    */
   deleteWorkspaceNow: (workspaceId: string) => Promise<void>
   /**
@@ -688,16 +688,16 @@ interface UIState {
   reportMergeTrain: (progress: StackOpProgress) => void
   /** 방문 순서 스택(브라우저 뒤로가기용). 현재 선택은 포함하지 않고, 오래된 것이 앞이다. */
   workspaceHistory: string[]
-  /** ⌘[ 로 떠나온 워크스페이스들. ⌘] 가 여기서 꺼내 되짚어 간다. */
+  /** ⌥⌘[ 로 떠나온 워크스페이스들. ⌥⌘] 가 여기서 꺼내 되짚어 간다. */
   workspaceForward: string[]
   /**
    * @param opts.fromHistory 뒤/앞으로 가기로 인한 선택 — 방문 스택에 다시 쌓지 않고,
    * 앞쪽 이력도 버리지 않는다.
    */
   selectWorkspace: (id: string | null, opts?: { fromHistory?: boolean }) => Promise<void>
-  /** ⌘[ — 직전에 보던 워크스페이스로 돌아간다(브라우저 뒤로가기). */
+  /** ⌥⌘[ — 직전에 보던 워크스페이스로 돌아간다(브라우저 뒤로가기). */
   goBackWorkspace: () => Promise<void>
-  /** ⌘] — 뒤로 온 길을 되짚어 앞으로 간다. */
+  /** ⌥⌘] — 뒤로 온 길을 되짚어 앞으로 간다. */
   goForwardWorkspace: () => Promise<void>
   refreshGit: (workspaceId: string) => Promise<void>
   /** 진입 여부와 무관하게 모든(비아카이브) 워크스페이스의 git 상태를 한 번에 갱신한다. */
@@ -1267,7 +1267,7 @@ export const useStore = create<UIState>((set, get) => ({
     }))
     try {
       const result = await window.api.workspace.archive(workspaceId)
-      // ⇧⌘T 가 되짚을 수 있게 쌓는다. 아카이브는 worktree 만 지우므로 되돌릴 수 있다.
+      // ⇧⌘Z 가 되짚을 수 있게 쌓는다. 아카이브는 worktree 만 지우므로 되돌릴 수 있다.
       set((s) => ({ reopenableArchives: pushReopenable(s.reopenableArchives, workspaceId) }))
       // archive script 가 도는 동안 사용자가 다른 워크스페이스로 이동할 수 있다. 완료 시점에도
       // 아카이브한 워크스페이스를 보고 있을 때만 Overview 로 나가야 새 선택을 덮어쓰지 않는다.
@@ -1521,7 +1521,7 @@ export const useStore = create<UIState>((set, get) => ({
       if (!w.archived) void get().refreshPr(w.id)
     }
 
-    // 패널을 토글할 때마다(키보드 ⌘J·버튼 등 경로 무관) workspace 별 상태를 기억해 둔다.
+    // 패널을 토글할 때마다(키보드 ⌥⌘J·버튼 등 경로 무관) workspace 별 상태를 기억해 둔다.
     useStore.subscribe((state, prev) => {
       if (state.rightPanelOpen !== prev.rightPanelOpen) rememberRightPanels(state.rightPanelOpen)
     })
@@ -2578,11 +2578,11 @@ export const useStore = create<UIState>((set, get) => ({
     const { archiveScriptFailure } = await window.api.workspace.remove(workspaceId, true)
     get().reportArchiveScriptFailure(archiveScriptFailure)
     if (get().undoableCreate?.workspaceId === workspaceId) set({ undoableCreate: null })
-    // 브랜치와 이력까지 지운 것은 되살릴 수 없다 — ⇧⌘T 가 시도하지 못하게 뺀다.
+    // 브랜치와 이력까지 지운 것은 되살릴 수 없다 — ⇧⌘Z 가 시도하지 못하게 뺀다.
     set((s) => ({ reopenableArchives: dropReopenable(s.reopenableArchives, workspaceId) }))
     if (!wasSelected) return
 
-    // 보고 있던 워크스페이스가 사라졌으니 ⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
+    // 보고 있던 워크스페이스가 사라졌으니 ⌥⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
     // 방송된 상태를 기다리지 않고 지운 id 를 직접 제외한다 — 되돌아갈 곳이 방금 지운 그
     // 워크스페이스가 되면 안 된다.
     const s = get()
@@ -2891,7 +2891,7 @@ export const useStore = create<UIState>((set, get) => ({
     // 아래의 "고르면 전체 화면을 닫는다" 는 화면이 하나일 때의 규칙이라, 분할에 그대로
     // 적용하면 사이드바를 한 번 누를 때마다 사용자가 방금 만든 짝이 무너진다. 판정은
     // lib/splitPanes 한 곳에서 내리고 여기서는 그 답을 집행한다.
-    // ⌘[ / ⌘] 로 되짚는 이동은 방문 기록의 축이므로 늘 주 칸으로 간다.
+    // ⌥⌘[ / ⌥⌘] 로 되짚는 이동은 방문 기록의 축이므로 늘 주 칸으로 간다.
     // 아무것도 고르지 않거나(Overview) 아카이브된 워크스페이스를 읽기 전용으로 들여다보는
     // 것은 "지금 짝지어 보던 것을 그만둔다" 는 뜻이다 — 둘 다 나란히 세울 대상이 아니다.
     const peekingArchived = !!id && !!get().app?.workspaces.find((w) => w.id === id)?.archived
@@ -2922,7 +2922,7 @@ export const useStore = create<UIState>((set, get) => ({
       // 그대로 두면 새 워크스페이스에서 없는 파일을 가리키게 된다.
       const fileViewer = s.fileViewer?.workspaceId === id ? s.fileViewer : null
       // 아카이브된 워크스페이스는 읽기 전용으로 잠깐 들여다보는 자리다 — 방문 이력의 어느 쪽에도
-      // 남기지 않는다(들어갈 때도, 떠날 때도). ⌘[ / ⌘] 는 살아 있는 워크스페이스 사이를 오가는
+      // 남기지 않는다(들어갈 때도, 떠날 때도). ⌥⌘[ / ⌥⌘] 는 살아 있는 워크스페이스 사이를 오가는
       // 축이라, 되살리지 않으면 돌아갈 수 없는 자리를 끼워 넣으면 되짚는 길만 길어진다.
       const peeking = !!archivedPreviewTarget(s.app?.workspaces, id)
       const from = archivedPreviewTarget(s.app?.workspaces, s.selectedWorkspaceId)
@@ -3021,7 +3021,7 @@ export const useStore = create<UIState>((set, get) => ({
 
   goForwardWorkspace: async () => {
     const s = get()
-    // 앞으로가기에는 리뷰 화면 같은 "한 겹 위" 가 없다 — ⌘[ 로 떠나온 워크스페이스만 되짚는다.
+    // 앞으로가기에는 리뷰 화면 같은 "한 겹 위" 가 없다 — ⌥⌘[ 로 떠나온 워크스페이스만 되짚는다.
     const alive = new Set((s.app?.workspaces ?? []).filter((w) => !w.archived).map((w) => w.id))
     const { target, back, forward } = navigateWorkspaceHistory(
       { back: s.workspaceHistory, forward: s.workspaceForward },
@@ -3443,7 +3443,7 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   // 패널 상태를 직접 지정한다. 온보딩에서 고른 기본값을 지금 화면에도 바로 반영하기 위한 것으로,
-  // 토글과 같은 경로를 타므로 localStorage 기억값(⌘J 기록)까지 함께 갱신된다 — 그러지 않으면
+  // 토글과 같은 경로를 타므로 localStorage 기억값(⌥⌘J 기록)까지 함께 갱신된다 — 그러지 않으면
   // 이미 토글한 적 있는 기존 사용자에게는 기억값이 새로 고른 기본값을 계속 덮어써 버린다.
   setRightPanelOpen: (open) => {
     const workspaceId = get().selectedWorkspaceId

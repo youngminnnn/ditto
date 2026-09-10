@@ -100,7 +100,17 @@ async function runCommand(win, text) {
     }
     const body = await card.innerText()
     if (!body.includes('Running…')) {
+      // 카드는 정착했다. 그런데 위의 `pre` 개수 확인과 이 본문 읽기는 **별개의 왕복**이라,
+      // 결과가 막 그려지는 순간에는 앞에서 0 을 보고 뒤에서 이미 그려진 `<pre>` 의 글자를 읽는
+      // 어긋남이 난다(본문에 JSON 이 있는데 `pre` 가 없다는 모순으로 나타난다). 정착한 뒤에
+      // 한 번 더 기다려 주면 그 틈이 닫힌다 — 진짜 실패는 `<pre>` 를 만들지 않으므로 그대로 걸린다.
+      const settled = card.locator('pre').first()
+      const hasResult = await settled
+        .waitFor({ state: 'attached', timeout: 1000 })
+        .then(() => true)
+        .catch(() => false)
       await box.press('Escape')
+      if (hasResult) return { result: JSON.parse(await settled.innerText()) }
       return { error: body }
     }
     await win.waitForTimeout(100)

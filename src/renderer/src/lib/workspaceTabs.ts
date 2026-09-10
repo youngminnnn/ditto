@@ -23,6 +23,8 @@ export interface WorkspaceTabsApi {
   select(tabId: string): void
   close(tabId: string): void
   open(spec: { kind: WorkspaceTabKind; target?: string; title?: string; activate?: boolean }): void
+  /** 가장 최근에 닫은 탭을 되살린다(⇧⌘T). 닫은 탭이 없으면 main 이 조용히 무시한다. */
+  reopen(): void
 }
 
 const EMPTY: WorkspaceTab[] = []
@@ -65,6 +67,10 @@ export function useWorkspaceTabs(workspaceId: string): WorkspaceTabsApi {
     [workspaceId]
   )
 
+  const reopen = useCallback(() => {
+    if (workspaceId) void window.api.tabs.reopen(workspaceId).then(setState)
+  }, [workspaceId])
+
   const tabs = state?.tabs ?? EMPTY
   const activeId = state?.activeId ?? 'work'
   return {
@@ -73,6 +79,7 @@ export function useWorkspaceTabs(workspaceId: string): WorkspaceTabsApi {
     active: tabs.find((t) => t.id === activeId),
     select,
     close,
-    open
+    open,
+    reopen
   }
 }

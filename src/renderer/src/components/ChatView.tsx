@@ -525,7 +525,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                     ? 'Hide work panel'
                     : 'Show work panel'
               }
-              shortcut="⌘J"
+              shortcut="⌥⌘J"
               onClick={toggleRightPanel}
               active={rightPanelOpen || workPaneDetached}
             >

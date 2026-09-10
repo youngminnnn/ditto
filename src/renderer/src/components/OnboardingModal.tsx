@@ -15,7 +15,7 @@ type Step = 'consent' | 'integrations' | 'preferences'
  * 동의가 끝나면 계정 연결(AI 제공자/GitHub) → 기본값 고르기로 이어진다.
  *
  * 예전엔 여기 사이에 기능을 일괄 소개하는 투어가 있었다. 리포도 워크스페이스도 없는 상태에서
- * work panel·⌘J·PR 리뷰를 한꺼번에 듣는 건 와닿지 않아 뺐다 — 그 소개는 이제 사용자가 각
+ * work panel·⌥⌘J·PR 리뷰를 한꺼번에 듣는 건 와닿지 않아 뺐다 — 그 소개는 이제 사용자가 각
  * 기능에 실제로 닿는 순간으로 흩어져 있다. 투어 자체는 Settings → About 에서 여전히 돌 수
  * 있다(`FeatureTour`).
  *

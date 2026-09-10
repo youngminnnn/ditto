@@ -88,8 +88,8 @@ const STEPS: Step[] = [
       </>
     ),
     shortcuts: [
-      { keys: '⌘1–9', label: 'Jump to a workspace' },
-      { keys: '⌘↑ / ⌘↓', label: 'Previous / next' }
+      { keys: '⌥⌘1–9', label: 'Jump to a workspace' },
+      { keys: '⌥⌘↑ / ⌥⌘↓', label: 'Previous / next' }
     ]
   },
   {
@@ -113,10 +113,10 @@ const STEPS: Step[] = [
         Your files, the diff of what changed, CI-style checks, and an interactive terminal — all
         scoped to the current workspace. Open a pull request and pull base updates from here too.
         Set whether it starts open by default in <b className="text-neutral-200">Settings</b> — your
-        last <b className="text-neutral-200">⌘J</b> toggle is then remembered from there.
+        last <b className="text-neutral-200">⌥⌘J</b> toggle is then remembered from there.
       </>
     ),
-    shortcuts: [{ keys: '⌘J', label: 'Toggle the work panel' }]
+    shortcuts: [{ keys: '⌥⌘J', label: 'Toggle the work panel' }]
   },
   {
     target: 'review-pr',

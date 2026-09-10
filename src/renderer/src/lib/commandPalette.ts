@@ -110,6 +110,19 @@ export function actionDisabledReason(
     case 'open-settings':
       return undefined
 
+    // ⌘1–9 처럼 팔레트가 대신 눌러 줄 수 없는 종류다(아홉 개 중 어느 것인지는 고를 수 없다) —
+    // 카탈로그에도 행을 올리지 않았으므로 여기까지 오지 않지만, 스위치는 갖춰 둔다.
+    case 'select-tab-1':
+    case 'select-tab-2':
+    case 'select-tab-3':
+    case 'select-tab-4':
+    case 'select-tab-5':
+    case 'select-tab-6':
+    case 'select-tab-7':
+    case 'select-tab-8':
+    case 'select-tab-9':
+      return undefined
+
     case 'new-workspace':
     case 'new-workspace-choose-agent':
     case 'review-pull-request':
@@ -130,6 +143,7 @@ export function actionDisabledReason(
       return ctx.worktreeTools ? undefined : ARCHIVED
 
     // 팬아웃 비교 화면 위에서는 대상 워크스페이스가 화면에 없다 — 무엇을 건드렸는지 알 수 없다.
+    // 탭 스트립도 그 화면에서는 가려지므로 같은 줄에 둔다.
     case 'toggle-dev-script':
     case 'toggle-scripts-panel':
     case 'open-in-editor':
@@ -138,6 +152,14 @@ export function actionDisabledReason(
     case 'open-file':
     case 'delete-workspace':
     case 'rebase-onto-base':
+    case 'new-tab':
+    case 'close-tab':
+    case 'reopen-closed-tab':
+    case 'next-tab':
+    case 'previous-tab':
+    case 'reload-tab':
+    case 'page-back':
+    case 'page-forward':
       if (ctx.activeFanoutGroupId) return 'Leave the fan-out comparison first.'
       if (action === 'delete-workspace' && ctx.activeReviewId) return 'Close the review first.'
       // 큰 파일 뷰어는 대화를 통째로 덮으므로 나란히 편 두 칸과 함께 쓸 수 없다.
@@ -157,7 +179,11 @@ export function actionDisabledReason(
       if (!ctx.selectedWorkspaceId) return NO_WORKSPACE
       return ctx.selectionIsStacked ? undefined : 'This workspace is not stacked on anything.'
 
+    // dev·web 탭이면 주소창으로 가고, 아니면 focus-composer 와 같은 판정으로 입력창으로 간다 —
+    // 팔레트는 어느 쪽으로 갈지 여기서 미리 알 수 없으므로(활성 탭 종류는 컨텍스트에 없다)
+    // 같은 조건으로 "가능은 하다" 만 알려 준다.
     case 'focus-composer':
+    case 'focus-address-bar':
       if (!ctx.selectedWorkspaceId) return NO_WORKSPACE
       if (!ctx.worktreeTools) return ARCHIVED
       return ctx.composerReachable ? undefined : HIDDEN_BY_OVERLAY
@@ -315,7 +341,7 @@ export interface PaletteSection {
  * 이름에 archive 가 든 워크스페이스가 없어도 Actions 가 한참 아래에 깔린다. 동점(=빈 질의)이면
  * `KIND_ORDER` 로 갈라 워크스페이스가 맨 위에 온다 — ⌘K 를 이동에 쓰던 손을 흔들지 않는다.
  *
- * 워크스페이스 섹션 **안의** 순서는 건드리지 않는다. 사이드바와 같은 위→아래 순서라야 ⌘1–9
+ * 워크스페이스 섹션 **안의** 순서는 건드리지 않는다. 사이드바와 같은 위→아래 순서라야 ⌥⌘1–9
  * 번호 배지와 눈으로 익힌 위치 감각이 어긋나지 않는다(호출자가 그 순서대로 넘긴다).
  */
 export function paletteSections(
@@ -343,7 +369,7 @@ export function paletteSections(
     //
     // 이 두 번째 기준이 없으면 팔레트를 연 순간(질의가 비어 점수가 모두 0) 카탈로그 순서가
     // 그대로 나오는데, 단축키 목록은 Navigation 이 앞이고 그 앞머리가 하필 참조 행들이다
-    // (⌘K·⌘1–9·⌘↑↓·⌘[]). 그러면 Actions 섹션이 회색 글자 넉 줄로 시작한다 — 고를 수 없는
+    // (⌘K·⌥⌘1–9·⌥⌘↑↓·⌥⌘[]). 그러면 Actions 섹션이 회색 글자 넉 줄로 시작한다 — 고를 수 없는
     // 것이 고를 수 있는 것을 가리는 셈이다. 참조 행은 검색으로 찾으라고 둔 것이지 첫 화면을
     // 채우라고 둔 것이 아니다. 점수를 먼저 보므로 검색했을 때의 관련도는 그대로다.
     const ordered =

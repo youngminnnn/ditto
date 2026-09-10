@@ -18,6 +18,7 @@ import { useStore } from '../store'
 import { isPaneWindow } from '../lib/paneWindow'
 import { useHostedView } from '../lib/hostedView'
 import { useSuppressViewsOver } from '../lib/viewSuppress'
+import { FOCUS_ADDRESS_BAR_EVENT } from '../lib/composerFocus'
 import type { HostedViewKind, Workspace } from '@shared/types'
 
 /**
@@ -215,6 +216,20 @@ export default function PreviewPanel({
     return () => window.removeEventListener('keydown', onKey)
   }, [picking])
 
+  /**
+   * ⌘L(dev·web 탭)이 오면 주소창으로 포커스를 옮긴다. 메뉴 accelerator 로 오는 명령이라
+   * `App.tsx` 가 활성 탭 종류를 보고 이 이벤트를 보낼지 결정한다 — 여기서는 그냥 듣기만 한다.
+   */
+  const addressInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const onFocusAddressBar = (): void => {
+      addressInputRef.current?.focus()
+      addressInputRef.current?.select()
+    }
+    window.addEventListener(FOCUS_ADDRESS_BAR_EVENT, onFocusAddressBar)
+    return () => window.removeEventListener(FOCUS_ADDRESS_BAR_EVENT, onFocusAddressBar)
+  }, [])
+
   /** 지금 화면을 찍어 컴포저에 첨부한다. 이미지는 main 을 거쳐 컴포저가 있는 창으로 간다. */
   const capture = async (): Promise<void> => {
     if (!ready || capturing) return
@@ -260,6 +275,7 @@ export default function PreviewPanel({
 
         <form onSubmit={submit} className="flex-1 min-w-0 mx-1">
           <input
+            ref={addressInputRef}
             value={shown}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => setDraft(null)}

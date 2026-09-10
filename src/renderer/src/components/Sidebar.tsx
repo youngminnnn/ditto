@@ -138,8 +138,8 @@ export default function Sidebar({
   )
   const now = useNow(1000, anyRunningOrRateLimited)
 
-  // ⌘1–9 단축키(App.tsx)와 똑같은 순서 함수로 번호를 매긴다 — 화면에서 위에서 n번째 행이
-  // 항상 ⌘n 이 되도록(레포가 여러 개여도 1,2,3… 순서가 위에서부터 이어진다).
+  // ⌥⌘1–9 단축키(App.tsx)와 똑같은 순서 함수로 번호를 매긴다 — 화면에서 위에서 n번째 행이
+  // 항상 ⌥⌘n 이 되도록(레포가 여러 개여도 1,2,3… 순서가 위에서부터 이어진다).
   const shortcutById = new Map<string, number>()
   ordered.slice(0, 9).forEach((w, i) => shortcutById.set(w.id, i + 1))
 
@@ -291,8 +291,8 @@ export default function Sidebar({
 
       <div data-tour="workspaces" className="flex-1 overflow-y-auto px-2 pb-4">
         {/* PR 리뷰는 리포의 자식이 아니라 리포지토리와 동급인 작업 개념이므로 별도 구역으로 둔다.
-            또한 ⌘1–9 번호는 orderVisibleWorkspaces(워크스페이스 전용)로 매겨진다 — 리뷰를 리포
-            블록 사이에 끼워 넣으면 "위에서 n번째 = ⌘n" 불변식이 깨지므로 워크스페이스 순서에는
+            또한 ⌥⌘1–9 번호는 orderVisibleWorkspaces(워크스페이스 전용)로 매겨진다 — 리뷰를 리포
+            블록 사이에 끼워 넣으면 "위에서 n번째 = ⌥⌘n" 불변식이 깨지므로 워크스페이스 순서에는
             포함하지 않는다. */}
         {app.reviews.length > 0 && (
           <div className="mb-3">
@@ -444,7 +444,7 @@ export default function Sidebar({
                 />
               </div>
 
-              {/* fan-out 그룹은 워크스페이스 행 위에 따로 놓는다. 행 사이에 끼워 넣으면 ⌘1–9
+              {/* fan-out 그룹은 워크스페이스 행 위에 따로 놓는다. 행 사이에 끼워 넣으면 ⌥⌘1–9
                   번호가 매겨지는 순서(orderVisibleWorkspaces)와 화면 순서가 어긋난다 — 리뷰
                   구역을 따로 뺀 것과 같은 이유다. 채택이 끝난 그룹은 여기 나오지 않는다. */}
               {unresolvedFanoutGroups(app.fanoutGroups, repo.id).map((group) => (
@@ -456,7 +456,7 @@ export default function Sidebar({
                   <p className="px-3 py-1 text-xs text-neutral-600">No workspaces</p>
                 )}
                 {/* 워크스페이스 행의 순서는 orderVisibleWorkspaces 의 정의(레포 순 → 레포 안
-                    orderByStack)와 일치해야 한다 — ⌘1–9 번호가 "위에서 n번째" 와 어긋나지 않게
+                    orderByStack)와 일치해야 한다 — ⌥⌘1–9 번호가 "위에서 n번째" 와 어긋나지 않게
                     하는 불변식이다. 여기 정렬 방식을 바꾸면 shared/types.ts 의
                     orderVisibleWorkspaces 도 같이 고칠 것. (생성 중 자리표시 행은 번호를 받지
                     않고 몇 초 만에 실제 행으로 바뀌므로, 그 사이 한 칸 밀리는 건 감수한다.) */}
@@ -482,7 +482,7 @@ export default function Sidebar({
           )
         })}
 
-        {/* 목록이 9개를 넘었을 때의 ⌘K 안내, 마우스로만 전환하는 사용자에게 뜨는 ⌘↑/⌘↓ 안내는
+        {/* 목록이 9개를 넘었을 때의 ⌘K 안내, 마우스로만 전환하는 사용자에게 뜨는 ⌥⌘↑/⌥⌘↓ 안내는
             더는 여기서 그리지 않는다 — `lib/hints.ts` 레지스트리로 옮겨 `components/Hint.tsx`
             (App.tsx 에 하나만 마운트되는 호스트)가 대신 그린다. 이 파일은 여전히 마우스 전환
             횟수를 세는 신호(noteMouseSwitch, 아래 WorkspaceRow)만 낸다. */}
@@ -826,7 +826,7 @@ function WorkspaceRow({
             return
           }
           void select(workspace.id)
-          // 마우스로만 전환하는 사용자에게만 ⌘↑/⌘↓ 힌트를 띄우기 위한 신호.
+          // 마우스로만 전환하는 사용자에게만 ⌥⌘↑/⌥⌘↓ 힌트를 띄우기 위한 신호.
           noteMouseSwitch()
         }}
         onKeyDown={(e) => {
@@ -1139,9 +1139,9 @@ function WorkspaceRow({
             {shortcut !== undefined && (
               <kbd
                 className="text-xs leading-none font-medium text-neutral-600 tabular-nums"
-                title={`Switch with ⌘${shortcut}`}
+                title={`Switch with ⌥⌘${shortcut}`}
               >
-                ⌘{shortcut}
+                ⌥⌘{shortcut}
               </kbd>
             )}
             {/* 미확인 완료는 권한 대기·실행 중과 별개의 상태이므로, 좌측 상태 점과 함께 같이 보여 준다

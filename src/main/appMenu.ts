@@ -16,10 +16,16 @@ import type { MenuCommand } from '@shared/types'
  * 메뉴 accelerator 는 브라우저 프로세스가 먼저 먹으므로 렌더러의 `preventDefault()` 로는
  * 못 막는다. 그래서 되찾는 방법은 **메뉴를 우리가 까는 것 하나뿐**이다.
  *
- * 우리 항목에는 accelerator 를 달지 않는다. 다는 순간 메뉴가 키를 가로채 렌더러의 문맥
+ * 우리 항목은 대부분 accelerator 를 달지 않는다. 다는 순간 메뉴가 키를 가로채 렌더러의 문맥
  * 가드(모달이 떠 있으면 양보한다 같은)를 건너뛰게 된다. 글쇠는 계속 렌더러가 소유하고,
  * 메뉴는 "그런 기능이 있다" 를 보여 주는 자리로 둔다. role 항목만 표준 accelerator 를
  * 유지한다 — Edit 메뉴가 그것으로 동작하기 때문이다(아래).
+ *
+ * **`Tab` 메뉴만 예외다.** 프리뷰·웹 탭 같은 게스트가 포커스를 쥐면 렌더러는 keydown 을 아예
+ * 못 본다 — 프리뷰를 한 번 클릭하면 탭 단축키가 통째로 먹통이 된다는 뜻이다. 메뉴 accelerator
+ * 는 브라우저 프로세스가 먼저 받으므로 포커스와 무관하게 뜬다. 그 대가로 렌더러의 문맥 가드를
+ * 건너뛰므로, `App.tsx` 의 `onMenuCommand` 구독이 모달이 떠 있으면 그 항목들만 걸러 무시한다
+ * (한 곳에서 한 번만 검사한다).
  */
 
 /**
@@ -70,9 +76,14 @@ function developerItems(): MenuItemConstructorOptions[] {
  * 하나이고, 글쇠·명령 팔레트·메뉴가 그 하나를 함께 부른다.
  */
 export function installAppMenu(run: (command: MenuCommand) => void): void {
-  const item = (label: string, command: MenuCommand): MenuItemConstructorOptions => ({
+  const item = (
+    label: string,
+    command: MenuCommand,
+    accelerator?: string
+  ): MenuItemConstructorOptions => ({
     label,
-    click: () => run(command)
+    click: () => run(command),
+    ...(accelerator ? { accelerator } : {})
   })
 
   const template: MenuItemConstructorOptions[] = [
@@ -123,6 +134,38 @@ export function installAppMenu(run: (command: MenuCommand) => void): void {
         item('Export Conversation…', 'export-conversation'),
         { type: 'separator' },
         item('Archive Workspace', 'archive-workspace')
+      ]
+    },
+    {
+      // 워크스페이스 콘텐츠 영역 맨 위 탭 스트립(TabStrip)과 그 안의 dev·web 탭 페이지 이동.
+      // 이 메뉴의 항목에는 전부 accelerator 가 있다 — 위 파일 주석의 예외.
+      label: 'Tab',
+      submenu: [
+        item('New Tab', 'new-tab', 'Cmd+T'),
+        item('Close Tab', 'close-tab', 'Cmd+W'),
+        item('Reopen Closed Tab', 'reopen-closed-tab', 'Shift+Cmd+T'),
+        { type: 'separator' },
+        item('Select Next Tab', 'next-tab', 'Shift+Cmd+]'),
+        item('Select Previous Tab', 'previous-tab', 'Shift+Cmd+['),
+        { type: 'separator' },
+        // ⌘1 은 언제나 작업 탭(Work) — TabStrip 이 그 탭을 항상 index 0 에 고정하는 불변식과
+        // 같다([[main/workspaceTabs]]). 숫자 하나마다 항목을 두는 것도 accelerator 하나마다
+        // Electron 메뉴 항목이 있어야 하기 때문이다 — 클릭할 일은 거의 없어도 등록은 필요하다.
+        item('Select Tab 1', 'select-tab-1', 'Cmd+1'),
+        item('Select Tab 2', 'select-tab-2', 'Cmd+2'),
+        item('Select Tab 3', 'select-tab-3', 'Cmd+3'),
+        item('Select Tab 4', 'select-tab-4', 'Cmd+4'),
+        item('Select Tab 5', 'select-tab-5', 'Cmd+5'),
+        item('Select Tab 6', 'select-tab-6', 'Cmd+6'),
+        item('Select Tab 7', 'select-tab-7', 'Cmd+7'),
+        item('Select Tab 8', 'select-tab-8', 'Cmd+8'),
+        item('Select Tab 9', 'select-tab-9', 'Cmd+9'),
+        { type: 'separator' },
+        item('Reload Tab', 'reload-tab', 'Cmd+R'),
+        item('Back', 'page-back', 'Cmd+['),
+        item('Forward', 'page-forward', 'Cmd+]'),
+        { type: 'separator' },
+        item('Focus Address Bar', 'focus-address-bar', 'Cmd+L')
       ]
     },
     {

@@ -151,7 +151,7 @@ export default function PreferencesStep({
 
           <Field
             label="Work panel"
-            hint="Files, changes, checks and the terminal. ⌘J toggles it, and your last toggle is remembered from then on."
+            hint="Files, changes, checks and the terminal. ⌥⌘J toggles it, and your last toggle is remembered from then on."
           >
             <div className="flex gap-1.5">
               <PanelChoice

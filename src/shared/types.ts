@@ -586,7 +586,7 @@ export function promoteWorkspaceStack<
  * 규칙: repos 배열 순서로 레포를 훑고, 레포 안에서는 orderByStack(부모 바로 뒤에 자식) 순서.
  * 두 배열 순서가 곧 표시 순서이므로(reorderById 참조), 드래그 앤 드롭 재정렬도 그대로 반영된다.
  *
- * ⌘1–9 번호 배지·⌘1–9 선택·⌘↑ / ⌘↓ 순환이 모두 이 함수 하나를 공유해야 한다.
+ * ⌥⌘1–9 번호 배지·⌥⌘1–9 선택·⌥⌘↑ / ⌥⌘↓ 순환이 모두 이 함수 하나를 공유해야 한다.
  * (예전에는 app.workspaces 원본 배열 순서를 그대로 썼는데, 그 배열은 레포별로 묶여 있지 않아
  *  레포가 여러 개면 A→B→A 처럼 섞여 화면 순서와 어긋났다. 그래서 번호가 꼬였다.)
  */
@@ -5159,6 +5159,26 @@ export type MenuCommand =
   | 'reveal-in-finder'
   | 'export-conversation'
   | 'archive-workspace'
+  // 탭·페이지 단축키. 게스트(프리뷰·웹 탭)가 포커스를 쥐면 렌더러는 keydown 을 못 보므로,
+  // 이것들만 accelerator 를 달아 브라우저 프로세스가 먼저 받게 한다(`src/main/appMenu.ts`).
+  | 'new-tab'
+  | 'close-tab'
+  | 'reopen-closed-tab'
+  | 'next-tab'
+  | 'previous-tab'
+  | 'select-tab-1'
+  | 'select-tab-2'
+  | 'select-tab-3'
+  | 'select-tab-4'
+  | 'select-tab-5'
+  | 'select-tab-6'
+  | 'select-tab-7'
+  | 'select-tab-8'
+  | 'select-tab-9'
+  | 'reload-tab'
+  | 'page-back'
+  | 'page-forward'
+  | 'focus-address-bar'
 
 export interface TerminalTab {
   id: string

@@ -41,7 +41,7 @@ export interface WorkspaceSurfaces {
   fileViewer: boolean
   /** worktree 가 있어야 성립하는 헤더 도구들 — ⇧⌘E/F/D/S/O 와 아카이브(⇧⌘⌫). */
   worktreeTools: boolean
-  /** ⌘[ / ⌘] 방문 이력에 이 선택을 남기는가. */
+  /** ⌥⌘[ / ⌥⌘] 방문 이력에 이 선택을 남기는가. */
   visitHistory: boolean
 }
 
@@ -59,7 +59,7 @@ const LIVE: WorkspaceSurfaces = {
  *
  * 인심을 쓰는 게 아니라 사실을 반영하는 것이다 — worktree 디렉터리가 없으므로 git·파일·터미널·
  * 스크립트는 실제로 불가능하고(main 의 IPC 핸들러들도 같은 이유로 아카이브를 막는다), 입력창은
- * 보낼 세션이 없다. 방문 이력에서도 빼는 이유는 조금 다르다: ⌘[ / ⌘] 는 살아 있는 워크스페이스
+ * 보낼 세션이 없다. 방문 이력에서도 빼는 이유는 조금 다르다: ⌥⌘[ / ⌥⌘] 는 살아 있는 워크스페이스
  * 사이를 오가는 축이라, 되살리지 않으면 돌아갈 수 없는 자리를 그 축에 끼우면 길만 길어진다.
  */
 const READ_ONLY: WorkspaceSurfaces = {

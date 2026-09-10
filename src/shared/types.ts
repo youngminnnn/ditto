@@ -5352,9 +5352,13 @@ export interface TerminalTabsState {
 }
 
 /**
- * 콘텐츠 영역 맨 위 탭 스트립의 탭 종류. **`HostedViewKind`(`'dev' | 'web'`)와 다르다** — 그쪽은
- * 네이티브(BrowserView) 렌더링이 필요한 종류만 담고, 여기는 파일·아티팩트·스택처럼 DOM 으로
- * 그리는 탭까지 포함한 전체 목록이다. 대화(chat)는 늘 첫 탭이고 닫을 수 없다([[main/workspaceTabs]]).
+ * 콘텐츠 영역 맨 위 탭 스트립의 탭 종류.
+ *
+ * **`HostedViewKind`(`'dev' | 'web' | 'artifact'`)와 다르다** — 그쪽은 `WebContentsView` 로
+ * 그리는 종류만 담고, 여기는 파일·스택처럼 DOM 으로 그리는 탭과 작업 탭까지 포함한 전체
+ * 목록이다. 겹치는 셋(dev·web·artifact)은 탭이면서 동시에 네이티브 뷰를 갖는다.
+ *
+ * 작업 탭(`work`)은 늘 첫 탭이고 닫을 수 없다([[main/workspaceTabs]]).
  */
 export type WorkspaceTabKind = 'work' | 'dev' | 'web' | 'file' | 'artifact' | 'stack'
 

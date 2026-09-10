@@ -2,6 +2,7 @@ import { BrowserWindow, WebContentsView, shell } from 'electron'
 import type { WebContents } from 'electron'
 import { BROWSER_PARTITION, IPC, PREVIEW_PARTITION, artifactPartition } from '@shared/types'
 import { ARTIFACT_ORIGIN } from '@shared/artifactUrl'
+import { applyContextMenu } from './guestContextMenu'
 import { ensureArtifactSessionFor } from './artifactProtocol'
 import type { HostedViewKind, HostedViewLayout } from '@shared/types'
 import { windowBackgroundColor } from './windows'
@@ -214,6 +215,9 @@ export class HostedViewManager {
     // 모델이 쓴 코드는 아무 데도 못 간다. 사용자의 dev 서버·웹 탭과 규칙이 다르다.
     if (kind === 'artifact') applyArtifactGuards(view.webContents)
     else applyGuestGuards(view.webContents)
+    // 우클릭 메뉴. Electron 은 기본 메뉴를 주지 않으므로 안 달면 우클릭이 아무 일도 안 한다.
+    // 주인 창을 값이 아니라 클로저로 넘긴다 — 뷰는 창 사이를 옮겨 다닌다([[main/guestContextMenu]]).
+    applyContextMenu(view.webContents, kind, () => this.ownerWindowOf(tabId))
 
     const entry: Entry = {
       view,
@@ -284,6 +288,14 @@ export class HostedViewManager {
    * 같은 창에 두 번 붙여도 안전해야 한다 — React 는 개발 모드에서 effect 를 두 번 돌리고,
    * 분리 창을 열고 닫는 동안 순서가 뒤집힐 수도 있다.
    */
+  /** 이 뷰가 지금 붙어 있는 창. 어디에도 안 붙어 있으면 `null` — 그것도 정상 상태다. */
+  private ownerWindowOf(tabId: string): BrowserWindow | null {
+    const id = this.entries.get(tabId)?.ownerWindowId
+    if (id == null) return null
+    const win = BrowserWindow.fromId(id)
+    return win && !win.isDestroyed() ? win : null
+  }
+
   attach(tabId: string, windowId: number): void {
     const entry = this.entries.get(tabId)
     if (!entry) return

@@ -71,6 +71,9 @@ export async function capturePreview(
   const target = views.resolve(tabId)
   if ('error' in target) return target
 
+  // 찍는 동안은 붙잡아 둔다 — 뷰 예산이 하필 이 순간 이 뷰를 골라 정리하면 캡처가 "왜 실패했는지
+  // 알 수 없는" 실패가 된다([[main/webViews]] evict).
+  const release = views.hold(tabId)
   try {
     let image = await target.guest.capturePage()
     if (image.isEmpty()) return { error: 'There is nothing to capture yet.' }
@@ -86,6 +89,8 @@ export async function capturePreview(
   } catch (err) {
     log.error('preview: capturePage failed', err)
     return { error: err instanceof Error ? err.message : 'Could not capture the preview.' }
+  } finally {
+    release()
   }
 }
 
@@ -102,7 +107,14 @@ export async function pickPreviewElement(
   const target = views.resolve(tabId)
   if ('error' in target) return target
 
-  const picked = await pickElement(target.guest)
+  // 사용자가 요소를 고르는 동안 뷰가 사라지면 CDP 세션이 매달린다 — 그동안 붙잡아 둔다.
+  const release = views.hold(tabId)
+  let picked: Awaited<ReturnType<typeof pickElement>>
+  try {
+    picked = await pickElement(target.guest)
+  } finally {
+    release()
+  }
   if ('error' in picked) return picked
 
   return {

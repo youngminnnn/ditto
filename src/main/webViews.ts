@@ -20,6 +20,24 @@ import { log } from './logger'
  * (`lib/viewSuppress.ts`). 이 파일은 그 지시를 받아 적용하는 쪽이다.
  */
 
+/**
+ * 동시에 살려 둘 뷰의 수.
+ *
+ * 뷰 하나가 렌더러 프로세스 하나다(50~120MB). 탭을 닫지 않고 쌓아 두는 것은 브라우저에서
+ * 지극히 평범한 사용이라, 상한이 없으면 그 평범한 사용이 곧 메모리 사고가 된다.
+ *
+ * **탭 레코드는 이 상한과 무관하다.** 탭(영속)과 뷰(캐시)의 수명을 나눈 것이 요점이다 —
+ * 축출된 탭을 다시 누르면 주소로 되살아난다. 사용자가 잃는 것은 그 페이지의 스크롤 위치와
+ * 폼 입력이지 탭 자체가 아니다.
+ */
+const MAX_LIVE_VIEWS = 6
+
+/** 안 보이는 채로 이만큼 지나면 정리한다. 다시 누르면 주소로 되살아난다. */
+const DORMANT_AFTER_MS = 10 * 60_000
+
+/** 동면 검사 주기. */
+const SWEEP_MS = 60_000
+
 /** http/https 만. file:·about:·custom scheme 은 게스트가 갈 곳이 아니다. */
 function isWebUrl(url: string): boolean {
   return /^https?:\/\//i.test(url)
@@ -97,6 +115,9 @@ export interface HostedViewHooks {
 
 export class HostedViewManager {
   private entries = new Map<string, Entry>()
+  /** `closed` 를 이미 걸어 둔 창. 뷰마다 걸면 같은 창에 리스너가 쌓인다. */
+  private watchedWindows = new Set<number>()
+  private sweepTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
     private dispatch: (channel: string, payload: unknown) => void,
@@ -134,12 +155,14 @@ export class HostedViewManager {
       busy: 0
     }
     this.entries.set(tabId, entry)
+    this.startSweep()
     this.watchNavigation(tabId, view.webContents)
     // 첫 loadURL 보다 먼저다 — 이 순서라야 페이지의 첫 콘솔 줄부터 잡힌다.
     this.hooks.onCreated?.(tabId, workspaceId, view.webContents)
     // 첫 주소는 **만든 자리에서만** 넣는다. 렌더러가 판단하면 마운트할 때마다 다시 로드하게
     // 되는데, 뷰가 이미 그 페이지에 있는지 아는 것은 이쪽뿐이다.
     if (initialUrl) this.load(tabId, initialUrl)
+    this.evict()
   }
 
   /**
@@ -201,6 +224,25 @@ export class HostedViewManager {
     if (!win || win.isDestroyed()) return
     win.contentView.addChildView(entry.view)
     entry.ownerWindowId = windowId
+    this.watchWindow(win)
+  }
+
+  /**
+   * 창이 닫히면 그 창이 붙이고 있던 뷰를 뗀다. **파괴가 아니다** — 분리한 작업 패널 창을
+   * 닫았다고 보고 있던 페이지가 처음부터 다시 로드되면 안 된다.
+   *
+   * 창이 사라질 때 그 렌더러도 함께 사라지므로 언마운트 effect 가 돌지 않는다. 그래서
+   * 렌더러의 detach 를 기다릴 수 없고, 이쪽에서 직접 들어야 한다. `PaneWindows` 에 이 배선을
+   * 심지 않은 이유는 그쪽이 뷰를 알 이유가 없어서다.
+   */
+  private watchWindow(win: BrowserWindow): void {
+    if (this.watchedWindows.has(win.id)) return
+    const id = win.id
+    this.watchedWindows.add(id)
+    win.once('closed', () => {
+      this.watchedWindows.delete(id)
+      this.detachWindow(id)
+    })
   }
 
   /**
@@ -357,6 +399,46 @@ export class HostedViewManager {
     this.hooks.onDestroyed?.(tabId, entry.workspaceId)
     if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close()
     this.dispatch(IPC.evtHostedView, { type: 'gone', tabId })
+  }
+
+  /**
+   * 예산을 넘으면 오래 안 본 뷰부터 정리한다.
+   *
+   * 보이는 뷰와 잡혀 있는 뷰(캡처·픽커 진행 중)는 후보가 아니다 — 사용자가 지금 보고 있는
+   * 화면이 사라지거나, 찍는 도중에 대상이 없어지면 그건 버그로 보인다.
+   */
+  private evict(): void {
+    if (this.entries.size <= MAX_LIVE_VIEWS) return
+    const candidates = [...this.entries]
+      .filter(([, e]) => !e.visible && e.busy === 0)
+      .sort((a, b) => a[1].lastVisibleAt - b[1].lastVisibleAt)
+    for (const [tabId] of candidates) {
+      if (this.entries.size <= MAX_LIVE_VIEWS) break
+      this.destroy(tabId)
+    }
+  }
+
+  /**
+   * 오래 안 본 뷰를 걷어낸다.
+   *
+   * 예산만으로는 부족하다 — 탭 두 개만 열어 둔 채 며칠 켜 두면 예산에 안 걸리면서 프로세스
+   * 둘이 계속 산다. `unref` 로 걸어 이 타이머가 앱을 붙잡지 않게 한다.
+   */
+  private startSweep(): void {
+    if (this.sweepTimer) return
+    this.sweepTimer = setInterval(() => {
+      const now = Date.now()
+      for (const [tabId, entry] of [...this.entries]) {
+        if (entry.visible || entry.busy > 0) continue
+        if (now - entry.lastVisibleAt < DORMANT_AFTER_MS) continue
+        this.destroy(tabId)
+      }
+      if (this.entries.size === 0 && this.sweepTimer) {
+        clearInterval(this.sweepTimer)
+        this.sweepTimer = null
+      }
+    }, SWEEP_MS)
+    this.sweepTimer.unref?.()
   }
 
   /** 워크스페이스가 아카이브·삭제될 때 그 아래 뷰를 전부 정리한다. */

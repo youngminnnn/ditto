@@ -23,8 +23,11 @@ const { webContentsViews, browserWindows } = vi.hoisted(() => ({
   browserWindows: new Map<
     number,
     {
+      id: number
       isDestroyed: () => boolean
       getContentBounds: () => { x: number; y: number; width: number; height: number }
+      // 매니저가 창이 닫힐 때 뷰를 떼려고 `closed` 를 한 번 건다([[main/webViews]] watchWindow).
+      once: ReturnType<typeof vi.fn>
       contentView: {
         addChildView: ReturnType<typeof vi.fn>
         removeChildView: ReturnType<typeof vi.fn>
@@ -82,13 +85,19 @@ function makeWindow(
   id: number,
   contentBounds = { x: 0, y: 0, width: 1000, height: 800 }
 ): {
+  id: number
   isDestroyed: () => boolean
   getContentBounds: () => typeof contentBounds
+  once: ReturnType<typeof vi.fn>
   contentView: { addChildView: ReturnType<typeof vi.fn>; removeChildView: ReturnType<typeof vi.fn> }
 } {
   const win = {
+    id,
     isDestroyed: () => false,
     getContentBounds: () => contentBounds,
+    // 매니저가 창 닫힘을 한 번 듣는다 — 창이 사라지면 그 렌더러의 언마운트가 돌지 않아
+    // detach 를 기다릴 수 없기 때문이다.
+    once: vi.fn(),
     contentView: { addChildView: vi.fn(), removeChildView: vi.fn() }
   }
   browserWindows.set(id, win)
@@ -233,6 +242,49 @@ describe('HostedViewManager', () => {
       height: 300
     })
     void win1
+  })
+
+  it('예산을 넘으면 오래 안 본 뷰부터 정리한다 — 뷰 하나가 렌더러 프로세스 하나다', async () => {
+    const manager = await makeManager()
+    const win = makeWindow(1)
+    // 7 개를 만든다(상한은 6). 만든 순서대로 마지막으로 보인 시각이 앞선다.
+    for (let i = 0; i < 7; i++) {
+      manager.ensure(`tab-${i}`, 'ws-1', 'dev')
+      manager.attach(`tab-${i}`, win.id)
+    }
+
+    // 가장 오래 안 본 것 하나가 사라지고 나머지는 남는다.
+    expect('guest' in manager.resolve('tab-0')).toBe(false)
+    expect('guest' in manager.resolve('tab-6')).toBe(true)
+  })
+
+  it('보고 있는 뷰는 예산에 걸려도 정리되지 않는다 — 사용자가 보던 화면이 사라지면 버그로 읽힌다', async () => {
+    const manager = await makeManager()
+    const win = makeWindow(1)
+    manager.ensure('tab-keep', 'ws-1', 'dev')
+    manager.attach('tab-keep', win.id)
+    manager.applyLayout(win.id, [
+      { tabId: 'tab-keep', x: 0, y: 0, width: 100, height: 100, visible: true }
+    ])
+
+    for (let i = 0; i < 8; i++) manager.ensure(`tab-${i}`, 'ws-1', 'dev')
+
+    expect('guest' in manager.resolve('tab-keep')).toBe(true)
+  })
+
+  it('창이 닫히면 그 창의 뷰를 뗀다 — 파괴가 아니다(분리 창을 닫았다고 페이지가 죽으면 안 된다)', async () => {
+    const manager = await makeManager()
+    const win = makeWindow(1)
+    manager.ensure('tab-1', 'ws-1', 'dev')
+    manager.attach('tab-1', win.id)
+
+    // 창이 사라지면 그 렌더러의 언마운트가 돌지 않는다 — 매니저가 직접 듣는 이유다.
+    const closed = win.once.mock.calls.find(([event]) => event === 'closed')?.[1] as () => void
+    expect(closed).toBeTypeOf('function')
+    closed()
+
+    expect('guest' in manager.resolve('tab-1')).toBe(true)
+    expect(webContentsViews[0].webContents.close).not.toHaveBeenCalled()
   })
 
   it('destroyWorkspace 는 같은 workspaceId 의 뷰만 지우고 다른 워크스페이스는 남긴다', async () => {

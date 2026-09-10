@@ -172,7 +172,14 @@ export default async function 에이전트가_프리뷰를_열고_에러를_읽�
         }
         const origin = new URL(opened.url).origin
 
-        // 4. 도구가 말만 한 것이 아니라 **화면이 실제로 그렇게 되었는지** 본다. 게스트가 붙고
+        // 4. 에이전트가 연 탭은 화면을 옮기지 않는다 — 사용자가 읽던 대화가 갈리면 안 되기
+        //    때문이다([[shared/types]] PreviewOpenEvent.activate). 그래서 화면을 보려면
+        //    사용자가 하듯 탭을 눌러야 한다. 탭이 생겼다는 것 자체가 첫 단언이다.
+        const devTab = wooi.win.getByRole('tab', { name: /127\.0\.0\.1:\d+/ })
+        await devTab.waitFor()
+        await devTab.click()
+
+        //    도구가 말만 한 것이 아니라 **화면이 실제로 그렇게 되었는지** 본다. 게스트가 붙고
         //    주소창이 그 주소를 비추는 것이 렌더러까지 신호가 닿았다는 증거다.
         const address = wooi.win.locator('input[aria-label="Preview address"]')
         await address.waitFor()

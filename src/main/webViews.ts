@@ -104,8 +104,15 @@ export class HostedViewManager {
    * 탭을 만들었다고 뷰까지 만들지는 않는다 — 뷰 하나가 렌더러 프로세스 하나다. 한 번도 보지
    * 않은 탭에까지 프로세스를 내주면 탭을 쌓아 두는 평범한 사용이 곧 메모리 사고가 된다.
    */
-  ensure(tabId: string, workspaceId: string, kind: HostedViewKind): void {
-    if (this.entries.has(tabId)) return
+  ensure(tabId: string, workspaceId: string, kind: HostedViewKind, initialUrl?: string): void {
+    if (this.entries.has(tabId)) {
+      // 이미 있다 — 렌더러가 방금 다시 마운트한 것이다(탭을 오갔거나 창을 옮겼거나). 지금
+      // 상태를 한 번 밀어 준다. 이게 없으면 새 화면은 주소도 앞뒤 버튼도 빈 채로 시작하고,
+      // **첫 주소를 다시 로드해 보고 있던 페이지를 처음으로 되감는다** — 뷰를 살려 두는
+      // 이유가 통째로 사라지는 자리다.
+      this.pushState(tabId)
+      return
+    }
 
     const view = new WebContentsView({ webPreferences: guestWebPreferences(PREVIEW_PARTITION) })
     // 첫 프레임 전과 리사이즈로 드러나는 가장자리에 흰 판이 번쩍이지 않게 앱 배경을 깔아 둔다.
@@ -125,6 +132,9 @@ export class HostedViewManager {
     this.watchNavigation(tabId, view.webContents)
     // 첫 loadURL 보다 먼저다 — 이 순서라야 페이지의 첫 콘솔 줄부터 잡힌다.
     this.hooks.onCreated?.(tabId, workspaceId, view.webContents)
+    // 첫 주소는 **만든 자리에서만** 넣는다. 렌더러가 판단하면 마운트할 때마다 다시 로드하게
+    // 되는데, 뷰가 이미 그 페이지에 있는지 아는 것은 이쪽뿐이다.
+    if (initialUrl) this.load(tabId, initialUrl)
   }
 
   /**
@@ -266,10 +276,19 @@ export class HostedViewManager {
    * "활성 탭" 규칙이 여기로 들어온다.
    */
   viewForWorkspace(workspaceId: string, kind: HostedViewKind): WebContents | null {
-    for (const entry of this.entries.values()) {
+    const tabId = this.tabIdForWorkspace(workspaceId, kind)
+    return tabId ? this.entries.get(tabId)!.view.webContents : null
+  }
+
+  /**
+   * 그 뷰를 담은 탭의 id. 수집기가 탭 단위로 키를 잡으므로([[main/previewIssues]]) 워크스페이스만
+   * 아는 호출자(에이전트 도구)가 이슈를 읽으려면 이 변환이 필요하다.
+   */
+  tabIdForWorkspace(workspaceId: string, kind: HostedViewKind): string | null {
+    for (const [tabId, entry] of this.entries) {
       if (entry.workspaceId !== workspaceId || entry.kind !== kind) continue
       if (entry.view.webContents.isDestroyed()) continue
-      return entry.view.webContents
+      return tabId
     }
     return null
   }

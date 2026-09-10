@@ -1073,11 +1073,11 @@ export interface Workspace {
   activeTerminalTabId?: string
   /**
    * 콘텐츠 영역 맨 위 탭 스트립(대화 + dev 프리뷰 + 웹 + 파일 + 아티팩트 + 스택)의 탭 목록.
-   * 없거나 비어 있으면 첫 조회 때 대화 탭 하나로 채운다 — 레거시 워크스페이스는 마이그레이션
-   * 없이 "대화 탭 1개" 로 읽힌다. 대화 탭(id='chat')은 언제나 이 배열의 첫 항목이다.
+   * 없거나 비어 있으면 첫 조회 때 작업 탭 하나로 채운다 — 레거시 워크스페이스는 마이그레이션
+   * 없이 "작업 탭 1개" 로 읽힌다. 작업 탭(id='work')은 언제나 이 배열의 첫 항목이다.
    */
   tabs?: WorkspaceTab[]
-  /** 마지막으로 보고 있던 탭. tabs 에 없는 값이면 대화 탭으로 되돌린다. */
+  /** 마지막으로 보고 있던 탭. tabs 에 없는 값이면 작업 탭으로 되돌린다. */
   activeTabId?: string
   createdAt: number
   lastActiveAt: number
@@ -2723,6 +2723,14 @@ export const PREVIEW_PARTITION = 'persist:wooi-preview'
 export interface PreviewOpenEvent {
   workspaceId: string
   url: string
+  /**
+   * 그 탭으로 화면을 옮길지.
+   *
+   * 사람이 "Open in Preview" 를 누른 것이면 참이다 — 누른 이유가 곧 보려는 것이다. 에이전트가
+   * 연 것이면 거짓이다: 사용자는 대화를 읽던 중이고, 그 화면이 예고 없이 갈리면 방금 무엇을
+   * 읽고 있었는지 잃는다. 탭은 생기므로 가고 싶으면 누르면 된다.
+   */
+  activate: boolean
 }
 
 /**
@@ -4028,11 +4036,11 @@ export const IPC = {
   /** 진행 중인 인라인 `!명령`(execInline)을 중단한다. 인자로 workspaceId 와 대상 아이템 id 를 받는다. */
   terminalKillInline: 'terminal:killInline',
   // 워크스페이스 콘텐츠 탭 (대화 위 크롬형 탭 스트립 — 대화·dev 프리뷰·웹·파일·아티팩트·스택)
-  /** 탭 구성을 읽는다(없으면 대화 탭 하나로 채워 돌려준다). */
+  /** 탭 구성을 읽는다(없으면 작업 탭 하나로 채워 돌려준다). */
   tabsGet: 'tabs:get',
   /** 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 활성화한다. */
   tabsOpen: 'tabs:open',
-  /** 탭을 닫는다. 대화 탭(chat)은 조용히 무시한다. */
+  /** 탭을 닫는다. 작업 탭(work)은 조용히 무시한다. */
   tabsClose: 'tabs:close',
   /** 보고 있는 탭을 바꾼다. */
   tabsSelect: 'tabs:select',
@@ -5160,7 +5168,7 @@ export interface TerminalTabsState {
  * 네이티브(BrowserView) 렌더링이 필요한 종류만 담고, 여기는 파일·아티팩트·스택처럼 DOM 으로
  * 그리는 탭까지 포함한 전체 목록이다. 대화(chat)는 늘 첫 탭이고 닫을 수 없다([[main/workspaceTabs]]).
  */
-export type WorkspaceTabKind = 'chat' | 'dev' | 'web' | 'file' | 'artifact' | 'stack'
+export type WorkspaceTabKind = 'work' | 'dev' | 'web' | 'file' | 'artifact' | 'stack'
 
 export interface WorkspaceTab {
   id: string
@@ -5175,7 +5183,7 @@ export interface WorkspaceTab {
 export interface WorkspaceTabsState {
   workspaceId: string
   tabs: WorkspaceTab[]
-  /** 지금 보고 있는 탭. 대화 탭이 항상 있으므로 tabs 는 비지 않고, activeId 는 늘 그중 하나를 가리킨다. */
+  /** 지금 보고 있는 탭. 작업 탭이 항상 있으므로 tabs 는 비지 않고, activeId 는 늘 그중 하나를 가리킨다. */
   activeId: string
 }
 

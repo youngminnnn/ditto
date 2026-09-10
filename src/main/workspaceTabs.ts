@@ -6,10 +6,10 @@ import { getStore } from './store'
 type Dispatch = (channel: string, payload: unknown) => void
 
 /**
- * 대화 탭의 고정 id. `TerminalTab` 과 달리 이 탭은 종류마저 고정이라(kind: 'chat') 데이터 자체가
- * 하나뿐임을 안다 — 화면이 무엇을 대화 탭으로 볼지 추측할 필요가 없다.
+ * 작업 탭의 고정 id. `TerminalTab` 과 달리 이 탭은 종류마저 고정이라(kind: 'work') 데이터 자체가
+ * 하나뿐임을 안다 — 화면이 무엇을 작업 탭으로 볼지 추측할 필요가 없다.
  */
-const CHAT_TAB_ID = 'chat'
+const WORK_TAB_ID = 'work'
 
 /**
  * 워크스페이스별로 기억하는 "최근 닫은 탭" 스택의 상한. reopenTab 으로 되살리는 편의 기능일
@@ -23,7 +23,7 @@ const CLOSED_STACK_LIMIT = 10
  * 진실 원천은 메인 프로세스(workspace 레코드)이고, 변경은 여기서만 일어나 모든 창에 방송된다
  * (작업 패널을 별도 창으로 떼어 낼 수 있어서, 만드는 창과 보는 창이 다를 수 있다).
  *
- * 터미널 탭과 다른 점 하나: **대화 탭(id='chat')은 항상 존재하고 항상 index 0** 이다. "첫 탭은
+ * 터미널 탭과 다른 점 하나: **작업 탭(id='work')은 항상 존재하고 항상 index 0** 이다. "첫 탭은
  * 닫을 수 없다" 가 화면이 지키는 규칙이 아니라 여기 정규화가 강제하는 **데이터 불변식**이다 —
  * 화면이 실수로 닫기 버튼을 그려도 데이터는 깨지지 않는다.
  */
@@ -40,7 +40,7 @@ export class WorkspaceTabManager {
   constructor(private dispatch: Dispatch) {}
 
   /**
-   * workspace 의 탭 구성을 읽는다. 비어 있거나 대화 탭이 없거나(신규·레거시 workspace) 대화 탭이
+   * workspace 의 탭 구성을 읽는다. 비어 있거나 작업 탭이 없거나(신규·레거시 workspace) 작업 탭이
    * 맨 앞이 아니거나 활성 탭이 사라졌으면 여기서 정규화해 영속한다(방송은 하지 않는다: 읽기의
    * 부수효과) — 화면은 "탭이 늘 최소 하나(대화), 대화는 늘 index 0" 을 전제로 그릴 수 있다.
    */
@@ -51,7 +51,7 @@ export class WorkspaceTabManager {
     if (!ws) return { workspaceId, tabs: [], activeId: '' }
     if (
       ws.tabs?.length &&
-      ws.tabs[0]?.id === CHAT_TAB_ID &&
+      ws.tabs[0]?.id === WORK_TAB_ID &&
       ws.tabs.some((t) => t.id === ws.activeTabId)
     ) {
       return { workspaceId, tabs: ws.tabs, activeId: ws.activeTabId as string }
@@ -65,30 +65,33 @@ export class WorkspaceTabManager {
    */
   openTab(
     workspaceId: string,
-    opts: { kind: WorkspaceTabKind; target?: string; title?: string }
+    opts: { kind: WorkspaceTabKind; target?: string; title?: string; activate?: boolean }
   ): WorkspaceTabsState {
+    // 기본은 활성화다(사람이 여는 경우가 대부분이라). 에이전트가 여는 탭만 false 로 온다 —
+    // 읽고 있던 대화가 예고 없이 다른 화면으로 갈리면 안 된다. 탭은 생기고, 갈지는 사람이 정한다.
+    const activate = opts.activate ?? true
     return this.mutateTabs(workspaceId, (ws) => {
       const tabs = ws.tabs ?? []
       const existing = tabs.find((t) => t.kind === opts.kind && t.target === opts.target)
       if (existing) {
-        ws.activeTabId = existing.id
+        if (activate) ws.activeTabId = existing.id
         return
       }
       const tab: WorkspaceTab = { id: randomUUID(), kind: opts.kind }
       if (opts.target !== undefined) tab.target = opts.target
       if (opts.title !== undefined) tab.title = opts.title
       ws.tabs = [...tabs, tab]
-      ws.activeTabId = tab.id
+      if (activate) ws.activeTabId = tab.id
     })
   }
 
   /**
-   * 탭을 닫는다. 대화 탭(chat)은 **조용히 무시한다** — 데이터 불변식을 어기라는 요청일 뿐
+   * 탭을 닫는다. 작업 탭(work)은 **조용히 무시한다** — 데이터 불변식을 어기라는 요청일 뿐
    * 에러가 아니다. 닫은 탭은 되살릴 수 있도록 워크스페이스별 스택에 쌓아 둔다(상한을 넘으면
    * 가장 오래된 것부터 버린다).
    */
   closeTab(workspaceId: string, tabId: string): WorkspaceTabsState {
-    if (tabId === CHAT_TAB_ID) return this.tabs(workspaceId)
+    if (tabId === WORK_TAB_ID) return this.tabs(workspaceId)
     return this.mutateTabs(workspaceId, (ws) => {
       const tabs = ws.tabs ?? []
       const idx = tabs.findIndex((t) => t.id === tabId)
@@ -101,7 +104,7 @@ export class WorkspaceTabManager {
       if (stack.length > CLOSED_STACK_LIMIT) stack.shift()
       this.closedStacks.set(workspaceId, stack)
 
-      // 닫은 탭을 보고 있었다면 오른쪽(없으면 왼쪽) 이웃으로 옮긴다. 대화 탭은 정규화가 항상
+      // 닫은 탭을 보고 있었다면 오른쪽(없으면 왼쪽) 이웃으로 옮긴다. 작업 탭은 정규화가 항상
       // index 0 을 지키므로 이웃이 하나도 없는 경우는 없다.
       if (ws.activeTabId === tabId) {
         ws.activeTabId = ws.tabs[Math.min(idx, ws.tabs.length - 1)]?.id
@@ -143,8 +146,8 @@ export class WorkspaceTabManager {
 
   /**
    * 탭 목록을 바꾸고(그리고 언제나 정규화하고) 결과를 방송한다.
-   * 정규화 = 대화 탭을 항상 index 0 에 두고(없으면 만들고, 다른 자리에 있으면 앞으로 옮기고),
-   * 활성 탭이 목록에 없으면 대화 탭으로 되돌린다.
+   * 정규화 = 작업 탭을 항상 index 0 에 두고(없으면 만들고, 다른 자리에 있으면 앞으로 옮기고),
+   * 활성 탭이 목록에 없으면 작업 탭으로 되돌린다.
    */
   private mutateTabs(
     workspaceId: string,
@@ -158,15 +161,15 @@ export class WorkspaceTabManager {
       mutate(ws)
 
       let tabs = ws.tabs ?? []
-      const chatIdx = tabs.findIndex((t) => t.id === CHAT_TAB_ID)
-      if (chatIdx < 0) {
-        tabs = [{ id: CHAT_TAB_ID, kind: 'chat' }, ...tabs]
-      } else if (chatIdx > 0) {
-        const chat = tabs[chatIdx]
-        tabs = [chat, ...tabs.filter((t) => t.id !== CHAT_TAB_ID)]
+      const workIdx = tabs.findIndex((t) => t.id === WORK_TAB_ID)
+      if (workIdx < 0) {
+        tabs = [{ id: WORK_TAB_ID, kind: 'work' }, ...tabs]
+      } else if (workIdx > 0) {
+        const work = tabs[workIdx]
+        tabs = [work, ...tabs.filter((t) => t.id !== WORK_TAB_ID)]
       }
       ws.tabs = tabs
-      if (!ws.tabs.some((t) => t.id === ws.activeTabId)) ws.activeTabId = CHAT_TAB_ID
+      if (!ws.tabs.some((t) => t.id === ws.activeTabId)) ws.activeTabId = WORK_TAB_ID
 
       state = {
         workspaceId,

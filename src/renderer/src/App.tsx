@@ -42,6 +42,9 @@ import FileViewerOverlay from './components/FileViewerOverlay'
 import FileQuickOpen from './components/FileQuickOpen'
 import WorkArea from './components/WorkArea'
 import Splitter from './components/Splitter'
+import TabStrip from './components/TabStrip'
+import DevTab from './components/tabs/DevTab'
+import { useWorkspaceTabs } from './lib/workspaceTabs'
 import EmptyState from './components/EmptyState'
 import Overview from './components/Overview'
 import SettingsModal from './components/SettingsModal'
@@ -110,6 +113,26 @@ export default function App(): React.JSX.Element {
   )
   // 작업 패널을 별도 창으로 떼어 뒀으면 여기서는 그리지 않는다 — 분리는 복제가 아니라 이동이다.
   const workPaneDetached = useStore((s) => s.detachedPanes.work)
+
+  // 워크스페이스 탭. 목록의 주인은 main 이고([[main/workspaceTabs]]) **구독은 여기 한 번뿐**이다 —
+  // 컴포넌트마다 각자 구독하면 탭이 바뀔 때마다 같은 일이 그 수만큼 일어난다.
+  const wsTabs = useWorkspaceTabs(selectedId ?? '')
+  // "Open in Preview" 로 들어오는 이동 명령. 같은 주소를 다시 눌러도 반응하도록 seq 를 붙인다.
+  const [previewNav, setPreviewNav] = useState<{ url: string; seq: number } | null>(null)
+  const previewSeq = useRef(0)
+  useEffect(() => {
+    return window.api.preview.onOpen((e) => {
+      // 고르지 않은 워크스페이스에도 탭을 만든다 — 에이전트는 백그라운드에서 프리뷰를 열 수
+      // 있고, 그때 탭이 안 생기면 사용자가 그 워크스페이스로 갔을 때 아무 흔적이 없다.
+      // 화면을 옮길지는 누가 열었느냐가 정한다([[shared/types]] PreviewOpenEvent.activate).
+      void window.api.tabs.open(e.workspaceId, {
+        kind: 'dev',
+        target: e.url,
+        activate: e.activate
+      })
+      if (e.workspaceId === selectedId) setPreviewNav({ url: e.url, seq: ++previewSeq.current })
+    })
+  }, [selectedId])
   const rightBase = useRef(rightWidth)
   const sidebarWidth = useStore((s) => s.sidebarWidth)
   const setSidebarWidth = useStore((s) => s.setSidebarWidth)
@@ -1160,43 +1183,60 @@ export default function App(): React.JSX.Element {
           ) : activeStackWorkspaceId ? (
             <StackScreen key={activeStackWorkspaceId} workspaceId={activeStackWorkspaceId} />
           ) : selected ? (
-            <>
-              {/*
+            <div className="flex-1 min-w-0 flex flex-col">
+              <TabStrip
+                tabs={wsTabs.tabs}
+                activeId={wsTabs.activeId}
+                onSelect={wsTabs.select}
+                onClose={wsTabs.close}
+              />
+              {wsTabs.active?.kind === 'dev' ? (
+                <DevTab
+                  key={wsTabs.active.id}
+                  workspace={selected}
+                  tab={wsTabs.active}
+                  navTarget={previewNav}
+                />
+              ) : (
+                <div className="flex-1 min-h-0 flex">
+                  {/*
                 서브에이전트를 골랐으면 그 대화가 이 자리에 선다 — 우측 작업 패널은 그대로 둔다.
                 서브에이전트는 부모와 **같은 worktree** 에서 일하므로, 그가 무엇을 고쳤는지는
                 여전히 그 워크스페이스의 Changes 에서 본다.
               */}
-              <div data-tour="chat" className="flex-1 min-w-0">
-                {openSubagentId ? (
-                  <SubagentChatView
-                    key={`${selected.id}:${openSubagentId}`}
-                    workspace={selected}
-                    toolId={openSubagentId}
-                  />
-                ) : (
-                  <ChatView key={selected.id} workspace={selected} />
-                )}
-              </div>
-              {rightPanelOpen && !workPaneDetached && (
-                <>
-                  <Splitter
-                    axis="x"
-                    label="Resize work panel"
-                    onStart={() => (rightBase.current = useStore.getState().rightWidth)}
-                    // 분할바를 오른쪽으로 끌면(dx>0) 우측 패널이 좁아진다.
-                    // 채팅이 maxRight 미만으로 줄지 않도록 드래그 폭도 함께 제한한다.
-                    onDelta={(dx) => setRightWidth(Math.min(rightBase.current - dx, maxRight))}
-                  />
-                  <div
-                    data-tour="work-panel"
-                    style={{ width: effectiveRightWidth }}
-                    className="shrink-0 border-l border-[var(--border)] min-w-0"
-                  >
-                    <WorkArea key={selected.id} workspace={selected} />
+                  <div data-tour="chat" className="flex-1 min-w-0">
+                    {openSubagentId ? (
+                      <SubagentChatView
+                        key={`${selected.id}:${openSubagentId}`}
+                        workspace={selected}
+                        toolId={openSubagentId}
+                      />
+                    ) : (
+                      <ChatView key={selected.id} workspace={selected} />
+                    )}
                   </div>
-                </>
+                  {rightPanelOpen && !workPaneDetached && (
+                    <>
+                      <Splitter
+                        axis="x"
+                        label="Resize work panel"
+                        onStart={() => (rightBase.current = useStore.getState().rightWidth)}
+                        // 분할바를 오른쪽으로 끌면(dx>0) 우측 패널이 좁아진다.
+                        // 채팅이 maxRight 미만으로 줄지 않도록 드래그 폭도 함께 제한한다.
+                        onDelta={(dx) => setRightWidth(Math.min(rightBase.current - dx, maxRight))}
+                      />
+                      <div
+                        data-tour="work-panel"
+                        style={{ width: effectiveRightWidth }}
+                        className="shrink-0 border-l border-[var(--border)] min-w-0"
+                      >
+                        <WorkArea key={selected.id} workspace={selected} />
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-            </>
+            </div>
           ) : archivedPreview ? (
             <div className="flex-1 min-w-0">
               <ArchivedChatView key={archivedPreview.id} workspace={archivedPreview} />

@@ -11,6 +11,10 @@ const { webContentsViews, browserWindows } = vi.hoisted(() => ({
       setWindowOpenHandler: ReturnType<typeof vi.fn>
       isDestroyed: () => boolean
       close: ReturnType<typeof vi.fn>
+      getURL: () => string
+      isLoading: () => boolean
+      loadURL: ReturnType<typeof vi.fn>
+      navigationHistory: { canGoBack: () => boolean; canGoForward: () => boolean }
     }
     setBounds: ReturnType<typeof vi.fn>
     setVisible: ReturnType<typeof vi.fn>
@@ -38,6 +42,16 @@ vi.mock('electron', () => {
     close = vi.fn(() => {
       this.destroyed = true
     })
+    // 이미 있는 뷰에 다시 ensure 하면 매니저가 지금 상태를 한 번 밀어 준다 — 그 경로가
+    // 이것들을 읽는다(그 동작이 "탭을 오가도 페이지가 안 되감긴다" 를 지탱한다).
+    url = ''
+    getURL = (): string => this.url
+    isLoading = (): boolean => false
+    loadURL = vi.fn((next: string) => {
+      this.url = next
+      return Promise.resolve()
+    })
+    navigationHistory = { canGoBack: (): boolean => false, canGoForward: (): boolean => false }
   }
 
   class FakeWebContentsView {
@@ -116,6 +130,17 @@ describe('HostedViewManager', () => {
     manager.ensure('tab-1', 'ws-1', 'dev')
 
     expect(webContentsViews).toHaveLength(1)
+  })
+
+  it('이미 있는 탭에 다시 ensure 해도 첫 주소를 또 로드하지 않는다 — 탭을 오갈 때마다 페이지가 처음으로 되감기던 자리다', async () => {
+    const manager = await makeManager()
+    manager.ensure('tab-1', 'ws-1', 'dev', 'http://localhost:5173/')
+    const wc = webContentsViews[0].webContents
+    expect(wc.loadURL).toHaveBeenCalledTimes(1)
+
+    // 렌더러가 탭을 떠났다 돌아오면 자리표시자가 다시 마운트되고 ensure 가 또 불린다.
+    manager.ensure('tab-1', 'ws-1', 'dev', 'http://localhost:5173/')
+    expect(wc.loadURL).toHaveBeenCalledTimes(1)
   })
 
   it('applyLayout 은 그 뷰의 주인 창이 아니면 무시한다 — 분리 창과 메인 창이 같은 워크스페이스를 그릴 수 있어서다', async () => {

@@ -367,8 +367,10 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
       'found, the error names which of the three things is missing: no run script configured,',
       'none of them running, or running but no address printed yet.',
       '',
-      'This is the same panel the user is looking at, so it exists only while this workspace is',
-      'the one open on screen. If it is not, the call fails and says so rather than guessing.'
+      'This opens the same preview the user sees, as a tab in this workspace. It does not',
+      'switch their screen to it — they may be reading the conversation. Opening works even',
+      'when this workspace is in the background; only capture_preview needs it on screen,',
+      'because a view that is not being drawn has no pixels to capture.'
     ].join(' '),
     inputSchema: {
       path: z

@@ -453,12 +453,17 @@ it was truncated.
 These three tools let an agent look at its own change instead of asking the user what
 they see: open the page, screenshot it, read what the console complained about.
 
-They drive the same Preview panel the user is looking at, not a private headless
-browser. That is deliberate — the user can see what the agent is looking at — and it has
-one consequence worth stating plainly: **the preview exists only for the workspace that
-is currently open on screen.** Wooi builds the work panel for the selected workspace, so
-an agent working in a background workspace gets a failure that says exactly that instead
-of a blank screenshot.
+They drive the same preview the user sees — a tab in the workspace, not a private
+headless browser. That is deliberate: the user can look at what the agent is looking at.
+
+Opening one does not switch the user's screen to it. They may be in the middle of
+reading the conversation, and a screen that changes under them costs more than the tab
+is worth; the tab appears in the strip and they go there when they want to.
+
+Opening works even when the workspace is in the background — Wooi owns the view, so it
+does not need anyone to be looking at it. **Capturing** still does: a view that is not
+being drawn has no pixels, and `capture_preview` says exactly that instead of returning
+a blank screenshot.
 
 There are no click or type tools. Writing to the page needs its own approval design, and
 reading is enough to close the check-your-own-work loop.

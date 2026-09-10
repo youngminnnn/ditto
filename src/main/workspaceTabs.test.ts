@@ -41,21 +41,21 @@ async function makeManager(dispatch = vi.fn()): Promise<{
 }
 
 describe('WorkspaceTabManager', () => {
-  it('탭이 없으면 대화 탭 하나를 만들어 영속하고, index 0 에서 활성으로 잡는다', async () => {
+  it('탭이 없으면 작업 탭 하나를 만들어 영속하고, index 0 에서 활성으로 잡는다', async () => {
     const { manager } = await makeManager()
 
     const state = manager.tabs(WS_ID)
 
     expect(state.tabs).toHaveLength(1)
-    expect(state.tabs[0]).toMatchObject({ id: 'chat', kind: 'chat' })
-    expect(state.activeId).toBe('chat')
+    expect(state.tabs[0]).toMatchObject({ id: 'work', kind: 'work' })
+    expect(state.activeId).toBe('work')
     const { getStore } = await import('./store')
     expect(getStore().getState().workspaces[0].tabs).toEqual(state.tabs)
   })
 
-  it('다른 탭을 대화 탭보다 앞에 두려 해도 정규화가 대화 탭을 index 0 으로 되돌린다', async () => {
+  it('다른 탭을 작업 탭보다 앞에 두려 해도 정규화가 작업 탭을 index 0 으로 되돌린다', async () => {
     const { manager } = await makeManager()
-    manager.tabs(WS_ID) // 대화 탭 생성
+    manager.tabs(WS_ID) // 작업 탭 생성
 
     const { getStore } = await import('./store')
     getStore().update((s: AppState) => {
@@ -63,22 +63,22 @@ describe('WorkspaceTabManager', () => {
       // 다른 경로(레거시 데이터 등)로 순서가 흐트러진 상태를 흉내낸다.
       ws.tabs = [
         { id: 'file-1', kind: 'file', target: 'a.ts' },
-        { id: 'chat', kind: 'chat' }
+        { id: 'work', kind: 'work' }
       ]
     })
 
     const state = manager.tabs(WS_ID)
-    expect(state.tabs.map((t) => t.id)).toEqual(['chat', 'file-1'])
+    expect(state.tabs.map((t) => t.id)).toEqual(['work', 'file-1'])
   })
 
   it('closeTab(chat) 은 조용히 무시된다', async () => {
     const { manager } = await makeManager()
     manager.tabs(WS_ID)
 
-    const state = manager.closeTab(WS_ID, 'chat')
+    const state = manager.closeTab(WS_ID, 'work')
 
-    expect(state.tabs.map((t) => t.id)).toEqual(['chat'])
-    expect(state.activeId).toBe('chat')
+    expect(state.tabs.map((t) => t.id)).toEqual(['work'])
+    expect(state.activeId).toBe('work')
   })
 
   it('탭을 닫으면 이웃이 활성이 된다', async () => {
@@ -86,17 +86,17 @@ describe('WorkspaceTabManager', () => {
     manager.tabs(WS_ID)
     const a = manager.openTab(WS_ID, { kind: 'file', target: 'a.ts' }).activeId
     const b = manager.openTab(WS_ID, { kind: 'file', target: 'b.ts' }).activeId
-    expect(manager.tabs(WS_ID).tabs.map((t) => t.id)).toEqual(['chat', a, b])
+    expect(manager.tabs(WS_ID).tabs.map((t) => t.id)).toEqual(['work', a, b])
 
     // 가운데(a)를 닫으면 오른쪽 이웃(b)이 활성이 된다.
     manager.selectTab(WS_ID, a)
     const state = manager.closeTab(WS_ID, a)
 
-    expect(state.tabs.map((t) => t.id)).toEqual(['chat', b])
+    expect(state.tabs.map((t) => t.id)).toEqual(['work', b])
     expect(state.activeId).toBe(b)
   })
 
-  it('activeTabId 가 사라진 탭을 가리키면 정규화가 대화 탭으로 되돌린다', async () => {
+  it('activeTabId 가 사라진 탭을 가리키면 정규화가 작업 탭으로 되돌린다', async () => {
     const { manager } = await makeManager()
     manager.tabs(WS_ID)
 
@@ -107,7 +107,7 @@ describe('WorkspaceTabManager', () => {
     })
 
     const state = manager.tabs(WS_ID)
-    expect(state.activeId).toBe('chat')
+    expect(state.activeId).toBe('work')
   })
 
   it('같은 kind+target 을 다시 열면 새 탭이 안 생기고 그것이 활성이 된다', async () => {
@@ -131,10 +131,10 @@ describe('WorkspaceTabManager', () => {
     const tabId = opened.activeId
 
     manager.closeTab(WS_ID, tabId)
-    expect(manager.tabs(WS_ID).tabs.map((t) => t.id)).toEqual(['chat'])
+    expect(manager.tabs(WS_ID).tabs.map((t) => t.id)).toEqual(['work'])
 
     const revived = manager.reopenTab(WS_ID)
-    expect(revived.tabs.map((t) => t.id)).toEqual(['chat', tabId])
+    expect(revived.tabs.map((t) => t.id)).toEqual(['work', tabId])
     expect(revived.activeId).toBe(tabId)
   })
 
@@ -167,7 +167,7 @@ describe('WorkspaceTabManager', () => {
     const { getStore } = await import('./store')
     const persisted = getStore().getState().workspaces[0].tabs
     expect(persisted).toHaveLength(2)
-    expect(persisted?.[0].kind).toBe('chat')
+    expect(persisted?.[0].kind).toBe('work')
     expect(persisted?.[1].kind).toBe('dev')
   })
 

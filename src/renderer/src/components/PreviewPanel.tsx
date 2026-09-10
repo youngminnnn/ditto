@@ -21,14 +21,6 @@ import { useSuppressViewsOver } from '../lib/viewSuppress'
 import type { Workspace } from '@shared/types'
 
 /**
- * 이 단계의 탭 id. 아직 탭 모델이 없어서 "워크스페이스당 dev 뷰 하나" 라는 현재 전제를 그대로
- * 합성한다 — 탭 목록이 생기면 진짜 탭 id 가 이 자리에 온다.
- */
-function devTabId(workspaceId: string): string {
-  return `dev:${workspaceId}`
-}
-
-/**
  * Preview 탭 — 이 워크트리가 띄운 dev 서버를 앱 안에서 본다.
  *
  * 범용 브라우저가 아니다. 여러 워크스페이스의 dev 서버를 오가며 "지금 이 브랜치의 화면" 을
@@ -40,17 +32,24 @@ function devTabId(workspaceId: string): string {
  */
 export default function PreviewPanel({
   workspace,
+  tabId,
   navTarget,
   active
 }: {
   workspace: Workspace
+  /**
+   * 이 프리뷰를 담은 탭의 id. **main 이 발급한 진짜 id 여야 한다.**
+   *
+   * 뷰의 상태 방송이 이 id 로 오기 때문이다 — 렌더러가 자기 규칙으로 id 를 지어내면, 에이전트가
+   * 만든 탭의 방송을 자기 것으로 알아보지 못해 주소창이 빈 채로 남는다.
+   */
+  tabId: string
   /** WorkPanel 이 넘기는 이동 명령("Open in Preview"). seq 가 바뀔 때만 이동한다. */
   navTarget: { url: string; seq: number } | null
   /** 지금 이 탭이 보이는지. 감춰져 있는 동안에는 캡처하지 않는다. */
   active: boolean
 }): React.JSX.Element {
   const pushToast = useStore((s) => s.pushToast)
-  const tabId = devTabId(workspace.id)
 
   // 화면에 보이는 주소(게스트가 실제로 있는 곳). 편집 중에는 draft 가 이걸 가린다.
   const [url, setUrl] = useState(workspace.previewUrl ?? '')
@@ -62,19 +61,22 @@ export default function PreviewPanel({
   const [issueCount, setIssueCount] = useState({ errors: 0, warnings: 0 })
   const [issues, setIssues] = useState<PreviewIssue[] | null>(null)
 
-  const { ref, state, failure, attached } = useHostedView({
-    tabId,
-    workspaceId: workspace.id,
-    kind: 'dev'
-  })
-  const ready = attached
-  const loading = state?.loading ?? false
-  const nav = { back: state?.canGoBack ?? false, forward: state?.canGoForward ?? false }
-
   /** 첫 로드 주소. mount 이후 prop 이 바뀌어도 다시 로드하지 않도록 처음 값을 고정한다. */
   const initialUrl = useRef(navTarget?.url ?? workspace.previewUrl ?? '')
   /** 이미 처리한 이동 명령의 seq. 같은 명령을 두 번 따라가지 않는다. */
   const handledSeq = useRef<number | null>(null)
+
+  const { ref, state, failure, attached } = useHostedView({
+    tabId,
+    workspaceId: workspace.id,
+    kind: 'dev',
+    // 뷰를 처음 만들 때만 쓰인다. 여기서 "붙었으니 로드하자" 를 판단하면 탭을 오갈 때마다
+    // 그 판단이 다시 일어나 보고 있던 페이지가 처음으로 되감긴다([[lib/hostedView]]).
+    initialUrl: initialUrl.current || undefined
+  })
+  const ready = attached
+  const loading = state?.loading ?? false
+  const nav = { back: state?.canGoBack ?? false, forward: state?.canGoForward ?? false }
 
   /** 주소를 워크스페이스에 적어 둔다 — 다음에 이 탭을 열면 여기서 시작한다. */
   const remember = (next: string): void => {
@@ -102,14 +104,6 @@ export default function PreviewPanel({
     // 그대로여도 매 렌더 다시 돈다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.url])
-
-  // 뷰가 준비되면 첫 주소를 밀어 넣는다. 갓 만든 뷰는 아직 아무 데도 가 있지 않다.
-  const loadedInitial = useRef(false)
-  useEffect(() => {
-    if (!attached || loadedInitial.current || !initialUrl.current) return
-    loadedInitial.current = true
-    void window.api.views.load(tabId, initialUrl.current)
-  }, [attached, tabId])
 
   // "Open in Preview" 로 들어온 이동 명령.
   useEffect(() => {

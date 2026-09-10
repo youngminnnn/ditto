@@ -45,8 +45,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** fixture 의 workspace id 로 고정한 tabId. devTabId() 와 같은 규칙(`dev:<workspaceId>`)이다. */
-const TAB_ID = 'dev:workspace-1'
+/**
+ * 탭 id 는 main 이 발급한다 — 렌더러가 자기 규칙으로 지어내면 에이전트가 만든 탭의 방송을
+ * 자기 것으로 못 알아본다(주소창이 빈 채로 남는다). 테스트도 그 계약대로 밖에서 넣는다.
+ */
+const TAB_ID = 'tab-dev-1'
 
 function addressInput(): HTMLInputElement {
   return screen.getByLabelText('Preview address') as HTMLInputElement
@@ -66,7 +69,7 @@ async function waitReady(): Promise<void> {
 
 describe('PreviewPanel', () => {
   it('주소창이 뷰의 실제 위치를 따라간다', () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
 
     act(() => {
       fakeApi.dispatch('views.onEvent', {
@@ -84,7 +87,7 @@ describe('PreviewPanel', () => {
   })
 
   it('주소를 제출하면 그 탭으로 load 한다 — 포트만 쳐도 normalizeInputUrl 이 채운다', async () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
     await waitReady()
 
     fireEvent.change(addressInput(), { target: { value: '3000' } })
@@ -94,7 +97,7 @@ describe('PreviewPanel', () => {
   })
 
   it('앞/뒤/새로고침 버튼이 그 탭의 명령을 부른다', async () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
     await waitReady()
 
     // canGoBack 이 거짓인 동안은 Back 이 눌리지 않는다.
@@ -123,7 +126,7 @@ describe('PreviewPanel', () => {
   })
 
   it('로딩 중에는 새로고침이 정지로 바뀐다', async () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
     await waitReady()
 
     act(() => {
@@ -145,7 +148,7 @@ describe('PreviewPanel', () => {
   })
 
   it('실패하면 안내가 뜨고 다시 시도가 reload 를 부른다', () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
 
     act(() => {
       fakeApi.dispatch('views.onEvent', {
@@ -165,7 +168,7 @@ describe('PreviewPanel', () => {
   })
 
   it('서브리소스 실패는 화면을 덮지 않는다 — 이미지 404 하나로 전체를 에러로 덮던 회귀를 막는다', () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
 
     act(() => {
       fakeApi.dispatch('views.onEvent', {
@@ -181,7 +184,7 @@ describe('PreviewPanel', () => {
   })
 
   it('다른 탭의 이벤트는 무시한다', () => {
-    render(<PreviewPanel workspace={workspace()} navTarget={null} active />)
+    render(<PreviewPanel workspace={workspace()} tabId={TAB_ID} navTarget={null} active />)
 
     act(() => {
       fakeApi.dispatch('views.onEvent', {
@@ -200,7 +203,7 @@ describe('PreviewPanel', () => {
 
   it('콘솔 에러 배지 — 개수가 뜨고 누르면 목록을 당겨 온다', () => {
     const ws = workspace()
-    render(<PreviewPanel workspace={ws} navTarget={null} active />)
+    render(<PreviewPanel workspace={ws} tabId={TAB_ID} navTarget={null} active />)
 
     act(() => {
       fakeApi.dispatch('preview.onIssues', {
@@ -221,7 +224,7 @@ describe('PreviewPanel', () => {
 
   it('다른 탭의 이슈 방송은 무시한다 — 같은 워크스페이스라도 탭이 다르면 이 배지를 건드리지 않는다', () => {
     const ws = workspace()
-    render(<PreviewPanel workspace={ws} navTarget={null} active />)
+    render(<PreviewPanel workspace={ws} tabId={TAB_ID} navTarget={null} active />)
 
     act(() => {
       fakeApi.dispatch('preview.onIssues', {

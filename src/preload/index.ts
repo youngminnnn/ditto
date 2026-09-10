@@ -372,8 +372,8 @@ const api: WooiApi = {
   onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb),
   onOpenRepoSettings: (cb) => subscribe(IPC.evtOpenRepoSettings, cb),
   views: {
-    ensure: (tabId, workspaceId, kind) =>
-      ipcRenderer.invoke(IPC.viewEnsure, tabId, workspaceId, kind),
+    ensure: (tabId, workspaceId, kind, initialUrl) =>
+      ipcRenderer.invoke(IPC.viewEnsure, tabId, workspaceId, kind, initialUrl),
     attach: (tabId) => ipcRenderer.invoke(IPC.viewAttach, tabId),
     detach: (tabId) => ipcRenderer.invoke(IPC.viewDetach, tabId),
     load: (tabId, url) => ipcRenderer.invoke(IPC.viewLoad, tabId, url),

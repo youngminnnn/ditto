@@ -101,6 +101,13 @@ export function useHostedView(opts: {
   kind: HostedViewKind
   /** 거짓이면 뷰를 숨긴다 — 빈 화면·실패 화면을 그 자리에 그리는 동안. */
   enabled?: boolean
+  /**
+   * 뷰를 **처음 만들 때만** 갈 주소. 이미 있는 뷰에는 아무 영향이 없다.
+   *
+   * 판단을 main 에 맡기는 이유가 있다. 렌더러가 "붙었으니 첫 주소를 넣자" 고 하면 탭을
+   * 오갈 때마다 그 판단이 다시 일어나 보고 있던 페이지가 처음으로 되감긴다.
+   */
+  initialUrl?: string
 }): {
   ref: React.RefObject<HTMLDivElement | null>
   state: HostedViewState | null
@@ -115,11 +122,13 @@ export function useHostedView(opts: {
    */
   attached: boolean
 } {
-  const { tabId, workspaceId, kind, enabled = true } = opts
+  const { tabId, workspaceId, kind, enabled = true, initialUrl } = opts
   const ref = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<HostedViewState | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [attached, setAttached] = useState(false)
+  // 마운트 시점의 값으로 고정한다 — deps 에 넣으면 주소가 바뀔 때마다 뷰를 다시 붙인다.
+  const initialUrlRef = useRef(initialUrl)
 
   // main 이 접어 보내는 상태 스냅샷. 이벤트 여섯 개를 각각 구독하던 것을 하나로 줄인 자리다.
   useEffect(() => {
@@ -148,7 +157,7 @@ export function useHostedView(opts: {
     if (!tabId || !el) return
 
     let cancelled = false
-    void window.api.views.ensure(tabId, workspaceId, kind).then(async () => {
+    void window.api.views.ensure(tabId, workspaceId, kind, initialUrlRef.current).then(async () => {
       if (cancelled) return
       // attach 는 ensure 뒤에 와야 한다 — 아직 없는 뷰는 붙일 수 없다.
       await window.api.views.attach(tabId)

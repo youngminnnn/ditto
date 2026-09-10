@@ -141,6 +141,11 @@ export function previewGuestFor(workspaceId: string): WebContents | null {
   return views.viewForWorkspace(workspaceId, 'dev')
 }
 
+/** 그 프리뷰를 담은 탭의 id. 콘솔·네트워크 문제가 탭 단위로 모이므로 조회에 이것이 필요하다. */
+export function previewTabFor(workspaceId: string): string | null {
+  return views.tabIdForWorkspace(workspaceId, 'dev')
+}
+
 /**
  * Preview 탭을 열라고 모든 창에 방송한다. 사람이 누르는 "Open in Preview" 와 같은 신호다.
  *
@@ -148,8 +153,8 @@ export function previewGuestFor(workspaceId: string): WebContents | null {
  * 때문이다([[agent/tools/preview]]). 렌더러와 메인이 같은 게스트에 각자 loadURL 을 걸면 서로를
  * ERR_ABORTED 로 끊어, "열었는데 왜 실패했는지" 를 아무도 정확히 말할 수 없게 된다.
  */
-export function requestPreviewOpen(workspaceId: string, url: string): void {
-  dispatchToRenderer(IPC.evtPreviewOpen, { workspaceId, url })
+export function requestPreviewOpen(workspaceId: string, url: string, activate: boolean): void {
+  dispatchToRenderer(IPC.evtPreviewOpen, { workspaceId, url, activate })
 }
 
 /**

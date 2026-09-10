@@ -1,5 +1,5 @@
 import type { WebContents } from 'electron'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_TOOL_IMAGE_KEY } from '@shared/agentToolContent'
 import type { PreviewIssue } from '@shared/previewIssues'
 import type { Repo, Workspace } from '@shared/types'
@@ -21,20 +21,32 @@ const state = vi.hoisted(() => ({
 
 const captureForAgent = vi.fn()
 const previewGuestFor = vi.fn()
+// 수집기가 탭 단위로 키를 잡으므로, 워크스페이스만 아는 도구는 이 변환을 거쳐 조회한다.
+const previewTabFor = vi.fn((..._args: unknown[]) => 'tab-dev' as string | null)
 const previewIssuesList = vi.fn()
-const requestPreviewOpen = vi.fn()
+const openTab = vi.fn((_workspaceId: string, opts: { target?: string }) => ({
+  workspaceId: 'ws-1',
+  tabs: [
+    { id: 'work', kind: 'work' },
+    { id: 'tab-dev', kind: 'dev', target: opts.target }
+  ],
+  activeId: 'work'
+}))
+const ensureView = vi.fn()
 
 vi.mock('../../store', () => ({ getStore: () => ({ getState: () => state }) }))
 vi.mock('../../preview', () => ({
   captureForAgent: (...args: unknown[]) => captureForAgent(...args),
   previewGuestFor: (...args: unknown[]) => previewGuestFor(...args),
-  previewIssues: () => ({ list: previewIssuesList }),
-  requestPreviewOpen: (...args: unknown[]) => requestPreviewOpen(...args)
+  previewTabFor: (...args: unknown[]) => previewTabFor(...args),
+  previewIssues: () => ({ list: previewIssuesList })
 }))
 
 const getOutput = vi.fn()
 const deps = {
-  scripts: { getOutput, getStatus: vi.fn() }
+  scripts: { getOutput, getStatus: vi.fn() },
+  tabs: { openTab },
+  views: { ensure: ensureView }
 } as unknown as AgentToolDeps
 
 const repo: Partial<Repo> = {
@@ -117,7 +129,14 @@ describe('open_preview', () => {
 
     const result = await call('openPreview')
 
-    expect(requestPreviewOpen).toHaveBeenCalledWith('ws-1', '')
+    // `activate: false` 가 계약이다 — 에이전트가 연 탭은 사용자가 읽던 화면을 갈지 않는다.
+    expect(openTab).toHaveBeenCalledWith('ws-1', {
+      kind: 'dev',
+      target: 'http://localhost:5173',
+      activate: false
+    })
+    // 뷰도 여기서 만든다 — 렌더러가 그 탭을 그리기를 기다리지 않는다(백그라운드에서도 열린다).
+    expect(ensureView).toHaveBeenCalledWith('tab-dev', 'ws-1', 'dev')
     expect(guest.loadURL).toHaveBeenCalledWith('http://localhost:5173/')
     expect(result.url).toBe('http://localhost:5173/')
   })
@@ -168,20 +187,20 @@ describe('open_preview', () => {
     expect(guest.loadURL).not.toHaveBeenCalled()
   })
 
-  describe('Preview 패널이 안 뜨면', () => {
-    beforeEach(() => vi.useFakeTimers())
-    afterEach(() => vi.useRealTimers())
+  // 예전에는 "탭을 열어라" 를 방송하고 렌더러가 게스트를 붙일 때까지 10 초를 폴링했다. 그
+  // 구조에서는 프리뷰가 **화면에 열린 워크스페이스에만** 존재해서, 에이전트가 백그라운드
+  // 워크스페이스에서 부르면 기다리다 실패하는 것이 정상 동작이었다. 뷰의 주인이 main 이 되면서
+  // 그 전제가 사라졌다 — 이제 탭도 뷰도 여기서 직접 만들므로 기다릴 것이 없다.
+  it('화면에 열려 있지 않아도 연다 — 뷰를 만드는 쪽이 main 이라 기다릴 것이 없다', async () => {
+    running('dev-1')
+    getOutput.mockReturnValue('  ➜  Local:   http://localhost:5173/\n')
+    const guest = makeGuest()
+    previewGuestFor.mockReturnValue(guest)
 
-    it('10 초를 기다리다 포기하고 던진다', async () => {
-      running('dev-1')
-      getOutput.mockReturnValue('  ➜  Local:   http://localhost:5173/\n')
-      previewGuestFor.mockReturnValue(null)
+    const result = await call('openPreview')
 
-      const pending = call('openPreview')
-      const assertion = expect(pending).rejects.toThrow(/open on screen/)
-      await vi.advanceTimersByTimeAsync(10_000)
-      await assertion
-    })
+    expect(result.url).toBe('http://localhost:5173/')
+    expect(ensureView).toHaveBeenCalledWith('tab-dev', 'ws-1', 'dev')
   })
 
   it('loadURL 이 ERR_ABORTED 로 실패하면 한 번 더 시도한다', async () => {

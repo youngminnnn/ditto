@@ -1613,8 +1613,10 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ── 얹은 웹 뷰(dev 프리뷰·웹 탭) ────────────────────────────────────────
 
-  handle(IPC.viewEnsure, (_e, tabId: string, workspaceId: string, kind: HostedViewKind) =>
-    ctx.views.ensure(tabId, workspaceId, kind)
+  handle(
+    IPC.viewEnsure,
+    (_e, tabId: string, workspaceId: string, kind: HostedViewKind, initialUrl?: string) =>
+      ctx.views.ensure(tabId, workspaceId, kind, initialUrl)
   )
   // 어느 창에 붙일지는 **보낸 쪽에서 읽는다.** 렌더러가 창 id 를 골라 보내면, 다른 창의
   // 레이아웃에 뷰를 얹어 달라는 요청이 성립한다.
@@ -1659,7 +1661,8 @@ export function registerIpc(ctx: IpcContext): void {
   // 다른 창에 떠 있을 수 있어(둘 다 분리 가능) renderer 끼리 직접 이야기할 방법이 없다.
   handle(IPC.previewOpen, (_e, workspaceId: string, url: string) => {
     rememberPreviewUrl(workspaceId, url)
-    dispatch(IPC.evtPreviewOpen, { workspaceId, url })
+    // 사람이 누른 것이므로 그 탭으로 옮긴다 — 누른 이유가 곧 보려는 것이다.
+    dispatch(IPC.evtPreviewOpen, { workspaceId, url, activate: true })
   })
 
   // 캡처는 main 이 한다(renderer 에는 webContents 가 없다). 찍은 이미지는 호출자에게 돌려주지

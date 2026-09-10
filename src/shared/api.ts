@@ -703,10 +703,13 @@ export interface WooiApi {
   tabs: {
     /** 탭 구성을 읽는다. 탭이 하나도 없으면 메인이 대화 탭 하나로 채워 돌려준다. */
     get(workspaceId: string): Promise<WorkspaceTabsState>
-    /** 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 활성화한다. */
+    /**
+     * 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 쓴다.
+     * `activate` 는 기본이 참 — 거짓이면 탭만 만들고 화면은 그대로 둔다(에이전트가 여는 경우).
+     */
     open(
       workspaceId: string,
-      opts: { kind: WorkspaceTabKind; target?: string; title?: string }
+      opts: { kind: WorkspaceTabKind; target?: string; title?: string; activate?: boolean }
     ): Promise<WorkspaceTabsState>
     /** 탭을 닫는다. 대화 탭(chat)은 조용히 무시된다. */
     close(workspaceId: string, tabId: string): Promise<WorkspaceTabsState>
@@ -913,7 +916,17 @@ export interface WooiApi {
    * 흘린다 — 네이티브 뷰는 CSS 레이아웃을 모르기 때문이다.
    */
   views: {
-    ensure(tabId: string, workspaceId: string, kind: HostedViewKind): Promise<void>
+    /**
+     * 탭에 뷰를 붙여 준다. `initialUrl` 은 **처음 만들 때만** 쓰인다 — 이미 있는 뷰에는 아무
+     * 영향이 없다. 그 판단을 main 에 둔 이유는 렌더러가 하면 탭을 오갈 때마다 다시 로드해
+     * 보고 있던 페이지를 처음으로 되감기 때문이다.
+     */
+    ensure(
+      tabId: string,
+      workspaceId: string,
+      kind: HostedViewKind,
+      initialUrl?: string
+    ): Promise<void>
     /** 이 창에 붙인다. 어느 창인지는 main 이 보낸 쪽에서 읽는다(렌더러가 정하지 않는다). */
     attach(tabId: string): Promise<void>
     detach(tabId: string): Promise<void>

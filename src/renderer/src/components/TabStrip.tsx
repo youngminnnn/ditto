@@ -35,20 +35,27 @@ export default function TabStrip({
 }): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <div
-      role="tablist"
-      aria-label="Workspace tabs"
-      className="h-9 shrink-0 flex items-end gap-px px-2 bg-[var(--bg-2)] border-b border-[var(--border)] overflow-x-auto no-scrollbar"
-    >
-      {tabs.map((tab) => (
-        <TabButton
-          key={tab.id}
-          tab={tab}
-          active={tab.id === activeId}
-          onSelect={() => onSelect(tab.id)}
-          onClose={() => onClose(tab.id)}
-        />
-      ))}
+    <div className="h-9 shrink-0 flex items-end px-2 bg-[var(--bg-2)] border-b border-[var(--border)]">
+      {/*
+        탭만 스크롤한다. `+` 를 이 안에 두면 `overflow-x-auto` 가 만드는 잘림 상자에 갇혀
+        드롭다운이 통째로 잘린다 — 버튼은 눌리는데 메뉴가 안 보이는 증상이 된다. 작업 패널의
+        탭 줄이 분리 버튼을 스크롤 바깥에 두는 것과 같은 이유다.
+      */}
+      <div
+        role="tablist"
+        aria-label="Workspace tabs"
+        className="flex-1 min-w-0 flex items-end gap-px overflow-x-auto no-scrollbar"
+      >
+        {tabs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeId}
+            onSelect={() => onSelect(tab.id)}
+            onClose={() => onClose(tab.id)}
+          />
+        ))}
+      </div>
       <div className="relative shrink-0 mb-[3px]">
         <button
           onClick={() => setMenuOpen((v) => !v)}

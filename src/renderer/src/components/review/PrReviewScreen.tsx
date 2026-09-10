@@ -109,8 +109,8 @@ export default function PrReviewScreen({ reviewId }: { reviewId: string }): Reac
    * 전역 핸들러의 긴 분기를 거칠 이유가 없다.
    *
    * 두 벌을 받는다: `n`/`p` 는 아무 수식키도 타지 않아 OS·메뉴·창 관리 앱이 가로챌 여지가
-   * 없고(diff 를 훑는 손이 홈 포지션에 있기도 하다), ⌥⌘↑/↓ 는 파일 뷰어의 ⌥⌘←/→ 와 같은
-   * "열려 있는 화면 안에서 이동" 어휘를 잇는다.
+   * 없고(diff 를 훑는 손이 홈 포지션에 있기도 하다), ⌥⌘↑/↓ 는 워크스페이스 순서 이동
+   * (⌥⌘↑/↓, App.tsx)과 같은 "열려 있는 화면 안에서 이동" 어휘를 잇는다.
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {

@@ -77,7 +77,7 @@ export default function Hint({
   )
   useEffect(
     () =>
-      // ⌘↑/⌘↓ 를 실제로 쓰면 App.tsx 의 키 핸들러가 finishSwitchHint() 로 SWITCH_HINT_DONE 을
+      // ⌥⌘↑/⌥⌘↓ 를 실제로 쓰면 App.tsx 의 키 핸들러가 finishSwitchHint() 로 SWITCH_HINT_DONE 을
       // 직접 세운다(이 컴포넌트를 거치지 않는 경로) — 그 변화를 놓치지 않도록 같은 이벤트를 듣는다.
       onSwitchHintChange(() => {
         setMouseSwitchCount(switchClickCount())

@@ -13,10 +13,11 @@ import type { FileContent } from '@shared/types'
 
 /**
  * 우측 패널의 All files 탭. worktree 파일을 lazy 트리로 탐색하고, 파일을 고르면
- * 뷰어로 본문을 표시한다(오버레이 뷰어와 같은 규칙으로 그 자리에서 고칠 수도 있다).
+ * 뷰어로 본문을 표시한다(큰 뷰어와 같은 규칙으로 그 자리에서 고칠 수도 있다 — 둘 다
+ * `useFileEditor` 하나를 공유한다).
  *
  * 여기는 폭이 좁아 훑어보기용이다 — 코드를 실제로 읽어야 하면 확대 버튼이나 더블클릭으로
- * 대화창 위의 큰 뷰어([[FileViewerOverlay]])로 넘긴다.
+ * 파일 탭([[components/tabs/FileTab]])을 연다.
  */
 export default function FileBrowser({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const [openFile, setOpenFile] = useState<string | null>(null)
@@ -39,12 +40,11 @@ export default function FileBrowser({ workspaceId }: { workspaceId: string }): R
   })
 
   /**
-   * 큰 뷰어로 넘기기. 분리한 패널 창([[paneWindow]])에서는 제공하지 않는다 —
-   * 그 창에는 뷰어가 없고, 메인 창으로 넘기면 보조 모니터에서 누른 파일이 반대편 화면에
-   * 뜨게 된다. 패널을 떼어 낸 이유가 그 반대라서, 여기서는 버튼 자체를 내린다
-   * (분리한 창은 크게 늘릴 수 있어 인라인 뷰어로도 읽을 만하다).
+   * 파일 탭으로 넘기기. 분리한 패널 창([[paneWindow]])에서는 하지 않는다 — 그 창에는 탭
+   * 스트립이 없고, 메인 창에 열면 보조 모니터에서 누른 파일이 반대편 화면에 뜬다. 패널을
+   * 떼어 낸 이유가 그 반대다(분리한 창은 크게 늘릴 수 있어 인라인 뷰어로도 읽을 만하다).
    */
-  const openViewer = isPaneWindow ? undefined : (path: string) => openFileViewer(workspaceId, path)
+  const openTab = isPaneWindow ? undefined : (path: string) => openFileViewer(workspaceId, path)
 
   /**
    * 목록으로 돌아간다. 고치던 것이 있으면 먼저 확인을 받는다 — 여기는 오버레이와 달리
@@ -101,9 +101,9 @@ export default function FileBrowser({ workspaceId }: { workspaceId: string }): R
           <span className="flex-1 truncate text-xs font-mono text-neutral-300" title={openFile}>
             {openFile}
           </span>
-          {openViewer && (
+          {openTab && (
             <button
-              onClick={() => openViewer(openFile)}
+              onClick={() => openTab(openFile)}
               title="Open in the full-size file viewer (⇧⌘O)"
               className={iconBtn}
             >
@@ -132,8 +132,11 @@ export default function FileBrowser({ workspaceId }: { workspaceId: string }): R
           key={treeKey}
           workspaceId={workspaceId}
           selected={openFile}
-          onSelect={selectFile}
-          onOpen={openViewer}
+          // 메인 창에서는 **누르면 곧장 탭으로 연다.** 패널 안에서 한 번 열고 다시 "큰 뷰어로"
+          // 를 누르는 두 걸음은, 탭이 생긴 뒤로는 첫 걸음이 아무것도 해 주지 않는다 — 같은
+          // 파일을 두 곳에서 볼 수 있게 될 뿐이다. 분리한 창에는 탭이 없으니 그대로 둔다.
+          onSelect={openTab ?? selectFile}
+          onOpen={openTab}
         />
       </div>
     </div>

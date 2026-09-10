@@ -54,7 +54,7 @@ export const carryMissingShownFlag = (repoId: string, path: string): string =>
   `carryMissingShown.${repoId}.${path}`
 
 /**
- * ⌘↑/⌘↓ 힌트가 제 역할을 끝냈는지. 사용자가 직접 닫았거나, 실제로 단축키를 써서
+ * ⌥⌘↑/⌥⌘↓ 힌트가 제 역할을 끝냈는지. 사용자가 직접 닫았거나, 실제로 단축키를 써서
  * 이미 알고 있음이 증명된 경우 true — 어느 쪽이든 다시는 띄우지 않는다.
  */
 export const SWITCH_HINT_DONE = 'switchHintDone'
@@ -131,7 +131,7 @@ export function noteMouseSwitch(): void {
 }
 
 /**
- * 힌트를 영구히 끈다. 사용자가 X 로 닫았을 때, 그리고 ⌘↑/⌘↓ 를 실제로 썼을 때 모두
+ * 힌트를 영구히 끈다. 사용자가 X 로 닫았을 때, 그리고 ⌥⌘↑/⌥⌘↓ 를 실제로 썼을 때 모두
  * 호출한다 — 후자가 핵심이다. 단축키를 쓰는 순간 힌트는 목적을 달성했으므로 조용히 사라진다.
  */
 export function finishSwitchHint(): void {
@@ -157,7 +157,7 @@ export function setUiNumber(name: string, value: number): void {
 /**
  * 점진적 힌트 레지스트리(`lib/hints.ts`)가 이 힌트 id 를 이미 봤는지 기억하는 키.
  *
- * 사이드바에 하드코딩돼 있던 두 힌트(⌘K, ⌘↑/⌘↓)를 레지스트리로 옮기면서도, 이미 그 둘을 닫아 본
+ * 사이드바에 하드코딩돼 있던 두 힌트(⌘K, ⌥⌘↑/⌥⌘↓)를 레지스트리로 옮기면서도, 이미 그 둘을 닫아 본
  * 사용자에게 다시 뜨면 안 되므로 **그 둘만 예전 키를 그대로 돌려준다**
  * (`QUICK_SWITCH_HINT_DISMISSED`, `SWITCH_HINT_DONE`). 나머지 힌트는 사이드바 밖에서 새로
  * 시작하는 것들이라 이어받을 예전 키가 없고, `hintSeen.<id>` 로 새로 만든다.

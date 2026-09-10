@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { CURRENT_TERMS_VERSION, hasAnyAgent, orderVisibleWorkspaces } from '@shared/types'
-import type { AgentBackendId } from '@shared/types'
+import type { AgentBackendId, MenuCommand } from '@shared/types'
 import { DEFAULT_SIDEBAR_WIDTH, useStore } from './store'
 import { nextPermissionMode } from './lib/permission'
 import { OPEN_REPO_SETTINGS_EVENT, openRepoSettings } from './lib/repoSettings'
@@ -12,6 +12,7 @@ import { applyTheme } from './lib/theme'
 import { finishSwitchHint } from './lib/uiFlags'
 import { OPEN_SETTINGS_EVENT, openSettings } from './lib/settingsNavigation'
 import {
+  FOCUS_ADDRESS_BAR_EVENT,
   FOCUS_COMPOSER_EVENT,
   INSERT_INTO_COMPOSER_EVENT,
   RUN_WOOI_COMMAND_EVENT,
@@ -30,7 +31,6 @@ import { NoticeBanner } from './components/NoticeBanner'
 import Sidebar from './components/Sidebar'
 import PrReviewScreen from './components/review/PrReviewScreen'
 import FanoutCompareScreen from './components/fanout/FanoutCompareScreen'
-import StackScreen from './components/stack/StackScreen'
 import SplitPanes from './components/SplitPanes'
 import { useFeatureNudge } from './lib/featureNudge'
 import PrReviewStartModal from './components/review/PrReviewStartModal'
@@ -38,10 +38,15 @@ import ChatView from './components/ChatView'
 import SubagentChatView from './components/SubagentChatView'
 import { nextSubagent, subagentCycle } from './lib/subagentRows'
 import ArchivedChatView from './components/ArchivedChatView'
-import FileViewerOverlay from './components/FileViewerOverlay'
 import FileQuickOpen from './components/FileQuickOpen'
 import WorkArea from './components/WorkArea'
 import Splitter from './components/Splitter'
+import TabStrip from './components/TabStrip'
+import BrowserTab from './components/tabs/BrowserTab'
+import ArtifactTab from './components/tabs/ArtifactTab'
+import FileTab from './components/tabs/FileTab'
+import StackTab from './components/tabs/StackTab'
+import { useWorkspaceTabs } from './lib/workspaceTabs'
 import EmptyState from './components/EmptyState'
 import Overview from './components/Overview'
 import SettingsModal from './components/SettingsModal'
@@ -69,8 +74,14 @@ import type { ExportConversationDetail } from './components/ExportMenu'
 /**
  * 대화 입력창이 지금 화면에 닿아 있는가.
  *
- * 리뷰 화면·팬아웃 비교·파일 뷰어는 대화를 통째로 덮는다. 그 위에서 친 글자를 뒤쪽 textarea 에
- * 몰래 넣으면 사용자는 자기 글이 어디로 갔는지 알 수 없다 — ⌘L 이 같은 이유로 같은 판정을 쓴다.
+ * 리뷰 화면·팬아웃 비교는 대화를 통째로 덮는다. 그 위에서 친 글자를 뒤쪽 textarea 에 몰래
+ * 넣으면 사용자는 자기 글이 어디로 갔는지 알 수 없다 — ⌘L 이 같은 이유로 같은 판정을 쓴다.
+ *
+ * 파일 탭은(dev·web·스택 탭과 마찬가지로) 여기서 따로 가리지 않는다 — 대화를 덮는 오버레이가
+ * 아니라 그 자리를 통째로 갈아 끼우는 탭이라 ChatView 자체가 마운트되지 않고, 대신 자기
+ * 컴포저를 들고 있다([[components/tabs/FileTab]], [[components/tabs/StackTab]]). 전역 타이핑
+ * 리다이렉트·⌘L 이 그 컴포저로 가도 안전한 이유도 같다 — 워크스페이스가 같으면 어느 탭의
+ * 컴포저든 같은 초안을 공유한다.
  *
  * 열린 모달(`overlayOpen`)은 보지 않는다. 부르는 쪽 둘 다 이미 그 답을 알고 있다 — 전역
  * keydown 은 모달이 떠 있으면 위에서 return 하고, ⌘K 팔레트는 항목을 고르는 즉시 닫힌다.
@@ -79,16 +90,40 @@ import type { ExportConversationDetail } from './components/ExportMenu'
 function chatComposerReachable(
   st: Parameters<typeof paneState>[0] & {
     activeFanoutGroupId: string | null
-    activeStackWorkspaceId: string | null
-  },
-  fileViewerVisible: boolean
+  }
 ): boolean {
-  if (fileViewerVisible) return false
-  if (st.activeFanoutGroupId || st.activeStackWorkspaceId) return false
+  if (st.activeFanoutGroupId) return false
   // 나란히 두 칸을 띄웠으면 "닿는" 입력창은 포커스된 칸의 것 하나뿐이다. 리뷰 칸을 보는 중에
   // 뒤쪽 대화의 입력창을 채우면, 분할이 아닐 때와 똑같이 글이 어디로 갔는지 알 수 없게 된다.
   return focusedPane(paneState(st))?.kind === 'workspace'
 }
+
+/**
+ * 탭·페이지 명령(`src/main/appMenu.ts` 의 Tab 메뉴). 메뉴 accelerator 로 오므로 렌더러의 문맥
+ * 가드(모달이 떠 있으면 양보한다)를 건너뛴다 — 그래서 `onMenuCommand` 구독 한 곳에서, 모달이
+ * 열려 있으면 이 집합에 속한 명령만 걸러 무시한다. 예를 들어 설정 모달 뒤에서 ⌘W 를 눌렀다고
+ * 뒤에 가려진 탭이 닫히면 안 된다.
+ */
+const TAB_MENU_COMMANDS = new Set<MenuCommand>([
+  'new-tab',
+  'close-tab',
+  'reopen-closed-tab',
+  'next-tab',
+  'previous-tab',
+  'select-tab-1',
+  'select-tab-2',
+  'select-tab-3',
+  'select-tab-4',
+  'select-tab-5',
+  'select-tab-6',
+  'select-tab-7',
+  'select-tab-8',
+  'select-tab-9',
+  'reload-tab',
+  'page-back',
+  'page-forward',
+  'focus-address-bar'
+])
 
 export default function App(): React.JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -110,6 +145,46 @@ export default function App(): React.JSX.Element {
   )
   // 작업 패널을 별도 창으로 떼어 뒀으면 여기서는 그리지 않는다 — 분리는 복제가 아니라 이동이다.
   const workPaneDetached = useStore((s) => s.detachedPanes.work)
+
+  // 워크스페이스 탭. 목록의 주인은 main 이고([[main/workspaceTabs]]) **구독은 여기 한 번뿐**이다 —
+  // 컴포넌트마다 각자 구독하면 탭이 바뀔 때마다 같은 일이 그 수만큼 일어난다.
+  const wsTabs = useWorkspaceTabs(selectedId ?? '')
+  // "Open in Preview" 로 들어오는 이동 명령. 같은 주소를 다시 눌러도 반응하도록 seq 를 붙인다.
+  const [previewNav, setPreviewNav] = useState<{ url: string; seq: number } | null>(null)
+  const previewSeq = useRef(0)
+  useEffect(() => {
+    return window.api.preview.onOpen((e) => {
+      // 고르지 않은 워크스페이스에도 탭을 만든다 — 에이전트는 백그라운드에서 프리뷰를 열 수
+      // 있고, 그때 탭이 안 생기면 사용자가 그 워크스페이스로 갔을 때 아무 흔적이 없다.
+      // 화면을 옮길지는 누가 열었느냐가 정한다([[shared/types]] PreviewOpenEvent.activate).
+      void window.api.tabs.open(e.workspaceId, {
+        kind: 'dev',
+        target: e.url,
+        activate: e.activate
+      })
+      if (e.workspaceId === selectedId) setPreviewNav({ url: e.url, seq: ++previewSeq.current })
+    })
+  }, [selectedId])
+
+  // create_artifact 가 방금 만든 것. 프리뷰와 같은 이유로 **화면을 옮기지 않는다** — 이 신호는
+  // 에이전트만 쏘고(사람이 누르는 입구가 없다), 읽던 대화가 예고 없이 갈리면 안 된다.
+  const [artifactNav, setArtifactNav] = useState<{
+    artifactId: string
+    version: number
+    seq: number
+  } | null>(null)
+  const artifactSeq = useRef(0)
+  useEffect(() => {
+    return window.api.artifact.onOpen((e) => {
+      void window.api.tabs.open(e.workspaceId, { kind: 'artifact', activate: false })
+      if (e.workspaceId === selectedId)
+        setArtifactNav({
+          artifactId: e.artifactId,
+          version: e.version,
+          seq: ++artifactSeq.current
+        })
+    })
+  }, [selectedId])
   const rightBase = useRef(rightWidth)
   const sidebarWidth = useStore((s) => s.sidebarWidth)
   const setSidebarWidth = useStore((s) => s.setSidebarWidth)
@@ -146,7 +221,7 @@ export default function App(): React.JSX.Element {
   } | null>(null)
   const [configRepoId, setConfigRepoId] = useState<string | null>(null)
   const [migrateFor, setMigrateFor] = useState<{ repoId: string | null } | null>(null)
-  // ⌘K 퀵 스위처. ⌘1–9 로 닿지 않는(10번째 이후) 워크스페이스로 이동하는 기본 경로다.
+  // ⌘K 퀵 스위처. ⌥⌘1–9 로 닿지 않는(10번째 이후) 워크스페이스로 이동하는 기본 경로다.
   const [quickSwitchOpen, setQuickSwitchOpen] = useState(false)
   // ⇧⌘K 대화 검색. ⌘K 가 "이름으로 이동" 이라면 이쪽은 "내용으로 찾기" 다.
   const [transcriptSearchOpen, setTranscriptSearchOpen] = useState(false)
@@ -155,14 +230,15 @@ export default function App(): React.JSX.Element {
   const [reviewStartOpen, setReviewStartOpen] = useState(false)
   const [issueRepoId, setIssueRepoId] = useState<string | null>(null)
   const [prRepoId, setPrRepoId] = useState<string | null>(null)
-  // ⇧⌘O 파일 퀵 오픈. 큰 파일 뷰어의 "주소창" 역할을 겸한다.
+  // ⇧⌘O 파일 퀵 오픈. 고르면 파일 탭이 열린다(store.openFileViewer).
   const [quickOpenFile, setQuickOpenFile] = useState(false)
   const activeReviewId = useStore((s) => s.activeReviewId)
   const activeFanoutGroupId = useStore((s) => s.activeFanoutGroupId)
-  const activeStackWorkspaceId = useStore((s) => s.activeStackWorkspaceId)
   const splitPane = useStore((s) => s.splitPane)
   const splitFocus = useStore((s) => s.splitFocus)
-  const fileViewer = useStore((s) => s.fileViewer)
+  // openFileViewer 가 활성 파일 탭에 보내는 이동 명령(줄 번호) — 탭 자체를 여는 것은
+  // openFileViewer 안에서 이미 끝났고, 여기서는 그 탭에게 "이 줄로 스크롤해" 만 전달한다.
+  const fileNav = useStore((s) => s.fileNav)
   // ⌘K 팔레트가 "승인할 게 없다" 를 이유로 쓴다. 셀렉터로 받아야 팔레트를 열어 둔 채 새 권한이
   // 들어와도 그 행이 따라 살아난다.
   const approvablePermissionCount = useStore((s) => s.approvablePermissionCount())
@@ -239,26 +315,17 @@ export default function App(): React.JSX.Element {
     prRepoId !== null ||
     quickOpenFile
 
-  // 큰 파일 뷰어가 실제로 화면에 떠 있는지 — 리뷰 화면에 들어가 있으면 가려지므로 아니다.
-  // 큰 파일 뷰어는 대화 위를 통째로 덮는 읽기 화면이라 나란히 편 두 칸과 자리를 다툰다 —
-  // 분할 중에는 띄우지 않는다(⇧⌘O 도 아래에서 그 이유를 말하고 물러난다).
-  const fileViewerVisible =
-    !activeReviewId &&
-    !activeFanoutGroupId &&
-    !splitPane &&
-    !!fileViewer &&
-    fileViewer.workspaceId === selectedId
-
   // 모달 상태는 여기(App)에만 있으므로, 대화 화면의 전역 키 핸들러(Composer 의 Esc 등)가
   // 볼 수 있도록 store 로 내보낸다 — 모달이 떠 있을 때 뒤쪽 단축키가 같이 발동하면 안 된다.
   //
-  // 파일 뷰어도 같은 이유로 포함한다(Esc·⌘F 를 뷰어가 가져간다). 다만 아래 전역 단축키
-  // 핸들러는 뷰어를 막지 않는다 — 워크스페이스 전환(⌘1–9·⌘K)은 뷰어 위에서도 되어야 하고,
-  // 전환하면 store 가 뷰어를 알아서 닫는다.
+  // 파일 탭은 여기 포함하지 않는다 — 예전 오버레이와 달리 ChatView 를 덮는 것이 아니라 그
+  // 자리를 갈아 끼우는 탭이라, 파일 탭이 활성이면 ChatView 자체가 마운트되지 않는다. Esc·⌘F
+  // 를 파일 탭이 가져가는 문제는 그래서 여기서 막을 필요가 없다(FileTab 이 스스로 듣고,
+  // MessageList 의 ⌘F 리스너는 ChatView 와 함께 언마운트돼 부딪히지 않는다).
   const setOverlayOpen = useStore((s) => s.setOverlayOpen)
   useEffect(() => {
-    setOverlayOpen(anyModalOpen || fileViewerVisible)
-  }, [anyModalOpen, fileViewerVisible, setOverlayOpen])
+    setOverlayOpen(anyModalOpen)
+  }, [anyModalOpen, setOverlayOpen])
 
   // '?' 키(어디서든, 단 입력 중이 아닐 때)로 단축키 도움말을 연다. Overview 등에서
   // 커스텀 이벤트로도 열 수 있다.
@@ -349,6 +416,23 @@ export default function App(): React.JSX.Element {
       )
       // worktree 가 있어야 성립하는 도구들의 대상. 아카이브 미리보기면 대상이 없다.
       const selId = surfaces.worktreeTools ? focusedWorkspaceId : null
+
+      // 탭은 TabStrip 이 그리는 딱 하나(선택된 워크스페이스)에 대해서만 뜻이 있다 — 분할·리뷰·
+      // 팬아웃·스택 화면에서는 TabStrip 자체가 그려지지 않으므로 selId 를 그 존재 확인으로 쓴다.
+      // ⌘1–9 는 9 개 중 어느 것인지 고를 수 없는 종류라 카탈로그에 행이 없고, 여기서만 처리한다.
+      if (action.startsWith('select-tab-')) {
+        const idx = Number(action.slice('select-tab-'.length)) - 1
+        const target = selId ? wsTabs.tabs[idx] : undefined
+        if (target) wsTabs.select(target.id)
+        return
+      }
+
+      /** dev·web 탭이 아니면 ⌘L 이 하던 원래 일 — 대화가 가려졌다면 몰래 포커스하지 않는다. */
+      const focusComposerIfReachable = (): void => {
+        if (surfaces.composer && chatComposerReachable(st)) {
+          window.dispatchEvent(new CustomEvent(FOCUS_COMPOSER_EVENT))
+        }
+      }
 
       switch (action) {
         case 'open-shortcuts':
@@ -444,7 +528,7 @@ export default function App(): React.JSX.Element {
             st.pushToast('info', 'This workspace is not stacked on anything.')
             return
           }
-          st.openStackView(anchorId)
+          wsTabs.open({ kind: 'stack', target: anchorId })
           return
         }
 
@@ -494,8 +578,10 @@ export default function App(): React.JSX.Element {
         }
 
         case 'open-file':
-          // 큰 파일 뷰어는 대화를 통째로 덮는 읽기 화면이라 나란히 편 두 칸과 함께 쓸 수 없다.
-          // 조용히 무시하면 고장 난 것처럼 보이니 무엇을 먼저 해야 하는지 말해 준다.
+          // 파일 탭은 TabStrip 이 그리는 자리에 뜨는데, 나란히 편 두 칸(SplitPanes)은 그
+          // 자리 대신 ChatView/PrReviewScreen 만 그린다 — 지금 열어도 탭은 워크스페이스
+          // 데이터에는 생기지만 화면 어디에도 보이지 않는다. 조용히 무시하면 고장 난 것처럼
+          // 보이니 무엇을 먼저 해야 하는지 말해 준다.
           if (st.splitPane) {
             st.pushToast('info', 'Close one pane (⇧⌘W) to open the file viewer.')
             return
@@ -543,9 +629,56 @@ export default function App(): React.JSX.Element {
           return
 
         case 'focus-composer':
-          // 대화가 다른 화면에 가려졌다면 뒤쪽 textarea 를 몰래 포커스하지 않는다.
-          if (surfaces.composer && chatComposerReachable(st, fileViewerVisible)) {
-            window.dispatchEvent(new CustomEvent(FOCUS_COMPOSER_EVENT))
+          focusComposerIfReachable()
+          return
+
+        // ⌘L: dev·web 탭이면 주소창, 아니면 입력창. 게스트가 포커스를 쥐면 렌더러 keydown 이
+        // 죽으므로 메뉴 accelerator 로 들어온다(Tab 메뉴) — 어느 쪽으로 갈지는 여기서 활성 탭
+        // 종류를 보고 갈라야, 메뉴는 "⌘L 눌렸다" 만 알려 주고 판단은 항상 같은 자리에서 한다.
+        case 'focus-address-bar':
+          if (selId && (wsTabs.active?.kind === 'dev' || wsTabs.active?.kind === 'web')) {
+            window.dispatchEvent(new CustomEvent(FOCUS_ADDRESS_BAR_EVENT))
+            return
+          }
+          focusComposerIfReachable()
+          return
+
+        case 'new-tab':
+          if (selId) wsTabs.open({ kind: 'web' })
+          return
+
+        case 'close-tab':
+          // 작업 탭(work)은 main 이 조용히 무시한다([[main/workspaceTabs]] closeTab) — 여기서
+          // 따로 막을 것이 없다.
+          if (selId) wsTabs.close(wsTabs.activeId)
+          return
+
+        case 'reopen-closed-tab':
+          if (selId) wsTabs.reopen()
+          return
+
+        case 'next-tab':
+        case 'previous-tab': {
+          if (!selId || wsTabs.tabs.length < 2) return
+          const idx = wsTabs.tabs.findIndex((t) => t.id === wsTabs.activeId)
+          const delta = action === 'next-tab' ? 1 : -1
+          const next = wsTabs.tabs[(idx + delta + wsTabs.tabs.length) % wsTabs.tabs.length]
+          wsTabs.select(next.id)
+          return
+        }
+
+        case 'reload-tab':
+          if (selId && (wsTabs.active?.kind === 'dev' || wsTabs.active?.kind === 'web')) {
+            void window.api.views.reload(wsTabs.active.id)
+          }
+          return
+
+        case 'page-back':
+        case 'page-forward':
+          if (selId && (wsTabs.active?.kind === 'dev' || wsTabs.active?.kind === 'web')) {
+            void (action === 'page-back'
+              ? window.api.views.goBack(wsTabs.active.id)
+              : window.api.views.goForward(wsTabs.active.id))
           }
           return
 
@@ -584,7 +717,16 @@ export default function App(): React.JSX.Element {
         }
       }
     },
-    [fileViewerVisible, toggleDevScript]
+    [
+      toggleDevScript,
+      wsTabs.tabs,
+      wsTabs.activeId,
+      wsTabs.active,
+      wsTabs.select,
+      wsTabs.close,
+      wsTabs.open,
+      wsTabs.reopen
+    ]
   )
 
   /** 팔레트에서 항목 하나를 고른 결과를 실행한다. 동작은 위의 러너로 넘긴다. */
@@ -642,7 +784,6 @@ export default function App(): React.JSX.Element {
       selectedWorkspaceId: selectedId,
       activeReviewId,
       activeFanoutGroupId,
-      activeStackWorkspaceId,
       splitPane,
       splitFocus
     }
@@ -653,7 +794,7 @@ export default function App(): React.JSX.Element {
       hasRepos: app.repos.length > 0,
       selectedWorkspaceId: focusedWorkspaceId,
       worktreeTools: workspaceSurfaces(archived).worktreeTools,
-      composerReachable: chatComposerReachable(paneAxes, fileViewerVisible),
+      composerReachable: chatComposerReachable(paneAxes),
       activeReviewId: focused?.kind === 'review' ? focused.reviewId : null,
       activeFanoutGroupId,
       pendingPermissionCount: approvablePermissionCount,
@@ -668,16 +809,19 @@ export default function App(): React.JSX.Element {
     selectedId,
     activeReviewId,
     activeFanoutGroupId,
-    activeStackWorkspaceId,
     splitPane,
     splitFocus,
-    fileViewerVisible,
     approvablePermissionCount,
     rebaseBlockedReason
   ])
 
-  // 키보드: ⇧⇥ 권한 모드 순환, ⌘1–9 워크스페이스 선택, ⌘↑ / ⌘↓ 이전/다음,
-  // ⌘L 메시지 입력창 포커스, ⌘[ 직전에 보던 워크스페이스로 뒤로가기, ⇧⌘R PR 리뷰 시작.
+  // 키보드: ⇧⇥ 권한 모드 순환, ⌥⌘1–9 워크스페이스 선택, ⌥⌘↑ / ⌥⌘↓ 이전/다음,
+  // ⌥⌘[ 직전에 보던 워크스페이스로 뒤로가기, ⇧⌘R PR 리뷰 시작.
+  //
+  // ⌘1–9·⌘[/]·⌘R·⌘T·⌘W·⌘L 은 여기 없다 — 게스트(프리뷰·웹 탭)가 포커스를 쥐면 이 keydown
+  // 자체가 안 불린다. 그 글쇠들은 브라우저 프로세스가 먼저 받는 메뉴 accelerator 로 옮겼다
+  // (`src/main/appMenu.ts` Tab 메뉴, `runPaletteAction` 의 탭 동작들). 워크스페이스 쪽 단축키는
+  // 그 글쇠들과 안 겹치게 ⌥ 를 더해 자리를 비켰다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const st = useStore.getState()
@@ -747,7 +891,7 @@ export default function App(): React.JSX.Element {
       // 입력창 caret 에 들어가고 포커스가 따라간다. ⌘L 을 "먼저" 누르는 박자를 없애는 것이지
       // 대체하는 것은 아니다. 가려짐 판정은 ⌘L 과 같은 것을 쓴다(아래 참조).
       // '?'·⌃O 같은 기존 단축키가 위에서 먼저 return 하므로 그 키들은 여기까지 오지 않는다.
-      if (surfaces.composer && chatComposerReachable(st, fileViewerVisible)) {
+      if (surfaces.composer && chatComposerReachable(st)) {
         if (shouldFocusComposerFromEditingKey(e)) {
           // 기본 동작까지 막아야 한다 — 막지 않으면 이 핸들러가 옮겨 놓은 포커스 위에서
           // Backspace 가 그대로 실행돼, 보이지도 않는 초안의 마지막 글자가 지워진다.
@@ -768,7 +912,7 @@ export default function App(): React.JSX.Element {
       // "입력을 시작할 곳" 역할이라 기억하기 쉽고, 기존 Wooi 단축키와도 겹치지 않는다.
       // 대화가 다른 화면에 가려졌다면 뒤쪽 textarea 를 몰래 포커스하지 않는다.
       if (e.code === 'KeyL' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-        if (surfaces.composer && chatComposerReachable(st, fileViewerVisible)) {
+        if (surfaces.composer && chatComposerReachable(st)) {
           e.preventDefault()
           runPaletteAction('focus-composer')
         }
@@ -815,7 +959,7 @@ export default function App(): React.JSX.Element {
         return
       }
 
-      // ⌘K: 퀵 스위처. ⌘1–9 는 앞 9개까지만 닿으므로, 그 뒤 워크스페이스는 여기서 검색해 이동한다.
+      // ⌘K: 퀵 스위처. ⌥⌘1–9 는 앞 9개까지만 닿으므로, 그 뒤 워크스페이스는 여기서 검색해 이동한다.
       // 키 판별은 e.code 로 한다 — 한글 IME 에서 e.key 가 'k' 가 아닐 수 있다.
       if (e.code === 'KeyK' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
@@ -860,8 +1004,9 @@ export default function App(): React.JSX.Element {
         return
       }
 
-      // ⌘J: 우측 작업 패널 표시/숨김 토글.
-      if (e.key === 'j') {
+      // ⌥⌘J: 우측 작업 패널 표시/숨김 토글. 예전엔 ⌘J 였다 — 그 글쇠는 이제 탭 단축키(⌘T 등)와
+      // 함께 메뉴 accelerator 자리로 넘어갔으므로 여기서도 ⌥ 를 더해 비켰다.
+      if (e.altKey && !e.shiftKey && !e.ctrlKey && e.code === 'KeyJ') {
         e.preventDefault()
         runPaletteAction('toggle-work-panel')
         return
@@ -883,8 +1028,14 @@ export default function App(): React.JSX.Element {
 
       // fan-out 비교 화면이 떠 있으면 헤더 도구의 대상이 화면에 없다 — 뒤에 가려진 워크스페이스를
       // 에디터에서 열거나 아카이브하면, 사용자는 자기가 무엇을 건드렸는지 알 수 없다.
-      // 워크스페이스 전환(⌘1–9·⌘K·⌘↑↓)은 아래에서 계속 받는다 — 그게 이 화면에서 나가는 길이다.
-      if (st.activeFanoutGroupId && (e.shiftKey || e.altKey || e.ctrlKey)) return
+      // 워크스페이스 전환(⌥⌘1–9·⌘K·⌥⌘↑↓·⌥⌘[])은 아래에서 계속 받는다 — 그게 이 화면에서
+      // 나가는 길이다. 이제 그 전환도 ⌥ 를 쥐므로, 여기서 alt 를 통째로 막으면 나가는 길까지
+      // 막힌다 — 영구 삭제(⌥⌘⌫)만 alt 조합이면서도 대상이 안 보이는 채로 남아야 하므로 따로 짚는다.
+      if (
+        st.activeFanoutGroupId &&
+        (e.shiftKey || e.ctrlKey || (e.altKey && (e.code === 'Backspace' || e.code === 'Delete')))
+      )
+        return
 
       // 우상단 헤더 도구 단축키 — 현재 선택된 workspace 를 대상으로 한다.
       // ⇧⌘ 조합이라 macOS 기본 단축키(⌘S/E/F, ⌘⌫ 등)나 앱 기존 단축키와 충돌하지 않는다.
@@ -913,10 +1064,11 @@ export default function App(): React.JSX.Element {
         }
       }
 
-      // ⇧⌘T: 방금 아카이브한 워크스페이스를 다시 연다(브라우저의 "닫은 탭 다시 열기").
+      // ⇧⌘Z: 방금 아카이브한 워크스페이스를 다시 연다. 예전엔 ⇧⌘T 였지만, 그 글쇠는 이제 메뉴
+      // accelerator 가 "닫은 탭 다시 열기"(reopen-closed-tab)로 가져갔다.
       // 아카이브 직후에는 Overview 로 빠져나와 선택이 없으므로, selId 를 요구하는 아래
       // ⇧⌘ 블록보다 앞에 둔다. 되살리는 대상은 아카이브뿐이다 — 영구 삭제는 되돌리지 않는다.
-      if (e.shiftKey && e.code === 'KeyT' && !e.ctrlKey && !e.altKey) {
+      if (e.shiftKey && e.code === 'KeyZ' && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         runPaletteAction('reopen-archived')
         return
@@ -955,9 +1107,9 @@ export default function App(): React.JSX.Element {
           runPaletteAction('reveal-in-finder')
           return
         }
-        // ⇧⌘O: 파일 퀵 오픈 — 고르면 대화창 위의 큰 파일 뷰어로 열린다. 그 뷰어는 대화를
-        // 통째로 덮으므로 나란히 편 두 칸과 함께 쓸 수 없다. 조용히 무시하면 단축키가 고장 난
-        // 것처럼 보이니, 무엇을 먼저 해야 하는지 말해 준다.
+        // ⇧⌘O: 파일 퀵 오픈 — 고르면 파일 탭이 열린다. 나란히 편 두 칸에서는 탭 스트립 자체가
+        // 그려지지 않으므로 함께 쓸 수 없다. 조용히 무시하면 단축키가 고장 난 것처럼 보이니,
+        // 무엇을 먼저 해야 하는지 말해 준다.
         if (e.code === 'KeyO') {
           e.preventDefault()
           runPaletteAction('open-file')
@@ -985,39 +1137,44 @@ export default function App(): React.JSX.Element {
         return
       }
 
-      // ⌘[: 직전에 보던 워크스페이스로 돌아간다(브라우저 뒤로가기와 같은 방문 기록 기반).
-      // 사이드바 순서상 앞/뒤로 옮기는 ⌘↑ / ⌘↓ 와는 다른 축이다. 목록이 비어 있어도
-      // 기록이 남아 있을 수 있으므로 아래 list 게이트보다 앞에 둔다.
-      if (e.key === '[' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      // ⌥⌘[: 직전에 보던 워크스페이스로 돌아간다(브라우저 뒤로가기와 같은 방문 기록 기반).
+      // 예전엔 ⌘[ 였다 — 그 글쇠는 이제 메뉴 accelerator 가 탭 페이지 뒤로가기(dev·web 탭)로
+      // 가져갔으므로 ⌥ 를 더해 비켰다. Option 을 누르면 e.key 가 흔들리는 키가 있어(예: macOS
+      // 미국 배열에서 ⌥[ 는 '“') 물리 키인 e.code 로 본다. 사이드바 순서상 앞/뒤로 옮기는
+      // ⌥⌘↑ / ⌥⌘↓ 와는 다른 축이다. 목록이 비어 있어도 기록이 남아 있을 수 있으므로 아래
+      // list 게이트보다 앞에 둔다.
+      if (e.code === 'BracketLeft' && e.altKey && !e.shiftKey && !e.ctrlKey) {
         e.preventDefault()
         void st.goBackWorkspace()
         return
       }
 
-      // ⌘]: ⌘[ 로 물러난 길을 되짚어 앞으로 간다. 뒤로만 갈 수 있으면 잘못 누른 ⌘[ 를
+      // ⌥⌘]: ⌥⌘[ 로 물러난 길을 되짚어 앞으로 간다. 뒤로만 갈 수 있으면 잘못 누른 ⌥⌘[ 를
       // 되돌릴 방법이 없다 — 짝이 있어야 방문 기록을 오갈 수 있다.
-      if (e.key === ']' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      if (e.code === 'BracketRight' && e.altKey && !e.shiftKey && !e.ctrlKey) {
         e.preventDefault()
         void st.goForwardWorkspace()
         return
       }
 
       // 사이드바에 보이는 순서(레포 순 → 레포 안에서는 stack 순)와 정확히 같은 목록.
-      // Sidebar 의 번호 배지도 같은 함수를 쓰므로 "위에서 n번째 = ⌘n" 이 항상 성립한다.
+      // Sidebar 의 번호 배지도 같은 함수를 쓰므로 "위에서 n번째 = ⌥⌘n" 이 항상 성립한다.
       const list = orderVisibleWorkspaces(st.app?.repos ?? [], st.app?.workspaces ?? [])
       if (!list.length) return
 
-      if (e.key >= '1' && e.key <= '9') {
-        const idx = Number(e.key) - 1
-        if (idx < list.length) {
+      // ⌥⌘1–9: 예전엔 ⌘1–9 였다 — 그 글쇠는 이제 메뉴 accelerator 가 탭 선택(select-tab-n)으로
+      // 가져갔다. Option 을 누르면 숫자 키의 e.key 도 흔들리므로(예: ⌥1 은 '¡') e.code 로 본다.
+      if (e.altKey && !e.shiftKey && e.code.startsWith('Digit')) {
+        const idx = Number(e.code.slice('Digit'.length)) - 1
+        if (idx >= 0 && idx < list.length) {
           e.preventDefault()
           void st.selectWorkspace(list[idx].id)
         }
-      } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey) {
-        // ⌘↑/⌘↓ 로 사이드바 순서를 위/아래로 훑는다. 세로 목록이라 방향키가 공간적으로
-        // 직관적이고, 괄호 키와 달리 키보드 레이아웃을 타지 않는다. 별칭이던 ⌘[ / ⌘] 는
-        // 뺐다 — 그 짝은 이제 목록 위치가 아니라 방문 기록을 오가는 뒤로/앞으로가기다.
-        // (Composer 의 ↑/↓ 메시지 히스토리는 ⌘ 없는 경우만 처리하도록 막아 뒀다.)
+      } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.altKey && !e.shiftKey) {
+        // ⌥⌘↑/⌥⌘↓ 로 사이드바 순서를 위/아래로 훑는다. 예전엔 ⌘↑/⌘↓ 였다. 같은 글쇠를 PR 리뷰
+        // 화면의 코멘트 이동(PrReviewScreen.tsx)도 쓴다 — 리뷰가 포커스를 쥐고 있으면 그쪽이
+        // 이겨야 하므로 여기서는 조용히 양보한다(리뷰의 자체 keydown 구독이 같은 이벤트를 듣는다).
+        if (focusedReviewId) return
         e.preventDefault()
         const cur = list.findIndex((w) => w.id === st.selectedWorkspaceId)
         const delta = e.key === 'ArrowDown' ? 1 : -1
@@ -1029,7 +1186,25 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [anyModalOpen, fileViewerVisible, runPaletteAction])
+  }, [anyModalOpen, runPaletteAction])
+
+  // 애플리케이션 메뉴는 글쇠·명령 팔레트와 **같은 구현**을 부른다. 메뉴가 자기 동작을 따로
+  // 들면 세 입구가 조금씩 다르게 굴어서, 어느 것으로 했느냐에 따라 결과가 갈린다.
+  // `MenuCommand` 가 `PaletteActionId` 의 부분집합이라 캐스팅 없이 그대로 넘어간다.
+  //
+  // 다만 메뉴 accelerator 는 브라우저 프로세스가 렌더러보다 먼저 받으므로, 위 keydown 이 하는
+  // "모달이 떠 있으면 양보한다" 같은 문맥 가드를 통째로 건너뛴다 — 그래서 탭·페이지 명령만
+  // (`TAB_MENU_COMMANDS`) 여기서 한 번 더 걸러 모달이 열려 있으면 무시한다. 예를 들어 설정
+  // 모달 뒤에서 ⌘W 를 눌렀다고 뒤에 가려진 탭이 닫히면 안 된다. 나머지 명령은 원래도 메뉴를
+  // 클릭해야만 오던 것들이라(accelerator 가 없었다) 이 가드가 따로 필요하지 않았다.
+  useEffect(() => {
+    return window.api.onMenuCommand((command) => {
+      if (TAB_MENU_COMMANDS.has(command) && (anyModalOpen || useStore.getState().confirmState)) {
+        return
+      }
+      runPaletteAction(command)
+    })
+  }, [anyModalOpen, runPaletteAction])
 
   if (!ready || !app) {
     return (
@@ -1139,7 +1314,6 @@ export default function App(): React.JSX.Element {
           onDelta={(dx) => setSidebarWidth(sidebarBase.current + dx)}
           onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
         />
-        {/* relative — 큰 파일 뷰어가 이 영역(대화 + 작업 패널)만 덮는 오버레이로 올라탄다. */}
         <div
           ref={contentRef}
           className="relative flex-1 min-w-0 border-l border-[var(--border)] flex"
@@ -1152,46 +1326,82 @@ export default function App(): React.JSX.Element {
             <FanoutCompareScreen key={activeFanoutGroupId} groupId={activeFanoutGroupId} />
           ) : activeReviewId ? (
             <PrReviewScreen key={activeReviewId} reviewId={activeReviewId} />
-          ) : activeStackWorkspaceId ? (
-            <StackScreen key={activeStackWorkspaceId} workspaceId={activeStackWorkspaceId} />
           ) : selected ? (
-            <>
-              {/*
+            <div className="flex-1 min-w-0 flex flex-col">
+              <TabStrip
+                tabs={wsTabs.tabs}
+                activeId={wsTabs.activeId}
+                onSelect={wsTabs.select}
+                onClose={wsTabs.close}
+                onNew={(kind) => wsTabs.open({ kind })}
+              />
+              {wsTabs.active && (wsTabs.active.kind === 'dev' || wsTabs.active.kind === 'web') ? (
+                <BrowserTab
+                  key={wsTabs.active.id}
+                  workspace={selected}
+                  tab={wsTabs.active}
+                  navTarget={wsTabs.active.kind === 'dev' ? previewNav : null}
+                />
+              ) : wsTabs.active?.kind === 'artifact' ? (
+                <ArtifactTab
+                  key={wsTabs.active.id}
+                  workspace={selected}
+                  tabId={wsTabs.active.id}
+                  target={artifactNav}
+                />
+              ) : wsTabs.active?.kind === 'file' ? (
+                // key 를 일부러 안 건다 — 이유는 FileTab 자신의 주석 참고(파일 탭 사이를
+                // 오가는 동안 저장하지 않은 초안을 잃지 않기 위해서다).
+                <FileTab workspace={selected} path={wsTabs.active.target ?? ''} nav={fileNav} />
+              ) : wsTabs.active?.kind === 'stack' ? (
+                // StackScreen 은 초안 같은 걸 들고 있지 않아 리마운트가 싸다 — FileTab 과 달리
+                // key 를 걸어 탭이 바뀔 때마다 깨끗하게 새로 그린다.
+                <StackTab
+                  key={wsTabs.active.id}
+                  workspace={selected}
+                  target={wsTabs.active.target ?? ''}
+                  onClose={() => wsTabs.close(wsTabs.activeId)}
+                />
+              ) : (
+                <div className="flex-1 min-h-0 flex">
+                  {/*
                 서브에이전트를 골랐으면 그 대화가 이 자리에 선다 — 우측 작업 패널은 그대로 둔다.
                 서브에이전트는 부모와 **같은 worktree** 에서 일하므로, 그가 무엇을 고쳤는지는
                 여전히 그 워크스페이스의 Changes 에서 본다.
               */}
-              <div data-tour="chat" className="flex-1 min-w-0">
-                {openSubagentId ? (
-                  <SubagentChatView
-                    key={`${selected.id}:${openSubagentId}`}
-                    workspace={selected}
-                    toolId={openSubagentId}
-                  />
-                ) : (
-                  <ChatView key={selected.id} workspace={selected} />
-                )}
-              </div>
-              {rightPanelOpen && !workPaneDetached && (
-                <>
-                  <Splitter
-                    axis="x"
-                    label="Resize work panel"
-                    onStart={() => (rightBase.current = useStore.getState().rightWidth)}
-                    // 분할바를 오른쪽으로 끌면(dx>0) 우측 패널이 좁아진다.
-                    // 채팅이 maxRight 미만으로 줄지 않도록 드래그 폭도 함께 제한한다.
-                    onDelta={(dx) => setRightWidth(Math.min(rightBase.current - dx, maxRight))}
-                  />
-                  <div
-                    data-tour="work-panel"
-                    style={{ width: effectiveRightWidth }}
-                    className="shrink-0 border-l border-[var(--border)] min-w-0"
-                  >
-                    <WorkArea key={selected.id} workspace={selected} />
+                  <div data-tour="chat" className="flex-1 min-w-0">
+                    {openSubagentId ? (
+                      <SubagentChatView
+                        key={`${selected.id}:${openSubagentId}`}
+                        workspace={selected}
+                        toolId={openSubagentId}
+                      />
+                    ) : (
+                      <ChatView key={selected.id} workspace={selected} />
+                    )}
                   </div>
-                </>
+                  {rightPanelOpen && !workPaneDetached && (
+                    <>
+                      <Splitter
+                        axis="x"
+                        label="Resize work panel"
+                        onStart={() => (rightBase.current = useStore.getState().rightWidth)}
+                        // 분할바를 오른쪽으로 끌면(dx>0) 우측 패널이 좁아진다.
+                        // 채팅이 maxRight 미만으로 줄지 않도록 드래그 폭도 함께 제한한다.
+                        onDelta={(dx) => setRightWidth(Math.min(rightBase.current - dx, maxRight))}
+                      />
+                      <div
+                        data-tour="work-panel"
+                        style={{ width: effectiveRightWidth }}
+                        className="shrink-0 border-l border-[var(--border)] min-w-0"
+                      >
+                        <WorkArea key={selected.id} workspace={selected} />
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-            </>
+            </div>
           ) : archivedPreview ? (
             <div className="flex-1 min-w-0">
               <ArchivedChatView key={archivedPreview.id} workspace={archivedPreview} />
@@ -1201,10 +1411,6 @@ export default function App(): React.JSX.Element {
           ) : (
             <EmptyState />
           )}
-
-          {/* 대화 위에 띄우는 큰 파일 뷰어. 대화·작업 패널은 뒤에 그대로 마운트돼 있어
-              닫으면 스크롤 위치와 입력창 초안이 그대로 살아 있다. */}
-          {selected && fileViewerVisible && <FileViewerOverlay workspace={selected} />}
         </div>
       </div>
 

@@ -11,7 +11,7 @@ describe('pushReopenable', () => {
     expect(pushReopenable(pushReopenable([], 'a'), 'b')).toEqual(['a', 'b'])
   })
 
-  /** 되살렸다가 다시 치운 워크스페이스가 스택에 두 번 남으면 ⇧⌘T 가 같은 곳을 두 번 연다. */
+  /** 되살렸다가 다시 치운 워크스페이스가 스택에 두 번 남으면 ⇧⌘Z 가 같은 곳을 두 번 연다. */
   it('같은 워크스페이스는 하나만 남기고 맨 위로 올린다', () => {
     expect(pushReopenable(['a', 'b'], 'a')).toEqual(['b', 'a'])
   })
@@ -25,7 +25,7 @@ describe('pushReopenable', () => {
 })
 
 describe('dropReopenable', () => {
-  /** 영구 삭제된 워크스페이스가 남아 있으면 ⇧⌘T 가 되살릴 수 없는 것을 시도하게 된다. */
+  /** 영구 삭제된 워크스페이스가 남아 있으면 ⇧⌘Z 가 되살릴 수 없는 것을 시도하게 된다. */
   it('영구 삭제된 워크스페이스를 뺀다', () => {
     expect(dropReopenable(['a', 'b', 'c'], 'b')).toEqual(['a', 'c'])
   })

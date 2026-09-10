@@ -2,6 +2,7 @@ import { workspaceDisplayName } from '@shared/types'
 import type { Workspace } from '@shared/types'
 import { listChangedPaths } from '../../git'
 import { getStore } from '../../store'
+import { toWorktreeRelative } from './paths'
 import type { AgentToolHandler } from './registry'
 
 /**
@@ -23,24 +24,6 @@ const MAX_PATHS_PER_WORKSPACE = 50
 const MAX_WORKSPACES = 20
 
 type Relation = 'parent' | 'child' | 'sibling'
-
-/**
- * 모델이 준 경로를 git 이 돌려주는 모양(리포 루트 기준 상대경로)으로 맞춘다.
- *
- * 비교 대상은 `git diff --name-only` 와 `git status --porcelain` 의 출력이라 언제나 리포 루트
- * 기준이다. 모델은 방금 편집한 파일을 절대경로나 `./` 를 붙여 넘기는 일이 잦은데, 그대로
- * 대조하면 **한 건도 겹치지 않는다** — 이 도구는 그때 조용히 "겹치는 것 없음" 이라고 답한다.
- * 겹침을 못 찾는 것이 곧 실패인 도구라, 틀린 답보다 못한 종류의 침묵이다.
- */
-function normalizePath(raw: string, worktreePath: string): string {
-  let path = raw.trim().replace(/\\/g, '/')
-  const root = worktreePath.replace(/\\/g, '/').replace(/\/+$/, '')
-  if (path.startsWith(`${root}/`)) path = path.slice(root.length + 1)
-  return path
-    .replace(/^\.\/+/, '')
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')
-}
 
 function relationTo(self: Workspace, other: Workspace): Relation {
   if (other.id === self.parentWorkspaceId) return 'parent'
@@ -70,7 +53,7 @@ export const checkRelatedWork: AgentToolHandler = async (_deps, workspaceId, arg
   const asked = Array.isArray(args.paths)
     ? args.paths
         .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-        .map((p) => normalizePath(p, self.worktreePath))
+        .map((p) => toWorktreeRelative(p, self.worktreePath))
         .filter(Boolean)
     : null
   const mine = new Set(asked ?? (await listChangedPaths(self.worktreePath, self.baseBranch)))

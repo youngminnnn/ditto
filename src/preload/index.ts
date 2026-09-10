@@ -131,18 +131,14 @@ const api: WooiApi = {
   preview: {
     setUrl: (workspaceId, url) => ipcRenderer.invoke(IPC.previewSetUrl, workspaceId, url),
     open: (workspaceId, url) => ipcRenderer.invoke(IPC.previewOpen, workspaceId, url),
-    capture: (workspaceId, webContentsId) =>
-      ipcRenderer.invoke(IPC.previewCapture, workspaceId, webContentsId),
-    pickElement: (workspaceId, webContentsId) =>
-      ipcRenderer.invoke(IPC.previewPickElement, workspaceId, webContentsId),
-    cancelPick: (webContentsId) => ipcRenderer.invoke(IPC.previewCancelPick, webContentsId),
-    watchIssues: (workspaceId, webContentsId) =>
-      ipcRenderer.invoke(IPC.previewWatchIssues, workspaceId, webContentsId),
-    unwatchIssues: (webContentsId) => ipcRenderer.invoke(IPC.previewUnwatchIssues, webContentsId),
-    listIssues: (workspaceId) => ipcRenderer.invoke(IPC.previewListIssues, workspaceId),
-    clearIssues: (workspaceId) => ipcRenderer.invoke(IPC.previewClearIssues, workspaceId),
-    sendIssues: (workspaceId, issueIds) =>
-      ipcRenderer.invoke(IPC.previewSendIssues, workspaceId, issueIds),
+    capture: (workspaceId, tabId) => ipcRenderer.invoke(IPC.previewCapture, workspaceId, tabId),
+    pickElement: (workspaceId, tabId) =>
+      ipcRenderer.invoke(IPC.previewPickElement, workspaceId, tabId),
+    cancelPick: (tabId) => ipcRenderer.invoke(IPC.previewCancelPick, tabId),
+    listIssues: (tabId) => ipcRenderer.invoke(IPC.previewListIssues, tabId),
+    clearIssues: (tabId) => ipcRenderer.invoke(IPC.previewClearIssues, tabId),
+    sendIssues: (workspaceId, tabId, issueIds) =>
+      ipcRenderer.invoke(IPC.previewSendIssues, workspaceId, tabId, issueIds),
     onOpen: (cb) => subscribe(IPC.evtPreviewOpen, cb),
     onIssues: (cb) => subscribe(IPC.evtPreviewIssues, cb)
   },
@@ -269,6 +265,17 @@ const api: WooiApi = {
     onTabs: (cb) => subscribe(IPC.evtTerminalTabs, cb)
   },
 
+  tabs: {
+    get: (workspaceId) => ipcRenderer.invoke(IPC.tabsGet, workspaceId),
+    open: (workspaceId, opts) => ipcRenderer.invoke(IPC.tabsOpen, workspaceId, opts),
+    close: (workspaceId, tabId) => ipcRenderer.invoke(IPC.tabsClose, workspaceId, tabId),
+    select: (workspaceId, tabId) => ipcRenderer.invoke(IPC.tabsSelect, workspaceId, tabId),
+    rename: (workspaceId, tabId, title) =>
+      ipcRenderer.invoke(IPC.tabsRename, workspaceId, tabId, title),
+    reopen: (workspaceId) => ipcRenderer.invoke(IPC.tabsReopen, workspaceId),
+    onTabs: (cb) => subscribe(IPC.evtWorkspaceTabs, cb)
+  },
+
   pane: {
     open: (kind, workspaceId) => ipcRenderer.invoke(IPC.paneOpen, kind, workspaceId),
     close: (kind) => ipcRenderer.invoke(IPC.paneClose, kind),
@@ -374,6 +381,22 @@ const api: WooiApi = {
   onReview: (cb) => subscribe(IPC.evtReview, cb),
   onSelectWorkspace: (cb) => subscribe(IPC.evtSelectWorkspace, cb),
   onOpenRepoSettings: (cb) => subscribe(IPC.evtOpenRepoSettings, cb),
+  views: {
+    ensure: (tabId, workspaceId, kind, initialUrl) =>
+      ipcRenderer.invoke(IPC.viewEnsure, tabId, workspaceId, kind, initialUrl),
+    attach: (tabId) => ipcRenderer.invoke(IPC.viewAttach, tabId),
+    detach: (tabId) => ipcRenderer.invoke(IPC.viewDetach, tabId),
+    load: (tabId, url) => ipcRenderer.invoke(IPC.viewLoad, tabId, url),
+    reload: (tabId) => ipcRenderer.invoke(IPC.viewReload, tabId),
+    stop: (tabId) => ipcRenderer.invoke(IPC.viewStop, tabId),
+    goBack: (tabId) => ipcRenderer.invoke(IPC.viewGoBack, tabId),
+    goForward: (tabId) => ipcRenderer.invoke(IPC.viewGoForward, tabId),
+    destroy: (tabId) => ipcRenderer.invoke(IPC.viewDestroy, tabId),
+    // 프레임마다 나가는 값이라 invoke 가 아니라 send 다 — 채널 정의의 주석을 본다.
+    setLayout: (layouts) => ipcRenderer.send(IPC.viewSetLayout, layouts),
+    onEvent: (cb) => subscribe(IPC.evtHostedView, cb)
+  },
+  onMenuCommand: (cb) => subscribe(IPC.evtMenuCommand, cb),
   onWindowFocus: (cb) => subscribe(IPC.evtWindowFocus, () => cb()),
   onWindowBlur: (cb) => subscribe(IPC.evtWindowBlur, () => cb()),
   onClaudeLogin: (cb) => subscribe(IPC.evtClaudeLogin, cb),

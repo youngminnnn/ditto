@@ -1,3 +1,4 @@
+import { useSuppressAllViews } from '../lib/viewSuppress'
 import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 
@@ -25,6 +26,9 @@ export default function ConfirmDialog(): React.JSX.Element | null {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [state, resolve, skip])
+
+  // 얹은 웹 뷰는 네이티브라 DOM 위에 그려진다 — 덮는 것만으로는 안 가려진다([[lib/viewSuppress]]).
+  useSuppressAllViews(!!state)
 
   if (!state) return null
 

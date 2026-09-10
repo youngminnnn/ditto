@@ -1,11 +1,15 @@
+import type { WebContents } from 'electron'
 import { log } from '../../logger'
 import type {
   AgentBackendId,
   AgentBackendMeta,
   ChatEvent,
   ChatItem,
+  HostedViewKind,
   ModelOption,
-  SendMessageOptions
+  SendMessageOptions,
+  WorkspaceTabKind,
+  WorkspaceTabsState
 } from '@shared/types'
 import type { ScriptRunner } from '../../scripts'
 
@@ -103,6 +107,29 @@ export interface AgentToolDeps {
     archiveAfterTurn: (workspaceId: string, run: () => Promise<void>) => void
   }
   terminals: { disposeWorkspace: (workspaceId: string) => void }
+  /**
+   * 아카이브·삭제 도구가 워크스페이스의 콘텐츠 탭 스트립·웹 뷰·Preview 문제 수집기를 함께
+   * 정리하는 데 쓴다([[workspaces]] archiveWorkspace·deleteWorkspace 가 요구하는 것과 같은 모양).
+   */
+  tabs: {
+    disposeWorkspace: (workspaceId: string) => void
+    openTab: (
+      workspaceId: string,
+      opts: { kind: WorkspaceTabKind; target?: string; title?: string; activate?: boolean }
+    ) => WorkspaceTabsState
+  }
+  views: {
+    destroyWorkspace: (workspaceId: string) => void
+    ensure: (tabId: string, workspaceId: string, kind: HostedViewKind, initialUrl?: string) => void
+    /**
+     * 방금 만든 뷰의 게스트를 꺼낸다 — 이동을 **메인이 직접** 시키기 위해서다.
+     *
+     * `ensure` 의 `initialUrl` 로 대신할 수 없다. 그 길은 로드의 성패가 아무 데도 안 돌아와서,
+     * 실패했는데 "열었다" 고 답하는 도구가 된다([[agent/tools/preview]] loadGuest).
+     */
+    resolve: (tabId: string) => { guest: WebContents } | { error: string }
+  }
+  previewIssues: { disposeWorkspace: (workspaceId: string) => void }
   /**
    * 삭제된 워크스페이스 id 를 들고 있던 fan-out 그룹을 정리한다([[workspaces]] deleteWorkspace).
    *

@@ -11,7 +11,7 @@
  * 팔레트에서 **실행할 수 있는** 동작의 이름.
  *
  * 단축키가 있다고 전부 여기 오지는 않는다. `⏎ 전송`·`⇧⏎ 줄바꿈` 같은 타건 제스처와
- * `⌘↑ / ⌘↓` 처럼 한 줄이 두 방향을 함께 설명하는 항목은 "누를 수는 있어도 고를 수는 없는"
+ * `⌥⌘↑ / ⌥⌘↓` 처럼 한 줄이 두 방향을 함께 설명하는 항목은 "누를 수는 있어도 고를 수는 없는"
  * 것들이라, 팔레트에서는 참조 행으로만 남는다(검색은 되고 Enter 는 듣지 않는다).
  *
  * 실제 구현은 `App.tsx` 가 들고 있다 — 전역 keydown 과 팔레트가 **같은 함수**를 부른다.
@@ -45,6 +45,28 @@ export type PaletteActionId =
   | 'cycle-subagent'
   | 'close-focused-pane'
   | 'toggle-split-focus'
+  // 탭 스트립(TabStrip). 게스트(프리뷰·웹 탭)가 포커스를 쥐면 렌더러는 keydown 을 아예 못
+  // 보므로, 이 동작들의 진짜 글쇠는 App.tsx 의 keydown 이 아니라 메뉴 accelerator 다
+  // (`src/main/appMenu.ts` 의 Tab 메뉴). 팔레트·도움말에서는 다른 동작과 똑같이 보인다 —
+  // 입구가 메뉴라는 사실은 사용자가 몰라도 되는 구현 디테일이다.
+  | 'new-tab'
+  | 'close-tab'
+  | 'reopen-closed-tab'
+  | 'next-tab'
+  | 'previous-tab'
+  | 'select-tab-1'
+  | 'select-tab-2'
+  | 'select-tab-3'
+  | 'select-tab-4'
+  | 'select-tab-5'
+  | 'select-tab-6'
+  | 'select-tab-7'
+  | 'select-tab-8'
+  | 'select-tab-9'
+  | 'reload-tab'
+  | 'page-back'
+  | 'page-forward'
+  | 'focus-address-bar'
 
 export interface ShortcutItem {
   /** 도움말에 그리는 글쇠들. `–` 와 `/` 는 kbd 가 아니라 구분 기호로 그려진다. */
@@ -69,9 +91,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: 'Search conversations across every workspace',
         action: 'search-conversations'
       },
-      { keys: ['⌘1', '–', '⌘9'], label: 'Switch to the top 9 workspaces in the sidebar' },
-      { keys: ['⌘↑', '/', '⌘↓'], label: 'Previous / next workspace' },
-      { keys: ['⌘[', '/', '⌘]'], label: 'Back / forward through workspaces you visited' },
+      { keys: ['⌥⌘1', '–', '⌥⌘9'], label: 'Switch to the top 9 workspaces in the sidebar' },
+      // 예전엔 ⌘↑/⌘↓ 였다. 맨 글쇠(⌘1–9·⌘[/]·⌘R…)는 이제 탭·페이지 단축키가 메뉴 accelerator 로
+      // 가져갔으므로(게스트가 포커스를 쥐어도 떠야 해서), 워크스페이스 쪽은 ⌥ 를 더해 자리를
+      // 비켜 줬다. PR 리뷰 화면에서는 같은 글쇠(⌥⌘↑/⌥⌘↓)를 코멘트 이동이 쓴다 — 리뷰가 떠 있으면
+      // 리뷰 쪽이 이긴다.
+      { keys: ['⌥⌘↑', '/', '⌥⌘↓'], label: 'Previous / next workspace' },
+      { keys: ['⌥⌘[', '/', '⌥⌘]'], label: 'Back / forward through workspaces you visited' },
       { keys: ['⌘U'], label: 'Jump to next unread session', action: 'next-unread' },
       { keys: ['⌘I'], label: 'Jump to next session needing input', action: 'next-needs-input' },
       { keys: ['?'], label: 'Show keyboard shortcuts', action: 'open-shortcuts' }
@@ -92,7 +118,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         action: 'undo-workspace-action'
       },
       {
-        keys: ['⇧⌘T'],
+        // 예전엔 ⇧⌘T 였다. 그 글쇠는 이제 메뉴 accelerator 가 "닫은 탭 다시 열기" 로 가져갔다
+        // (아래 Tabs 그룹의 reopen-closed-tab).
+        keys: ['⇧⌘Z'],
         label: 'Reopen the workspace you just archived',
         action: 'reopen-archived'
       },
@@ -108,7 +136,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         action: 'rebase-onto-base'
       },
       { keys: ['⌘,'], label: 'Open settings', action: 'open-settings' },
-      { keys: ['⌘J'], label: 'Toggle the work panel', action: 'toggle-work-panel' },
+      // 예전엔 ⌘J 였다. 탭·페이지 단축키가 ⌘ 맨 글쇠들을 메뉴 accelerator 로 가져가면서 함께 옮겼다.
+      { keys: ['⌥⌘J'], label: 'Toggle the work panel', action: 'toggle-work-panel' },
       {
         keys: ['⌃A'],
         label: 'Step through this workspace’s subagents, then back to the main conversation',
@@ -121,6 +150,39 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         keys: ['⇧⌘A'],
         label: 'Approve all pending permissions',
         action: 'approve-all-permissions'
+      }
+    ]
+  },
+  {
+    // 이 그룹의 글쇠는 전부 메뉴 accelerator 로 달려 있다(App.tsx 의 keydown 이 아니다) —
+    // 게스트(프리뷰·웹 탭)가 포커스를 쥐면 렌더러는 keydown 을 아예 못 보므로, 브라우저
+    // 프로세스가 먼저 받는 메뉴 accelerator 만 포커스와 무관하게 뜬다.
+    title: 'Tabs',
+    items: [
+      { keys: ['⌘T'], label: 'New tab', action: 'new-tab' },
+      { keys: ['⌘W'], label: 'Close the active tab', action: 'close-tab' },
+      { keys: ['⇧⌘T'], label: 'Reopen the tab you just closed', action: 'reopen-closed-tab' },
+      { keys: ['⇧⌘]'], label: 'Next tab', action: 'next-tab' },
+      { keys: ['⇧⌘['], label: 'Previous tab', action: 'previous-tab' },
+      {
+        keys: ['⌘1', '–', '⌘9'],
+        label: 'Switch to a tab by position (⌘1 is always Work)'
+      },
+      { keys: ['⌘R'], label: 'Reload the tab (dev / web tabs only)', action: 'reload-tab' },
+      {
+        keys: ['⌘['],
+        label: 'Back on the page (dev / web tabs only)',
+        action: 'page-back'
+      },
+      {
+        keys: ['⌘]'],
+        label: 'Forward on the page (dev / web tabs only)',
+        action: 'page-forward'
+      },
+      {
+        keys: ['⌘L'],
+        label: 'Focus the address bar (dev / web tabs) or the message input',
+        action: 'focus-address-bar'
       }
     ]
   },
@@ -172,9 +234,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: 'Open a file — type a path, add #L42 to jump to a line',
         action: 'open-file'
       },
-      { keys: ['⌘F'], label: 'Find in the open file' },
-      { keys: ['⌘⌥←', '/', '⌘⌥→'], label: 'Back / forward through visited files' },
-      { keys: ['Esc'], label: 'Close the viewer and return to the conversation' }
+      // 파일마다 탭이 하나라 방문 기록이 곧 탭 목록이다 — 앞/뒤 이력은 없고, 닫기는 다른
+      // 탭과 똑같이 ⌘W 다(따로 적지 않는다).
+      { keys: ['⌘F'], label: 'Find in the open file — only while a file tab is active' }
     ]
   },
   {
@@ -196,7 +258,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Conversation',
     items: [
-      { keys: ['⌘L'], label: 'Focus the message input', action: 'focus-composer' },
+      // ⌘L 은 이제 Tabs 그룹에 있다 — dev·web 탭에서는 주소창, 아니면 이 입력창을 포커스한다
+      // (focus-address-bar). 같은 물리 키를 두 행으로 쪼개면 "정본이 둘" 이 되므로 여기서는 뺀다.
       { keys: ['⌘F'], label: 'Search the conversation' },
       { keys: ['⌘+', '/', '⌘-'], label: 'Bigger / smaller conversation text' },
       { keys: ['⌘0'], label: 'Reset conversation text size' },

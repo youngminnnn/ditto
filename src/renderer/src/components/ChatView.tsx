@@ -465,7 +465,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
             >
               <Terminal size={15} />
             </HeaderButton>
-            {/* 큰 파일 뷰어는 대화를 통째로 덮는 화면이라 나란히 편 두 칸과 함께 쓸 수 없다. */}
+            {/* 파일 탭은 TabStrip 자리에 뜨는데, 나란히 편 두 칸에서는 그 자리가 없다. */}
             {!inSplit && (
               <HeaderButton
                 title="Open a file in the big viewer"
@@ -525,7 +525,7 @@ export default function ChatView({ workspace }: { workspace: Workspace }): React
                     ? 'Hide work panel'
                     : 'Show work panel'
               }
-              shortcut="⌘J"
+              shortcut="⌥⌘J"
               onClick={toggleRightPanel}
               active={rightPanelOpen || workPaneDetached}
             >

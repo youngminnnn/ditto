@@ -1,3 +1,4 @@
+import { useSuppressAllViews } from '../lib/viewSuppress'
 import { useEffect, useId, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '../store'
@@ -54,6 +55,9 @@ export default function Modal({
     first?.focus()
     return () => openerRef.current?.focus()
   }, [])
+
+  // 얹은 웹 뷰는 네이티브라 DOM 위에 그려진다 — 덮는 것만으로는 안 가려진다([[lib/viewSuppress]]).
+  useSuppressAllViews()
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onMouseDown={onClose}>

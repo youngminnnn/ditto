@@ -51,7 +51,6 @@ import {
   readUiFlag,
   setUiFlag
 } from './lib/uiFlags'
-import { buildStackLayers } from './lib/stackView'
 import {
   DEFAULT_SPLIT_FRACTION,
   clampSplitFraction,
@@ -199,30 +198,9 @@ interface ConfirmState extends ConfirmOptions {
   resolve: (ok: boolean) => void
 }
 
-/** 큰 파일 뷰어가 방문한 파일 한 개. */
-export interface FileViewerEntry {
-  /** worktree 기준 상대 경로. */
-  path: string
-  /** 열자마자 이동할 줄(1-based). diff·멘션에서 특정 줄로 보낼 때 쓴다. */
-  line?: number
-}
-
-export interface FileViewerState {
-  /** 이 경로들이 속한 worktree. 다른 워크스페이스로 옮기면 뷰어는 닫힌다. */
-  workspaceId: string
-  /** 방문 기록(뒤로/앞으로). */
-  history: FileViewerEntry[]
-  /** history 안의 현재 위치. */
-  index: number
-  /** 왼쪽 파일 트리 표시 여부. */
-  treeOpen: boolean
-}
-
-/** 뷰어 방문 기록 상한. 브라우저처럼 오래된 것부터 버린다. */
-const FILE_HISTORY_MAX = 50
-
 let toastSeq = 0
 let pendingSeq = 0
+let fileNavSeq = 0
 
 /** "3 commits" / "1 commit" — 확인 다이얼로그 문장을 세는 곳마다 s 를 붙이지 않게. */
 function plural(count: number, noun: string): string {
@@ -464,13 +442,13 @@ interface UIState {
    */
   detachedPanes: PaneState
   /**
-   * 대화창 위에 띄우는 큰 파일 뷰어. null 이면 닫혀 있다.
-   * 우측 패널의 좁은 뷰어로는 코드를 읽기 어려워서, 브라우저처럼 앞/뒤로 오갈 수 있는
-   * 전체 폭 뷰어를 따로 둔다(대화는 뒤에 그대로 살아 있고 닫으면 즉시 복귀한다).
+   * `openFileViewer` 가 파일 탭으로 보내는 이동 명령(줄 번호). 파일은 이제 탭 하나하나가
+   * "연 파일" 그 자체라 경로를 target 에 실어 탭을 열지만, 줄 번호까지 target 에 넣으면
+   * (`path#L42`) 같은 파일을 다른 줄로 열 때마다 탭이 하나 더 생긴다. 그래서 경로는 탭이
+   * 들고, 줄 번호만 `previewNav` 와 같은 모양의 통로로 따로 흘려보낸다. seq 는 같은 파일을
+   * 같은 줄로 다시 열어도 반응하게 하는 토큰이다.
    */
-  fileViewer: FileViewerState | null
-  /** 큰 파일 뷰어 왼쪽 트리의 너비(px). */
-  fileViewerTreeWidth: number
+  fileNav: { path: string; line?: number; seq: number } | null
   /**
    * 대화 검색(⇧⌘K)에서 고른 결과로 데려갈 항목. 대화창이 그 자리로 스크롤하고 나면 지운다.
    *
@@ -509,11 +487,11 @@ interface UIState {
     workspaceId: string
   ) => Promise<{ archiveScriptFailure?: ArchiveScriptFailure }>
   /**
-   * ⇧⌘T 로 다시 열 수 있는, 최근 아카이브한 워크스페이스들(오래된 것이 앞).
+   * ⇧⌘Z 로 다시 열 수 있는, 최근 아카이브한 워크스페이스들(오래된 것이 앞).
    * 영구 삭제는 되살릴 수 없으므로 여기 쌓이지 않는다.
    */
   reopenableArchives: string[]
-  /** ⇧⌘T — 가장 최근에 아카이브한 워크스페이스를 되살려 연다. */
+  /** ⇧⌘Z — 가장 최근에 아카이브한 워크스페이스를 되살려 연다. */
   reopenLastArchivedWorkspace: () => Promise<void>
   /** 마지막 일괄 아카이브. 바로 뒤의 ⌘Z 또는 토스트 Undo 로만 한 번 복원한다. */
   undoableArchive: { workspaceIds: string[]; at: number } | null
@@ -534,12 +512,6 @@ interface UIState {
    * 밀어낸다 — 워크스페이스를 고르면 둘 다 닫힌다.
    */
   activeFanoutGroupId: string | null
-  /**
-   * 열려 있는 스택 화면의 앵커 워크스페이스 id. 리뷰·fan-out 과 같은 자리를 쓰므로 셋은
-   * 서로를 밀어낸다. 스택은 워크스페이스에 매여 있지만 **선택과는 다른 축**이다 —
-   * 화면은 앵커가 속한 스택 전체를 그리고, 선택은 그중 한 층만 가리킨다.
-   */
-  activeStackWorkspaceId: string | null
   /**
    * 나란히 편 두 번째 칸. null 이면 화면은 예전처럼 하나다.
    *
@@ -614,14 +586,6 @@ interface UIState {
   /** 비교 화면을 닫고 원래 보던 워크스페이스로 돌아간다. */
   closeFanoutCompare: () => void
   /**
-   * 스택 화면을 연다(리뷰·fan-out 화면과 자리를 다투므로 그쪽은 닫는다).
-   * 앵커가 속한 스택의 모든 층에 대해 git·PR 을 한 번 새로 고친다 — 층마다 따로 열어 본 적이
-   * 없으면 behind·PR 칸이 비어 있고, 비어 있는 칸은 "문제 없음" 처럼 읽힌다.
-   */
-  openStackView: (workspaceId: string) => void
-  /** 스택 화면을 닫는다. */
-  closeStackView: () => void
-  /**
    * 승자를 채택한다(확인 후). 나머지 형제는 아카이브되고 — 되살릴 수 있지만 미커밋 변경은
    * 사라지므로 — 무엇을 잃는지 먼저 센다.
    */
@@ -644,7 +608,7 @@ interface UIState {
   requestDeleteWorkspace: (workspaceId: string) => Promise<void>
   /**
    * 확인 없이 즉시 영구 삭제한다 — 물어보는 것은 호출부의 몫이다.
-   * 지운 워크스페이스를 보고 있었다면 ⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
+   * 지운 워크스페이스를 보고 있었다면 ⌥⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
    */
   deleteWorkspaceNow: (workspaceId: string) => Promise<void>
   /**
@@ -688,16 +652,16 @@ interface UIState {
   reportMergeTrain: (progress: StackOpProgress) => void
   /** 방문 순서 스택(브라우저 뒤로가기용). 현재 선택은 포함하지 않고, 오래된 것이 앞이다. */
   workspaceHistory: string[]
-  /** ⌘[ 로 떠나온 워크스페이스들. ⌘] 가 여기서 꺼내 되짚어 간다. */
+  /** ⌥⌘[ 로 떠나온 워크스페이스들. ⌥⌘] 가 여기서 꺼내 되짚어 간다. */
   workspaceForward: string[]
   /**
    * @param opts.fromHistory 뒤/앞으로 가기로 인한 선택 — 방문 스택에 다시 쌓지 않고,
    * 앞쪽 이력도 버리지 않는다.
    */
   selectWorkspace: (id: string | null, opts?: { fromHistory?: boolean }) => Promise<void>
-  /** ⌘[ — 직전에 보던 워크스페이스로 돌아간다(브라우저 뒤로가기). */
+  /** ⌥⌘[ — 직전에 보던 워크스페이스로 돌아간다(브라우저 뒤로가기). */
   goBackWorkspace: () => Promise<void>
-  /** ⌘] — 뒤로 온 길을 되짚어 앞으로 간다. */
+  /** ⌥⌘] — 뒤로 온 길을 되짚어 앞으로 간다. */
   goForwardWorkspace: () => Promise<void>
   refreshGit: (workspaceId: string) => Promise<void>
   /** 진입 여부와 무관하게 모든(비아카이브) 워크스페이스의 git 상태를 한 번에 갱신한다. */
@@ -786,10 +750,6 @@ interface UIState {
   setRightPanelOpen: (open: boolean) => void
   setTerminalRatio: (ratio: number) => void
   /**
-   * 큰 파일 뷰어를 연다. 이미 열려 있으면 그 파일로 이동하고 방문 기록에 쌓는다.
-   * line 을 주면 그 줄로 스크롤한다.
-   */
-  /**
    * 대화 검색 결과로 이동한다 — 해당 워크스페이스를 열고 그 항목까지 스크롤한다.
    * 아카이브된 워크스페이스는 대화창이 없으므로 안내만 하고 이동하지 않는다.
    */
@@ -800,12 +760,8 @@ interface UIState {
   closeSubagent: () => void
   /** 이동이 끝났다(또는 대상을 못 찾았다) — 대기 중인 목적지를 지운다. */
   clearJumpTarget: () => void
+  /** 파일을 연다 — 실제로는 파일 탭을 열거나(main.tabs.open) 이미 열려 있으면 활성화한다. */
   openFileViewer: (workspaceId: string, path: string, line?: number) => void
-  closeFileViewer: () => void
-  /** 방문 기록에서 delta 만큼 이동(-1 뒤로, +1 앞으로). 범위를 벗어나면 아무것도 하지 않는다. */
-  navigateFileViewer: (delta: number) => void
-  toggleFileViewerTree: () => void
-  setFileViewerTreeWidth: (px: number) => void
   /** 토스트를 띄우고 그 id 를 반환한다. actions 를 주면 인라인 버튼이 붙고 자동으로 닫히지 않는다. */
   pushToast: (kind: ToastKind, message: string, actions?: ToastAction[]) => string
   dismissToast: (id: string) => void
@@ -1236,8 +1192,7 @@ export const useStore = create<UIState>((set, get) => ({
   },
   terminalRatio: 0.5,
   detachedPanes: { work: false, scripts: false, overview: false },
-  fileViewer: null,
-  fileViewerTreeWidth: 260,
+  fileNav: null,
   jumpTarget: null,
   selectedSubagent: null,
   toasts: [],
@@ -1252,7 +1207,6 @@ export const useStore = create<UIState>((set, get) => ({
   undoableArchive: null,
   activeReviewId: null,
   activeFanoutGroupId: null,
-  activeStackWorkspaceId: null,
   splitPane: null,
   splitFocus: 'main',
   splitFraction: readRememberedSplitFraction(),
@@ -1267,7 +1221,7 @@ export const useStore = create<UIState>((set, get) => ({
     }))
     try {
       const result = await window.api.workspace.archive(workspaceId)
-      // ⇧⌘T 가 되짚을 수 있게 쌓는다. 아카이브는 worktree 만 지우므로 되돌릴 수 있다.
+      // ⇧⌘Z 가 되짚을 수 있게 쌓는다. 아카이브는 worktree 만 지우므로 되돌릴 수 있다.
       set((s) => ({ reopenableArchives: pushReopenable(s.reopenableArchives, workspaceId) }))
       // archive script 가 도는 동안 사용자가 다른 워크스페이스로 이동할 수 있다. 완료 시점에도
       // 아카이브한 워크스페이스를 보고 있을 때만 Overview 로 나가야 새 선택을 덮어쓰지 않는다.
@@ -1521,7 +1475,7 @@ export const useStore = create<UIState>((set, get) => ({
       if (!w.archived) void get().refreshPr(w.id)
     }
 
-    // 패널을 토글할 때마다(키보드 ⌘J·버튼 등 경로 무관) workspace 별 상태를 기억해 둔다.
+    // 패널을 토글할 때마다(키보드 ⌥⌘J·버튼 등 경로 무관) workspace 별 상태를 기억해 둔다.
     useStore.subscribe((state, prev) => {
       if (state.rightPanelOpen !== prev.rightPanelOpen) rememberRightPanels(state.rightPanelOpen)
     })
@@ -2314,7 +2268,6 @@ export const useStore = create<UIState>((set, get) => ({
     set({
       activeFanoutGroupId: groupId,
       activeReviewId: null,
-      activeStackWorkspaceId: null,
       ...collapsedSplit
     })
     // 비교 화면의 후보 카드는 git 요약(N changed · ↑ahead)을 그대로 읽어 쓴다. 진입 시 한 번
@@ -2324,26 +2277,6 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   closeFanoutCompare: () => set({ activeFanoutGroupId: null }),
-
-  openStackView: (workspaceId) => {
-    set({
-      activeStackWorkspaceId: workspaceId,
-      activeReviewId: null,
-      activeFanoutGroupId: null,
-      ...collapsedSplit
-    })
-    // 층마다 워크트리가 따로인 모델 A 는 여기서 전부 새로 고쳐야 한 화면에 같은 시점이 모인다.
-    // 모델 B 는 층이 워크스페이스 하나를 나눠 쓰므로 한 번으로 끝난다(브랜치별 PR 은 화면이 읽는다).
-    const targets = new Set(
-      buildStackLayers(get().app?.workspaces ?? [], workspaceId).map((l) => l.workspaceId)
-    )
-    for (const id of targets) {
-      void get().refreshGit(id)
-      void get().refreshPr(id)
-    }
-  },
-
-  closeStackView: () => set({ activeStackWorkspaceId: null }),
 
   openSplitPane: (view) => {
     const st = get()
@@ -2365,15 +2298,11 @@ export const useStore = create<UIState>((set, get) => ({
       return
     }
     const next = openSplit(st.app?.workspaces ?? [], state, view)
-    // fan-out·스택 화면은 전체 화면이라 옆에 칸을 세울 자리가 없다 — 짝을 여는 김에 닫는다.
+    // fan-out 화면은 전체 화면이라 옆에 칸을 세울 자리가 없다 — 짝을 여는 김에 닫는다.
     set({
       splitPane: next.split,
       splitFocus: next.focus,
-      activeFanoutGroupId: null,
-      activeStackWorkspaceId: null,
-      // 큰 파일 뷰어는 두 칸을 통째로 덮으므로 분할과 함께 뜨지 않는다. 열려 있던 채로 두면
-      // 나중에 칸을 닫는 순간 잊고 있던 파일이 되살아나 대화를 가린다.
-      fileViewer: null
+      activeFanoutGroupId: null
     })
     get().hydratePaneView(view)
   },
@@ -2578,11 +2507,11 @@ export const useStore = create<UIState>((set, get) => ({
     const { archiveScriptFailure } = await window.api.workspace.remove(workspaceId, true)
     get().reportArchiveScriptFailure(archiveScriptFailure)
     if (get().undoableCreate?.workspaceId === workspaceId) set({ undoableCreate: null })
-    // 브랜치와 이력까지 지운 것은 되살릴 수 없다 — ⇧⌘T 가 시도하지 못하게 뺀다.
+    // 브랜치와 이력까지 지운 것은 되살릴 수 없다 — ⇧⌘Z 가 시도하지 못하게 뺀다.
     set((s) => ({ reopenableArchives: dropReopenable(s.reopenableArchives, workspaceId) }))
     if (!wasSelected) return
 
-    // 보고 있던 워크스페이스가 사라졌으니 ⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
+    // 보고 있던 워크스페이스가 사라졌으니 ⌥⌘[ 와 같은 규칙으로 직전에 보던 곳으로 돌아간다.
     // 방송된 상태를 기다리지 않고 지운 id 를 직접 제외한다 — 되돌아갈 곳이 방금 지운 그
     // 워크스페이스가 되면 안 된다.
     const s = get()
@@ -2891,7 +2820,7 @@ export const useStore = create<UIState>((set, get) => ({
     // 아래의 "고르면 전체 화면을 닫는다" 는 화면이 하나일 때의 규칙이라, 분할에 그대로
     // 적용하면 사이드바를 한 번 누를 때마다 사용자가 방금 만든 짝이 무너진다. 판정은
     // lib/splitPanes 한 곳에서 내리고 여기서는 그 답을 집행한다.
-    // ⌘[ / ⌘] 로 되짚는 이동은 방문 기록의 축이므로 늘 주 칸으로 간다.
+    // ⌥⌘[ / ⌥⌘] 로 되짚는 이동은 방문 기록의 축이므로 늘 주 칸으로 간다.
     // 아무것도 고르지 않거나(Overview) 아카이브된 워크스페이스를 읽기 전용으로 들여다보는
     // 것은 "지금 짝지어 보던 것을 그만둔다" 는 뜻이다 — 둘 다 나란히 세울 대상이 아니다.
     const peekingArchived = !!id && !!get().app?.workspaces.find((w) => w.id === id)?.archived
@@ -2918,11 +2847,8 @@ export const useStore = create<UIState>((set, get) => ({
     // 선택 시 미확인 표시 해제. 사이드바 선택은 하나의 축이므로 리뷰 화면에서도 빠져나온다
     // (리뷰 세션 자체는 남아 있어 사이드바에서 다시 고를 수 있다).
     set((s) => {
-      // 다른 워크스페이스로 옮기면 파일 뷰어는 닫는다 — 열린 경로가 그 worktree 전용이라
-      // 그대로 두면 새 워크스페이스에서 없는 파일을 가리키게 된다.
-      const fileViewer = s.fileViewer?.workspaceId === id ? s.fileViewer : null
       // 아카이브된 워크스페이스는 읽기 전용으로 잠깐 들여다보는 자리다 — 방문 이력의 어느 쪽에도
-      // 남기지 않는다(들어갈 때도, 떠날 때도). ⌘[ / ⌘] 는 살아 있는 워크스페이스 사이를 오가는
+      // 남기지 않는다(들어갈 때도, 떠날 때도). ⌥⌘[ / ⌥⌘] 는 살아 있는 워크스페이스 사이를 오가는
       // 축이라, 되살리지 않으면 돌아갈 수 없는 자리를 끼워 넣으면 되짚는 길만 길어진다.
       const peeking = !!archivedPreviewTarget(s.app?.workspaces, id)
       const from = archivedPreviewTarget(s.app?.workspaces, s.selectedWorkspaceId)
@@ -2939,14 +2865,12 @@ export const useStore = create<UIState>((set, get) => ({
       // 나온다" 는 뜻이다(그룹 자체는 남아 사이드바에서 다시 열 수 있다).
       const closed = {
         activeReviewId: null,
-        activeFanoutGroupId: null,
-        activeStackWorkspaceId: null
+        activeFanoutGroupId: null
       }
       if (!id || !s.unread[id])
         return {
           selectedWorkspaceId: id,
           ...closed,
-          fileViewer,
           workspaceHistory,
           workspaceForward
         }
@@ -2956,7 +2880,6 @@ export const useStore = create<UIState>((set, get) => ({
         selectedWorkspaceId: id,
         unread,
         ...closed,
-        fileViewer,
         workspaceHistory,
         workspaceForward
       }
@@ -3021,7 +2944,7 @@ export const useStore = create<UIState>((set, get) => ({
 
   goForwardWorkspace: async () => {
     const s = get()
-    // 앞으로가기에는 리뷰 화면 같은 "한 겹 위" 가 없다 — ⌘[ 로 떠나온 워크스페이스만 되짚는다.
+    // 앞으로가기에는 리뷰 화면 같은 "한 겹 위" 가 없다 — ⌥⌘[ 로 떠나온 워크스페이스만 되짚는다.
     const alive = new Set((s.app?.workspaces ?? []).filter((w) => !w.archived).map((w) => w.id))
     const { target, back, forward } = navigateWorkspaceHistory(
       { back: s.workspaceHistory, forward: s.workspaceForward },
@@ -3443,7 +3366,7 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   // 패널 상태를 직접 지정한다. 온보딩에서 고른 기본값을 지금 화면에도 바로 반영하기 위한 것으로,
-  // 토글과 같은 경로를 타므로 localStorage 기억값(⌘J 기록)까지 함께 갱신된다 — 그러지 않으면
+  // 토글과 같은 경로를 타므로 localStorage 기억값(⌥⌘J 기록)까지 함께 갱신된다 — 그러지 않으면
   // 이미 토글한 적 있는 기존 사용자에게는 기억값이 새로 고른 기본값을 계속 덮어써 버린다.
   setRightPanelOpen: (open) => {
     const workspaceId = get().selectedWorkspaceId
@@ -3493,46 +3416,14 @@ export const useStore = create<UIState>((set, get) => ({
 
   closeSubagent: () => set((s) => (s.selectedSubagent ? { selectedSubagent: null } : {})),
 
-  openFileViewer: (workspaceId, path, line) =>
-    set((s) => {
-      const cur = s.fileViewer
-      // 처음 열거나 다른 워크스페이스로 넘어가면 기록을 새로 시작한다(경로가 그 worktree 전용이다).
-      if (!cur || cur.workspaceId !== workspaceId)
-        return { fileViewer: { workspaceId, history: [{ path, line }], index: 0, treeOpen: true } }
-
-      // 보고 있던 파일을 다시 열면 기록을 늘리지 않고 줄 위치만 갱신한다.
-      if (cur.history[cur.index]?.path === path) {
-        const history = cur.history.slice()
-        history[cur.index] = { path, line }
-        return { fileViewer: { ...cur, history } }
-      }
-
-      // 뒤로 간 상태에서 새 파일을 열면 앞쪽 기록은 브라우저처럼 버린다.
-      const history = [...cur.history.slice(0, cur.index + 1), { path, line }].slice(
-        -FILE_HISTORY_MAX
-      )
-      return { fileViewer: { ...cur, history, index: history.length - 1 } }
-    }),
-
-  closeFileViewer: () => set({ fileViewer: null }),
-
-  navigateFileViewer: (delta) =>
-    set((s) => {
-      const cur = s.fileViewer
-      if (!cur) return {}
-      const index = cur.index + delta
-      if (index < 0 || index >= cur.history.length) return {}
-      return { fileViewer: { ...cur, index } }
-    }),
-
-  toggleFileViewerTree: () =>
-    set((s) =>
-      s.fileViewer ? { fileViewer: { ...s.fileViewer, treeOpen: !s.fileViewer.treeOpen } } : {}
-    ),
-
-  // 트리가 사라지거나 코드 영역을 다 먹지 않도록 양끝을 클램프한다.
-  setFileViewerTreeWidth: (px) =>
-    set({ fileViewerTreeWidth: Math.max(180, Math.min(560, Math.round(px))) }),
+  openFileViewer: (workspaceId, path, line) => {
+    // 탭이 이력을 대신한다 — 같은 kind+target 탭이 있으면 main 이 새로 만들지 않고 그것을
+    // 활성화한다([[main/workspaceTabs]] openTab). 줄 번호는 target 에 넣지 않는다: 넣으면
+    // (`path#L42`) 같은 파일을 다른 줄로 열 때마다 탭이 하나 더 생긴다. 대신 `fileNav` 로
+    // 흘려보내 활성 파일 탭이 그 줄로 스크롤하게 한다.
+    void window.api.tabs.open(workspaceId, { kind: 'file', target: path })
+    set({ fileNav: { path, line, seq: ++fileNavSeq } })
+  },
 
   pushToast: (kind, message, actions) => {
     const id = `toast:${++toastSeq}`
@@ -3614,7 +3505,6 @@ export const useStore = create<UIState>((set, get) => ({
       const id = res.reviewId
       set({
         activeReviewId: id,
-        activeStackWorkspaceId: null,
         ...collapsedSplit,
         reviewViews: { ...get().reviewViews, [id]: emptyView() }
       })
@@ -3633,7 +3523,7 @@ export const useStore = create<UIState>((set, get) => ({
         return
       }
     }
-    set({ activeReviewId: reviewId, activeStackWorkspaceId: null })
+    set({ activeReviewId: reviewId })
     void get().loadReview(reviewId)
     // 열어서 봤으므로 미확인 점을 끈다.
     void window.api.review.markSeen(reviewId)

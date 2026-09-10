@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+import { useSuppressViewsOver } from '../lib/viewSuppress'
 import { CheckCircle2, Info, AlertTriangle, X } from 'lucide-react'
 import { useStore, type ToastKind } from '../store'
 
@@ -6,8 +8,13 @@ export default function Toaster(): React.JSX.Element {
   const toasts = useStore((s) => s.toasts)
   const dismiss = useStore((s) => s.dismissToast)
 
+  // `fixed bottom-4 right-4` 는 작업 패널과 정확히 겹친다. 전면 가림으로 두면 토스트 하나에
+  // dev 프리뷰 전체가 깜빡이므로, 겹치는 뷰만 잠깐 숨긴다([[lib/viewSuppress]]).
+  const box = useRef<HTMLDivElement>(null)
+  useSuppressViewsOver(box, toasts.length > 0)
+
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 max-w-sm">
+    <div ref={box} className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 max-w-sm">
       {/* role="alert" 를 여기 두지 않는다 — 토스트 내용은 LiveRegion(유일한 라이브 리전
           호스트)이 polite 로 읽는다. 여기 다시 붙이면 같은 문장이 두 리전에서 겹쳐 읽히고,
           방금 한 행동의 결과 보고일 뿐인 토스트가 읽던 것을 끊고 끼어든다. */}

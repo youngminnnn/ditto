@@ -278,6 +278,13 @@ async function cropElement(
   send: (method: string, params?: object) => Promise<never>,
   nodeId: number
 ): Promise<string | undefined> {
+  // 뷰가 창에서 떨어져 있거나 숨겨진 동안은 게스트가 화면에 그려지지 않아 capturePage 가
+  // 빈 이미지를 준다. 아래 try 안에서 그 상태로 크롭을 시도하면 "크롭 없음" 으로 조용히
+  // 넘어가서 사용자는 이유를 알 길이 없다 — 여기서 미리 확인해 명확한 에러로 알린다.
+  if ((await guest.capturePage()).isEmpty()) {
+    throw new Error('This page is not visible right now, so the element could not be captured.')
+  }
+
   try {
     const box = (await send('DOM.getBoxModel', { nodeId })) as unknown as {
       model?: { border?: number[] }

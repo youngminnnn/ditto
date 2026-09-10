@@ -4,7 +4,7 @@ import { SWITCH_HINT_THRESHOLD } from './uiFlags'
 /**
  * 점진적 온보딩 힌트 레지스트리.
  *
- * `Sidebar.tsx` 에 하드코딩돼 있던 두 힌트(⌘K, ⌘↑/⌘↓)가 정답에 가까운 패턴이었다 — 한계에 실제로
+ * `Sidebar.tsx` 에 하드코딩돼 있던 두 힌트(⌘K, ⌥⌘↑/⌥⌘↓)가 정답에 가까운 패턴이었다 — 한계에 실제로
  * 부딪힌 순간에만, 작고 흐리게, X 로 닫으면 끝. 이 파일은 그 패턴을 일반화해, 예전 7단계 일괄
  * 투어가 하던 소개를 그 기능에 실제로 도달한 순간들로 흩어 놓는다(`OnboardingModal` 은 더 이상
  * 이걸 첫 실행에 일괄로 하지 않는다).
@@ -174,7 +174,7 @@ export const HINTS: Hint[] = [
     priority: 40,
     when: (ctx) => !!ctx.selected && ctx.selected.changedFiles > 0 && !ctx.selected.panelOpen,
     body: 'Your changed files show up here — diff, checks, and a terminal, all scoped to this workspace.',
-    shortcut: '⌘J'
+    shortcut: '⌥⌘J'
   },
   {
     id: 'stack-work',
@@ -219,7 +219,7 @@ export const HINTS: Hint[] = [
     priority: 61,
     when: (ctx) => ctx.mouseSwitchCount >= SWITCH_HINT_THRESHOLD && ctx.visibleWorkspaceCount > 1,
     body: 'Switch workspaces without leaving the keyboard.',
-    shortcut: '⌘↑ / ⌘↓'
+    shortcut: '⌥⌘↑ / ⌥⌘↓'
   },
   {
     id: 'peer-message',

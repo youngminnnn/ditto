@@ -49,7 +49,7 @@ describe('pushWorkspaceHistory', () => {
 describe('popWorkspaceHistory', () => {
   const alive = new Set(['a', 'b', 'c'])
 
-  /** A → B → C 에서 ⌘[ 두 번이면 B 를 거쳐 A 까지 거슬러 올라간다. */
+  /** A → B → C 에서 ⌥⌘[ 두 번이면 B 를 거쳐 A 까지 거슬러 올라간다. */
   it('방문 순서를 거슬러 올라간다', () => {
     const first = popWorkspaceHistory(['a', 'b'], 'c', alive)
     expect(first.target).toBe('b')

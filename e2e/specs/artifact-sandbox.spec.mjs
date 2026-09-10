@@ -42,7 +42,9 @@ async function untilGuest(wooi, predicate, message) {
     const seen = await wooi.app.evaluate(async ({ webContents, session }, partition) => {
       const guest = webContents
         .getAllWebContents()
-        .find((wc) => wc.getType() === 'webview' && wc.session === session.fromPartition(partition))
+        // 게스트는 이제 `<webview>` 가 아니라 main 이 소유하는 뷰다([[main/webViews]]) —
+        // 파티션이 곧 신원이고, 그 판정은 뷰 구현이 바뀌어도 흔들리지 않는다.
+        .find((wc) => wc.session === session.fromPartition(partition))
       if (!guest || guest.isDestroyed()) return { found: false }
       return { found: true, url: guest.getURL() }
     }, ARTIFACT_PARTITION)
@@ -58,7 +60,9 @@ function inGuest(wooi, source) {
     async ({ webContents, session }, { partition, code }) => {
       const guest = webContents
         .getAllWebContents()
-        .find((wc) => wc.getType() === 'webview' && wc.session === session.fromPartition(partition))
+        // 게스트는 이제 `<webview>` 가 아니라 main 이 소유하는 뷰다([[main/webViews]]) —
+        // 파티션이 곧 신원이고, 그 판정은 뷰 구현이 바뀌어도 흔들리지 않는다.
+        .find((wc) => wc.session === session.fromPartition(partition))
       if (!guest) throw new Error('no artifact guest to run in')
       return guest.executeJavaScript(code)
     },
@@ -111,8 +115,11 @@ export default async function 아티팩트가_격리된_스킴에서_뜨고_망�
       try {
         await openSeededWorkspace(wooi.win)
 
-        // 1. 탭을 누르면 게스트가 붙는다(누르기 전에는 만들지 않는다 — 안 쓸 게스트를
-        //    워크스페이스마다 띄울 이유가 없다).
+        // 1. 아티팩트는 워크스페이스 탭이다. 에이전트가 만들면 탭이 저절로 생기지만, 여기서는
+        //    디스크에 미리 심어 둔 것을 여는 것이라 사람과 같은 입구(탭 스트립의 +)를 쓴다.
+        //    탭을 열어야 게스트가 붙는다 — 열기 전에는 만들지 않는다(안 쓸 게스트를 워크스페이스
+        //    마다 띄울 이유가 없다).
+        await wooi.win.getByRole('button', { name: 'New tab' }).click()
         await wooi.win.getByRole('button', { name: 'Artifacts' }).click()
         await wooi.win.getByText('E2E artifact').first().waitFor()
 

@@ -1,3 +1,4 @@
+import { useSuppressAllViews } from '../lib/viewSuppress'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { primaryBtn, ghostBtn } from './Modal'
@@ -87,8 +88,8 @@ const STEPS: Step[] = [
       </>
     ),
     shortcuts: [
-      { keys: '⌘1–9', label: 'Jump to a workspace' },
-      { keys: '⌘↑ / ⌘↓', label: 'Previous / next' }
+      { keys: '⌥⌘1–9', label: 'Jump to a workspace' },
+      { keys: '⌥⌘↑ / ⌥⌘↓', label: 'Previous / next' }
     ]
   },
   {
@@ -112,10 +113,10 @@ const STEPS: Step[] = [
         Your files, the diff of what changed, CI-style checks, and an interactive terminal — all
         scoped to the current workspace. Open a pull request and pull base updates from here too.
         Set whether it starts open by default in <b className="text-neutral-200">Settings</b> — your
-        last <b className="text-neutral-200">⌘J</b> toggle is then remembered from there.
+        last <b className="text-neutral-200">⌥⌘J</b> toggle is then remembered from there.
       </>
     ),
-    shortcuts: [{ keys: '⌘J', label: 'Toggle the work panel' }]
+    shortcuts: [{ keys: '⌥⌘J', label: 'Toggle the work panel' }]
   },
   {
     target: 'review-pr',
@@ -252,6 +253,9 @@ export default function FeatureTour({ onDone }: { onDone: () => void }): React.J
       </div>
     </div>
   )
+
+  // 얹은 웹 뷰는 네이티브라 DOM 위에 그려진다 — 덮는 것만으로는 안 가려진다([[lib/viewSuppress]]).
+  useSuppressAllViews()
 
   return (
     <div className="fixed inset-0 z-50">

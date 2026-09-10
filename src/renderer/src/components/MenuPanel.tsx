@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+import { useSuppressViewsOver } from '../lib/viewSuppress'
 import type { HTMLAttributes } from 'react'
 
 export const menuItemCls =
@@ -8,8 +10,13 @@ export default function MenuPanel({
   className = '',
   ...props
 }: HTMLAttributes<HTMLDivElement>): React.JSX.Element {
+  // 드롭다운은 화면 한 귀퉁이만 덮는다 — 겹치는 뷰만 숨긴다. 이 한 줄로 StackPopover·
+  // PrActionsMenu·SavedPromptPicker·BaseSyncControl 이 함께 따라온다([[lib/viewSuppress]]).
+  const box = useRef<HTMLDivElement>(null)
+  useSuppressViewsOver(box)
   return (
     <div
+      ref={box}
       className={`rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] py-1 shadow-xl ${className}`}
       {...props}
     />

@@ -23,12 +23,15 @@ import ArtifactView from './ArtifactView'
 
 export default function ArtifactPanel({
   workspace,
+  tabId,
   target,
   active
 }: {
   workspace: Workspace
+  /** 이 패널이 사는 탭의 id — 게스트 뷰가 그 id 로 상태를 방송한다([[main/webViews]]). */
+  tabId: string
   /**
-   * WorkPanel 이 넘기는 "이걸 열어라" 명령(create_artifact 가 방금 만든 것).
+   * 탭을 여는 쪽이 넘기는 "이걸 열어라" 명령(create_artifact 가 방금 만든 것).
    * seq 가 바뀔 때만 따라간다 — 같은 명령을 두 번 따라가면 사용자가 방금 고른 버전을 뺏는다.
    */
   target: { artifactId: string; version: number; seq: number } | null
@@ -114,6 +117,7 @@ export default function ArtifactPanel({
         <div className="relative flex-1 min-h-0">
           <ArtifactView
             workspaceId={workspace.id}
+            tabId={tabId}
             artifactId={selected?.id ?? null}
             version={shownVersion}
             kind={selected?.kind ?? null}

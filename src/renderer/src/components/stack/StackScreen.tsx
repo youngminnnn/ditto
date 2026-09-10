@@ -31,12 +31,19 @@ const chipCls = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs'
  * 있던 컴포넌트(`BaseSyncControl`·`StackTrainModal`·`CommitMoveModal`·배너들)에서 온다.
  * 기존 진입점(헤더의 `StackPopover` 등)은 그대로 남는다.
  */
-export default function StackScreen({ workspaceId }: { workspaceId: string }): React.JSX.Element {
+export default function StackScreen({
+  workspaceId,
+  onClose
+}: {
+  workspaceId: string
+  /** 닫기를 스스로 정하지 않는다 — 이 화면은 탭 하나일 뿐이고, "닫는다" 가 무엇을 뜻하는지
+   * (탭을 닫는다) 는 그 탭을 담은 쪽([[components/tabs/StackTab]])이 안다. */
+  onClose: () => void
+}): React.JSX.Element {
   const workspaces = useStore((s) => s.app!.workspaces)
   const gitStatus = useStore((s) => s.gitStatus)
   const prStatusMap = useStore((s) => s.prStatus)
   const stackProgress = useStore((s) => s.stackProgress)
-  const closeStackView = useStore((s) => s.closeStackView)
   const refreshGit = useStore((s) => s.refreshGit)
   const refreshPr = useStore((s) => s.refreshPr)
   const requireGithub = useStore((s) => s.requireGithub)
@@ -135,6 +142,18 @@ export default function StackScreen({ workspaceId }: { workspaceId: string }): R
     await Promise.all([...ids].flatMap((id) => [refreshGit(id), refreshPr(id)]))
     setNonce((n) => n + 1)
   }
+
+  // 이 화면을 열 때 층마다 git·PR 을 한 번 새로 고친다.
+  //
+  // 층은 저마다 워크트리가 따로라 마지막으로 조회한 시점이 다르다. 새로 고치지 않으면 서로
+  // 다른 시점의 behind·PR 상태가 한 화면에 나란히 놓이는데, 그걸 **비교하려고** 연 화면에서
+  // 비교가 성립하지 않는다. 예전에는 화면을 여는 스토어 액션이 이 일을 했지만 스택이 탭이
+  // 되면서 그 자리가 사라졌다 — 데이터가 필요한 쪽으로 옮겨 왔다.
+  useEffect(() => {
+    void refreshAll()
+    // 마운트당 한 번. deps 에 layers 를 넣으면 새로고침 결과가 자기 자신을 다시 부른다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const trainProgress = trainTargetId ? stackProgress[trainTargetId] : null
 
@@ -268,7 +287,7 @@ export default function StackScreen({ workspaceId }: { workspaceId: string }): R
             {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
           </button>
           <button
-            onClick={closeStackView}
+            onClick={onClose}
             title="Close the stack view"
             aria-label="Close the stack view"
             className="grid h-7 w-7 place-items-center rounded-md text-neutral-400 hover:bg-[var(--surface-2)] hover:text-neutral-100 active:scale-90"

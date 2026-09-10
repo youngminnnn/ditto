@@ -333,6 +333,32 @@ export const WOOI_COMMANDS: WooiCommandSpec[] = [
     prompt: 'Call `mcp__wooi__open_preview` to show this path in the preview: $ARGUMENTS'
   },
   {
+    name: 'web',
+    tool: 'open_web_tab',
+    mode: 'direct',
+    description: 'Open a web page as a tab in this workspace',
+    argumentHint: '<url>',
+    prompt: 'Call `mcp__wooi__open_web_tab` to open this address as a tab: $ARGUMENTS'
+  },
+  {
+    name: 'file',
+    tool: 'open_file_tab',
+    mode: 'direct',
+    description: 'Open a file from this worktree as a tab',
+    argumentHint: '<path>',
+    prompt: 'Call `mcp__wooi__open_file_tab` to open this file as a tab: $ARGUMENTS'
+  },
+  {
+    // `/wooi:artifact` 는 create_artifact 가 이미 쓰고 있다 — 만드는 것과 다시 여는 것이
+    // 이름 하나를 두고 다투면 둘 다 못 찾는다.
+    name: 'open-artifact',
+    tool: 'open_artifact_tab',
+    mode: 'direct',
+    description: 'Bring an artifact this workspace made back on screen',
+    argumentHint: '<id> [version]',
+    prompt: 'Call `mcp__wooi__open_artifact_tab` to show this artifact again: $ARGUMENTS'
+  },
+  {
     // 즉시 실행이 아니라 에이전트를 거친다. 이 도구의 결과는 그림이고, 그림은 모델의 눈에
     // 닿아야 값이 있다 — 즉시 실행 경로는 결과 JSON 을 카드에 그대로 펼치므로, 여기서는
     // 거대한 base64 한 덩어리를 화면에 쏟는 것으로 끝난다.
@@ -465,6 +491,24 @@ export function parseWooiCommandArgs(name: string, raw: string): WooiCommandArgs
     // 경로는 없어도 된다(기본값 "/"). 있으면 그대로 넘긴다 — 검증은 도구가 한다.
     case 'preview':
       return { args: rest ? { path: rest } : {} }
+
+    // 아래 셋은 인자가 필수다. 비어 있어도 그대로 넘긴다 — 무엇이 빠졌는지 말하는 것은
+    // 도구의 에러 문장이고, 여기서 미리 막으면 그 문장이 사용자에게 안 간다.
+    case 'web':
+      return { args: { url: rest } }
+    case 'file':
+      return { args: { path: rest } }
+
+    // `<id> [version]` — 버전은 숫자여야 하므로 숫자로 넘긴다. 숫자가 아니면 손대지 않고
+    // 넘겨 도구가 판정하게 둔다(여기서 삼키면 오타가 조용히 최신 버전으로 열린다).
+    case 'open-artifact': {
+      const [id, version] = words(rest)
+      if (version == null) return { args: { artifact_id: id ?? '' } }
+      const parsed = Number(version)
+      return {
+        args: { artifact_id: id ?? '', version: Number.isInteger(parsed) ? parsed : version }
+      }
+    }
 
     case 'message-status':
       return { args: rest ? { messageId: rest } : {} }

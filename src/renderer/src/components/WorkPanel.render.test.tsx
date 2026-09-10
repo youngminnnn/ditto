@@ -15,10 +15,13 @@ beforeEach(() => resetStore())
 describe('work panel 탭', () => {
   it('탭마다 접근 가능한 이름이 있어 라벨이 감춰져도 식별된다', () => {
     renderWithStore(<WorkPanel workspace={workspace()} />)
-    for (const label of ['All files', 'Changes', 'Check', 'Preview', 'Artifacts']) {
+    for (const label of ['All files', 'Changes', 'Check']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
     expect(screen.queryByRole('button', { name: 'Commits' })).not.toBeInTheDocument()
+    // Preview 는 워크스페이스 탭으로 승격돼 이 패널을 떠났다([[components/TabStrip]]).
+    // 여기 남아 있으면 같은 화면을 두 곳에서 열 수 있게 되고, 어느 쪽이 진짜인지 흐려진다.
+    expect(screen.queryByRole('button', { name: 'Preview' })).not.toBeInTheDocument()
   })
 
   // 탭이 눌려 글자가 밀리던 회귀의 정체는 flex 기본값 shrink:1 이었다. 폭 계산은 jsdom 밖의

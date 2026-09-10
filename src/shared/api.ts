@@ -47,6 +47,10 @@ import type {
   McpInventory,
   McpOauthLoginCompletedEvent,
   McpServerInfo,
+  MenuCommand,
+  HostedViewEvent,
+  HostedViewKind,
+  HostedViewLayout,
   ModelOption,
   MemoryScope,
   NotificationSkip,
@@ -91,7 +95,9 @@ import type {
   UpdateFromBaseResult,
   UpdateStatus,
   WorkspaceCompareBase,
-  WorkspaceDiff
+  WorkspaceDiff,
+  WorkspaceTabKind,
+  WorkspaceTabsState
 } from './types'
 import type { PreviewIssue } from './previewIssues'
 
@@ -374,25 +380,27 @@ export interface WooiApi {
     open(workspaceId: string, url: string): Promise<void>
     /**
      * Preview 화면을 캡처해 컴포저 첨부로 보낸다. 성공하면 이미지는 onComposerAttach 로 온다.
-     * webContentsId 는 `<webview>.getWebContentsId()` — main 이 그 게스트가 정말 Preview 인지 확인한다.
+     * tabId 는 우리가 발급한 것이라 main 은 자기 레지스트리에서 찾기만 하면 된다 — 렌더러가
+     * 준 숫자를 검증하던 관문이 필요 없어졌다([[main/webViews]]).
      */
-    capture(workspaceId: string, webContentsId: number): Promise<PreviewCaptureResult>
+    capture(workspaceId: string, tabId: string): Promise<PreviewCaptureResult>
     /**
      * 요소 픽커를 켜고 사용자가 고를 때까지 기다린다. 고르면 결과는 onComposerAttach 로 오고,
      * 여기서는 끝났다는 것(또는 실패 사유)만 돌려준다. 취소·타임아웃도 error 로 온다.
      */
-    pickElement(workspaceId: string, webContentsId: number): Promise<PreviewCaptureResult>
+    pickElement(workspaceId: string, tabId: string): Promise<PreviewCaptureResult>
     /** 진행 중인 픽을 취소한다. 켜져 있지 않으면 아무 일도 하지 않는다. */
-    cancelPick(webContentsId: number): Promise<void>
-    /** 이 게스트의 콘솔·네트워크 문제를 이 워크스페이스 것으로 모으기 시작한다. */
-    watchIssues(workspaceId: string, webContentsId: number): Promise<void>
-    /** 수집을 멈춘다(패널이 사라질 때). */
-    unwatchIssues(webContentsId: number): Promise<void>
-    /** 모아 둔 문제 목록. 개수만 방송되므로 패널을 열 때 이걸로 채운다. */
-    listIssues(workspaceId: string): Promise<PreviewIssue[]>
-    clearIssues(workspaceId: string): Promise<void>
+    cancelPick(tabId: string): Promise<void>
+    /** 모아 둔 문제 목록. 개수만 방송되므로 패널을 열 때 이걸로 채운다. 워크스페이스가 아니라
+     *  tabId 로 찾는다 — 한 워크스페이스에 탭이 여럿일 수 있어서다. */
+    listIssues(tabId: string): Promise<PreviewIssue[]>
+    clearIssues(tabId: string): Promise<void>
     /** 고른 문제들을 컴포저에 넣는다(결과는 onComposerAttach 로 온다). */
-    sendIssues(workspaceId: string, issueIds: string[]): Promise<PreviewCaptureResult>
+    sendIssues(
+      workspaceId: string,
+      tabId: string,
+      issueIds: string[]
+    ): Promise<PreviewCaptureResult>
     onOpen(cb: (e: PreviewOpenEvent) => void): () => void
     onIssues(cb: (e: PreviewIssueCountEvent) => void): () => void
   }
@@ -710,6 +718,33 @@ export interface WooiApi {
   }
 
   /**
+   * 콘텐츠 영역 맨 위 탭 스트립(대화 + dev 프리뷰 + 웹 + 파일 + 아티팩트 + 스택). 목록의 단일
+   * 진실 원천은 main 이고, 변경은 모든 창에 방송된다([[main/workspaceTabs]]).
+   */
+  tabs: {
+    /** 탭 구성을 읽는다. 탭이 하나도 없으면 메인이 대화 탭 하나로 채워 돌려준다. */
+    get(workspaceId: string): Promise<WorkspaceTabsState>
+    /**
+     * 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 쓴다.
+     * `activate` 는 기본이 참 — 거짓이면 탭만 만들고 화면은 그대로 둔다(에이전트가 여는 경우).
+     */
+    open(
+      workspaceId: string,
+      opts: { kind: WorkspaceTabKind; target?: string; title?: string; activate?: boolean }
+    ): Promise<WorkspaceTabsState>
+    /** 탭을 닫는다. 대화 탭(chat)은 조용히 무시된다. */
+    close(workspaceId: string, tabId: string): Promise<WorkspaceTabsState>
+    /** 보고 있는 탭을 바꾼다. */
+    select(workspaceId: string, tabId: string): Promise<WorkspaceTabsState>
+    /** 탭 이름을 바꾼다(빈 문자열이면 기본 이름으로 되돌린다). */
+    rename(workspaceId: string, tabId: string, title: string): Promise<WorkspaceTabsState>
+    /** 가장 최근에 닫은 탭을 되살린다(워크스페이스별 최대 10개까지 기억, 영속하지 않는다). */
+    reopen(workspaceId: string): Promise<WorkspaceTabsState>
+    /** 탭 구성 변경 방송 — 다른 창(분리한 작업 패널)에서 바꾼 것도 여기로 들어온다. */
+    onTabs(cb: (e: WorkspaceTabsState) => void): () => void
+  }
+
+  /**
    * 패널을 별도 창으로 분리한다(듀얼 모니터에서 보조 화면에 띄우기 위한 것).
    * 분리한 창은 메인 창의 선택 워크스페이스를 따라가고, 닫으면 패널이 메인 창으로 되돌아온다.
    */
@@ -895,6 +930,39 @@ export interface WooiApi {
   onSelectWorkspace(cb: (workspaceId: string) => void): () => void
   /** 분리한 패널 창이 요청한 리포 설정 열기(메인 창이 모달을 띄운다). */
   onOpenRepoSettings(cb: (repoId: string) => void): () => void
+  /**
+   * main 이 소유하는 웹 뷰(dev 프리뷰·웹 탭).
+   *
+   * 명령만 이쪽으로 가고, 뷰가 **어디에 얼마나** 그려질지는 렌더러가 재서 `setLayout` 으로
+   * 흘린다 — 네이티브 뷰는 CSS 레이아웃을 모르기 때문이다.
+   */
+  views: {
+    /**
+     * 탭에 뷰를 붙여 준다. `initialUrl` 은 **처음 만들 때만** 쓰인다 — 이미 있는 뷰에는 아무
+     * 영향이 없다. 그 판단을 main 에 둔 이유는 렌더러가 하면 탭을 오갈 때마다 다시 로드해
+     * 보고 있던 페이지를 처음으로 되감기 때문이다.
+     */
+    ensure(
+      tabId: string,
+      workspaceId: string,
+      kind: HostedViewKind,
+      initialUrl?: string
+    ): Promise<void>
+    /** 이 창에 붙인다. 어느 창인지는 main 이 보낸 쪽에서 읽는다(렌더러가 정하지 않는다). */
+    attach(tabId: string): Promise<void>
+    detach(tabId: string): Promise<void>
+    load(tabId: string, url: string): Promise<void>
+    reload(tabId: string): Promise<void>
+    stop(tabId: string): Promise<void>
+    goBack(tabId: string): Promise<void>
+    goForward(tabId: string): Promise<void>
+    destroy(tabId: string): Promise<void>
+    /** 프레임마다 나가는 자리 갱신. 회신이 없다. */
+    setLayout(layouts: HostedViewLayout[]): void
+    onEvent(cb: (e: HostedViewEvent) => void): () => void
+  }
+  /** 애플리케이션 메뉴에서 고른 항목. 메인 창에만 온다. */
+  onMenuCommand(cb: (command: MenuCommand) => void): () => void
   /** main 창이 포커스를 얻었을 때의 알림(미확인 표시 해제 트리거). */
   onWindowFocus(cb: () => void): () => void
   /** main 창이 포커스를 잃었을 때의 알림(이후 완료를 미확인으로 잡는 신뢰 신호). */

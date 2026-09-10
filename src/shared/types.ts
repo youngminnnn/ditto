@@ -586,7 +586,7 @@ export function promoteWorkspaceStack<
  * 규칙: repos 배열 순서로 레포를 훑고, 레포 안에서는 orderByStack(부모 바로 뒤에 자식) 순서.
  * 두 배열 순서가 곧 표시 순서이므로(reorderById 참조), 드래그 앤 드롭 재정렬도 그대로 반영된다.
  *
- * ⌘1–9 번호 배지·⌘1–9 선택·⌘↑ / ⌘↓ 순환이 모두 이 함수 하나를 공유해야 한다.
+ * ⌥⌘1–9 번호 배지·⌥⌘1–9 선택·⌥⌘↑ / ⌥⌘↓ 순환이 모두 이 함수 하나를 공유해야 한다.
  * (예전에는 app.workspaces 원본 배열 순서를 그대로 썼는데, 그 배열은 레포별로 묶여 있지 않아
  *  레포가 여러 개면 A→B→A 처럼 섞여 화면 순서와 어긋났다. 그래서 번호가 꼬였다.)
  */
@@ -1071,6 +1071,14 @@ export interface Workspace {
   terminalTabs?: TerminalTab[]
   /** 마지막으로 보고 있던 터미널 탭. terminalTabs 에 없는 값이면 첫 탭으로 되돌린다. */
   activeTerminalTabId?: string
+  /**
+   * 콘텐츠 영역 맨 위 탭 스트립(대화 + dev 프리뷰 + 웹 + 파일 + 아티팩트 + 스택)의 탭 목록.
+   * 없거나 비어 있으면 첫 조회 때 작업 탭 하나로 채운다 — 레거시 워크스페이스는 마이그레이션
+   * 없이 "작업 탭 1개" 로 읽힌다. 작업 탭(id='work')은 언제나 이 배열의 첫 항목이다.
+   */
+  tabs?: WorkspaceTab[]
+  /** 마지막으로 보고 있던 탭. tabs 에 없는 값이면 작업 탭으로 되돌린다. */
+  activeTabId?: string
   createdAt: number
   lastActiveAt: number
 }
@@ -2699,7 +2707,7 @@ export type ScriptRunState = 'idle' | 'running' | 'exited'
 // ── Preview 패널(워크트리의 dev 서버를 앱 안에서 보는 탭) ────────────────
 
 /**
- * Preview `<webview>` 가 쓰는 Electron 세션 파티션.
+ * Preview 게스트가 쓰는 Electron 세션 파티션.
  *
  * 앱의 기본 세션과 **반드시** 갈라 둔다. 이유가 둘이다:
  *  1. 격리 — 미리보는 페이지가 앱이 들고 있는 쿠키·스토리지·자격증명에 닿지 못한다.
@@ -2711,10 +2719,29 @@ export type ScriptRunState = 'idle' | 'running' | 'exited'
  */
 export const PREVIEW_PARTITION = 'persist:wooi-preview'
 
+/**
+ * 일반 웹 탭이 쓰는 파티션. dev 프리뷰와 **갈라 둔다.**
+ *
+ * 문서 사이트에 로그인해 둔 쿠키가 우리 dev 서버 요청에 실려 나가면 안 되고, 반대로 dev 앱이
+ * 심는 스토리지가 바깥 사이트에 보여도 안 된다. 둘 다 우리가 만든 게 아니라 남의 페이지다.
+ *
+ * 워크스페이스별로 나누지 않는다 — 문서를 읽으려고 워크스페이스마다 다시 로그인하게 만들
+ * 이유가 없다. 격리의 경계는 "앱 : 바깥" 과 "dev : 바깥" 이지 워크스페이스 사이가 아니다.
+ */
+export const BROWSER_PARTITION = 'persist:wooi-browser'
+
 /** Preview 를 특정 주소로 열라는 신호(evtPreviewOpen 페이로드). */
 export interface PreviewOpenEvent {
   workspaceId: string
   url: string
+  /**
+   * 그 탭으로 화면을 옮길지.
+   *
+   * 사람이 "Open in Preview" 를 누른 것이면 참이다 — 누른 이유가 곧 보려는 것이다. 에이전트가
+   * 연 것이면 거짓이다: 사용자는 대화를 읽던 중이고, 그 화면이 예고 없이 갈리면 방금 무엇을
+   * 읽고 있었는지 잃는다. 탭은 생기므로 가고 싶으면 누르면 된다.
+   */
+  activate: boolean
 }
 
 // ── Artifacts(에이전트가 만든 것을 앱 안에서 실행해 보여주는 탭) ────────────────
@@ -2871,8 +2898,10 @@ export interface ComposerAttachment {
 /** 컴포저에 넣을 것이 도착했다(evtComposerAttach 페이로드). */
 export type ComposerAttachEvent = ComposerAttachment & { workspaceId: string }
 
-/** Preview 가 모은 문제의 개수(evtPreviewIssues 페이로드). */
+/** Preview 가 모은 문제의 개수(evtPreviewIssues 페이로드). 탭 단위로 모으지만, 사이드바
+ *  배지가 조회 테이블 없이 그릴 수 있도록 workspaceId 도 함께 싣는다. */
 export interface PreviewIssueCountEvent {
+  tabId: string
   workspaceId: string
   errors: number
   warnings: number
@@ -4157,6 +4186,19 @@ export const IPC = {
   terminalExec: 'terminal:exec',
   /** 진행 중인 인라인 `!명령`(execInline)을 중단한다. 인자로 workspaceId 와 대상 아이템 id 를 받는다. */
   terminalKillInline: 'terminal:killInline',
+  // 워크스페이스 콘텐츠 탭 (대화 위 크롬형 탭 스트립 — 대화·dev 프리뷰·웹·파일·아티팩트·스택)
+  /** 탭 구성을 읽는다(없으면 작업 탭 하나로 채워 돌려준다). */
+  tabsGet: 'tabs:get',
+  /** 탭을 연다. 같은 kind+target 탭이 이미 있으면 새로 만들지 않고 그것을 활성화한다. */
+  tabsOpen: 'tabs:open',
+  /** 탭을 닫는다. 작업 탭(work)은 조용히 무시한다. */
+  tabsClose: 'tabs:close',
+  /** 보고 있는 탭을 바꾼다. */
+  tabsSelect: 'tabs:select',
+  /** 탭 이름을 바꾼다(빈 문자열이면 기본 이름으로 되돌린다). */
+  tabsRename: 'tabs:rename',
+  /** 가장 최근에 닫은 탭을 되살린다(워크스페이스별 최대 10개까지 기억, 영속하지 않는다). */
+  tabsReopen: 'tabs:reopen',
   // 분리한 패널 창 (work / scripts)
   /** 해당 패널을 별도 창으로 띄운다(이미 떠 있으면 앞으로 가져온다). */
   paneOpen: 'pane:open',
@@ -4177,7 +4219,7 @@ export const IPC = {
   previewSetUrl: 'preview:setUrl',
   /** 이 워크스페이스의 Preview 를 특정 주소로 연다(스크립트 패널의 "Open in Preview"). */
   previewOpen: 'preview:open',
-  /** Preview 화면을 캡처해 컴포저 첨부로 흘려보낸다. 인자는 webview 게스트의 webContents id. */
+  /** Preview 화면을 캡처해 컴포저 첨부로 흘려보낸다. 인자는 그 화면을 그리는 탭의 id. */
   previewCapture: 'preview:capture',
   /**
    * 요소 픽커를 켠다. 사용자가 미리보는 페이지에서 요소를 고를 때까지 기다렸다가,
@@ -4186,13 +4228,9 @@ export const IPC = {
   previewPickElement: 'preview:pickElement',
   /** 진행 중인 요소 픽을 취소한다(Esc·패널 언마운트). */
   previewCancelPick: 'preview:cancelPick',
-  /** 이 게스트의 콘솔·네트워크 문제를 이 워크스페이스 것으로 모으기 시작한다(dom-ready 에서). */
-  previewWatchIssues: 'preview:watchIssues',
-  /** 수집을 멈춘다(패널이 사라질 때). */
-  previewUnwatchIssues: 'preview:unwatchIssues',
-  /** 모아 둔 문제 목록을 읽는다(개수만 방송되므로 패널을 열 때 한 번 가져간다). */
+  /** 모아 둔 문제 목록을 읽는다(개수만 방송되므로 패널을 열 때 한 번 가져간다). 인자는 tabId. */
   previewListIssues: 'preview:listIssues',
-  /** 모아 둔 문제를 비운다. */
+  /** 모아 둔 문제를 비운다. 인자는 tabId. */
   previewClearIssues: 'preview:clearIssues',
   /** 고른 문제들을 컴포저에 넣는다. */
   previewSendIssues: 'preview:sendIssues',
@@ -4237,6 +4275,35 @@ export const IPC = {
   evtReview: 'evt:review',
   /** OS 알림 클릭 등으로 특정 workspace 를 선택하도록 renderer 에 요청. */
   evtSelectWorkspace: 'evt:selectWorkspace',
+  /** 탭에 뷰를 붙여 준다(이미 있으면 그대로). 한 번도 보지 않은 탭에는 뷰를 만들지 않는다. */
+  viewEnsure: 'view:ensure',
+  /** 자리표시자가 마운트됐다 — 이 창에 뷰를 붙인다. */
+  viewAttach: 'view:attach',
+  /** 자리표시자가 사라졌다 — 창에서 뗀다(파괴하지 않는다). */
+  viewDetach: 'view:detach',
+  viewLoad: 'view:load',
+  viewReload: 'view:reload',
+  viewStop: 'view:stop',
+  viewGoBack: 'view:goBack',
+  viewGoForward: 'view:goForward',
+  viewDestroy: 'view:destroy',
+  /**
+   * 렌더러가 잰 뷰들의 자리. **`invoke` 가 아니라 `send` 다.**
+   *
+   * 분할바를 끄는 동안 프레임마다 나가는 값이라, 회신을 기다릴 이유가 없는데 Promise 를
+   * 만들고 큐에 쌓는 비용만 든다. 관례(`handle` 래퍼)의 의도적 예외이고, 그래서 원격
+   * 레지스트리에도 올라가지 않는다 — 폰에는 창이 없어 뷰가 성립하지 않는다.
+   */
+  viewSetLayout: 'view:setLayout',
+  /** 게스트의 내비게이션 상태·실패·소멸. 페이로드는 `HostedViewEvent`. */
+  evtHostedView: 'evt:hostedView',
+  /**
+   * 애플리케이션 메뉴에서 고른 항목. 페이로드는 `MenuCommand`.
+   *
+   * 방송(`dispatch`)이 아니라 **메인 창에만** 보낸다 — 메뉴 항목은 메인 창 UI 에 대한
+   * 것이고, 원격(폰)에는 메뉴가 없어 미러할 대상도 아니다. `evtWindowFocus` 와 같은 부류다.
+   */
+  evtMenuCommand: 'evt:menuCommand',
   /** main 창이 포커스를 얻었을 때의 알림 — 보고 있는 workspace 의 미확인 표시 해제 트리거. */
   evtWindowFocus: 'evt:windowFocus',
   /** main 창이 포커스를 잃었을 때의 알림 — 이후 완료를 미확인(Dock 배지)으로 잡는 신뢰 신호. */
@@ -4247,6 +4314,8 @@ export const IPC = {
   evtTerminalExit: 'evt:terminalExit',
   /** 터미널 탭 구성 변경(생성·닫기·이름 변경·선택). 메인 창과 분리한 패널 창이 함께 따라간다. */
   evtTerminalTabs: 'evt:terminalTabs',
+  /** 워크스페이스 콘텐츠 탭 구성 변경(열기·닫기·선택·이름 변경·되살리기). 모든 창이 함께 따라간다. */
+  evtWorkspaceTabs: 'evt:workspaceTabs',
   /** 앱 내부 Claude 로그인 진행 이벤트(인증 URL 노출 / 코드 입력 요청 / 완료). */
   evtClaudeLogin: 'evt:claudeLogin',
   /** 앱 내부 Codex 로그인 진행 이벤트(브라우저 인증 URL 노출 / 완료). */
@@ -5180,6 +5249,94 @@ export const MENTION_DROP_HINT_BYTES = 256 * 1024
 // ── 인터랙티브 터미널 (worktree PTY) ──────────────────────────────────────
 
 /** 터미널 탭 하나 = PTY 하나. 셸 세션은 영속하지 않고 이 메타데이터만 저장한다. */
+/**
+ * main 이 소유해 화면에 얹는 웹 콘텐츠의 종류.
+ *
+ * 탭 종류 전부가 아니라 **네이티브 뷰가 필요한 것만** 여기 온다 — 파일·스택 탭은 DOM 으로
+ * 그리므로 자리·가림 문제가 애초에 없다.
+ */
+export type HostedViewKind = 'dev' | 'web' | 'artifact'
+
+/** 렌더러가 잰 뷰 하나의 자리. 창 콘텐츠 영역 기준 DIP 좌표다(스케일 환산은 하지 않는다). */
+export interface HostedViewLayout {
+  tabId: string
+  x: number
+  y: number
+  width: number
+  height: number
+  /** 모달이 덮었거나 탭이 감춰졌으면 거짓. 자리를 못 재도 거짓이다(잘못된 자리에 남기지 않는다). */
+  visible: boolean
+}
+
+/** 게스트의 내비게이션 상태. 이벤트 여섯 개를 접어 한 번에 보낸다. */
+export interface HostedViewState {
+  tabId: string
+  url: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  ready: boolean
+}
+
+/** main → 렌더러로 가는 뷰 소식. `gone` 은 동면·크래시로 뷰가 사라졌다는 뜻이다. */
+export type HostedViewEvent =
+  | ({ type: 'state' } & HostedViewState)
+  | {
+      type: 'fail'
+      tabId: string
+      errorCode: number
+      errorDescription: string
+      isMainFrame: boolean
+    }
+  | { type: 'gone'; tabId: string }
+
+/**
+ * 애플리케이션 메뉴가 렌더러에 보낼 수 있는 명령.
+ *
+ * 렌더러의 `PaletteActionId` 부분집합이라 그대로 `runPaletteAction` 에 넘긴다 — 캐스팅이
+ * 필요 없고, 여기서 오타를 내면 렌더러 쪽에서 컴파일이 깨진다. 메뉴가 자기 동작을 따로
+ * 구현하지 않는 이유이기도 하다: 구현은 하나이고 입구만 셋(글쇠·팔레트·메뉴)이다.
+ *
+ * `PaletteActionId` 를 여기로 옮기지 않는 것은 그쪽이 렌더러 전용 개념이기 때문이다 —
+ * 메뉴가 부를 수 없는 항목(타건 제스처 등)까지 공유 타입에 끌어오면 경계가 흐려진다.
+ */
+export type MenuCommand =
+  | 'open-settings'
+  | 'open-shortcuts'
+  | 'toggle-work-panel'
+  | 'toggle-scripts-panel'
+  | 'close-focused-pane'
+  | 'new-workspace'
+  | 'new-workspace-choose-agent'
+  | 'search-conversations'
+  | 'open-file'
+  | 'review-pull-request'
+  | 'open-stack-view'
+  | 'open-in-editor'
+  | 'reveal-in-finder'
+  | 'export-conversation'
+  | 'archive-workspace'
+  // 탭·페이지 단축키. 게스트(프리뷰·웹 탭)가 포커스를 쥐면 렌더러는 keydown 을 못 보므로,
+  // 이것들만 accelerator 를 달아 브라우저 프로세스가 먼저 받게 한다(`src/main/appMenu.ts`).
+  | 'new-tab'
+  | 'close-tab'
+  | 'reopen-closed-tab'
+  | 'next-tab'
+  | 'previous-tab'
+  | 'select-tab-1'
+  | 'select-tab-2'
+  | 'select-tab-3'
+  | 'select-tab-4'
+  | 'select-tab-5'
+  | 'select-tab-6'
+  | 'select-tab-7'
+  | 'select-tab-8'
+  | 'select-tab-9'
+  | 'reload-tab'
+  | 'page-back'
+  | 'page-forward'
+  | 'focus-address-bar'
+
 export interface TerminalTab {
   id: string
   /** 사용자가 탭을 더블클릭해 붙인 이름. 없으면 화면이 순번으로 이름을 만든다(Terminal, Terminal 2 …). */
@@ -5191,6 +5348,38 @@ export interface TerminalTabsState {
   workspaceId: string
   tabs: TerminalTab[]
   /** 지금 보고 있는 탭. tabs 가 비어 있지 않은 한 항상 그중 하나를 가리킨다. */
+  activeId: string
+}
+
+/**
+ * 콘텐츠 영역 맨 위 탭 스트립의 탭 종류.
+ *
+ * **`HostedViewKind`(`'dev' | 'web' | 'artifact'`)와 다르다** — 그쪽은 `WebContentsView` 로
+ * 그리는 종류만 담고, 여기는 파일·스택처럼 DOM 으로 그리는 탭과 작업 탭까지 포함한 전체
+ * 목록이다. 겹치는 셋(dev·web·artifact)은 탭이면서 동시에 네이티브 뷰를 갖는다.
+ *
+ * 작업 탭(`work`)은 늘 첫 탭이고 닫을 수 없다([[main/workspaceTabs]]).
+ */
+export type WorkspaceTabKind = 'work' | 'dev' | 'web' | 'file' | 'artifact' | 'stack'
+
+export interface WorkspaceTab {
+  id: string
+  kind: WorkspaceTabKind
+  /**
+   * dev·web: 현재 주소. file: 워크트리 상대 경로(줄 번호는 안 싣는다 — 같은 파일을 다른 줄로
+   * 열 때마다 탭이 늘어난다, [[renderer/store]] fileNav 가 대신 나른다). artifact:
+   * artifactId@version. stack: 앵커 workspaceId.
+   */
+  target?: string
+  /** 사용자가 바꾼 이름. 없으면 화면이 target 에서 만든다. */
+  title?: string
+}
+
+/** 한 워크스페이스의 콘텐츠 탭 구성. 탭이 바뀔 때마다 모든 창에 이 형태로 방송된다. */
+export interface WorkspaceTabsState {
+  workspaceId: string
+  tabs: WorkspaceTab[]
+  /** 지금 보고 있는 탭. 작업 탭이 항상 있으므로 tabs 는 비지 않고, activeId 는 늘 그중 하나를 가리킨다. */
   activeId: string
 }
 

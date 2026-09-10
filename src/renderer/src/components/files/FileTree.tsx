@@ -3,7 +3,8 @@ import { ChevronRight, Folder, FolderOpen, File as FileIcon, Loader2 } from 'luc
 import type { DirEntry } from '@shared/types'
 
 /**
- * worktree 파일 트리(lazy). 우측 작업 패널과 큰 파일 뷰어가 함께 쓴다.
+ * worktree 파일 트리(lazy). 우측 작업 패널(All files)이 쓴다. 파일 탭에는 일부러 넣지
+ * 않는다 — 같은 트리가 화면에 여럿 떠 있는 꼴이 된다([[components/tabs/FileTab]]).
  *
  * 새로고침은 `key` 를 바꿔 통째로 다시 마운트하는 방식이다 — 펼친 노드마다 캐시를 무효화하는
  * 것보다 단순하고, 트리는 다시 그려도 저렴하다.

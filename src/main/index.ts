@@ -1,6 +1,8 @@
 import { app, BrowserWindow, session } from 'electron'
 import { IPC } from '@shared/types'
 import { applyDevPaths, isDevIsolated, toolShimPath, wooiHome } from './paths'
+import { installAppMenu } from './appMenu'
+import { HostedViewManager } from './webViews'
 import { AgentOrchestrator } from './agent/orchestrator'
 import { initAgentTools } from './agent/tools'
 import { writeWooiPlugins } from './agent/plugin'
@@ -17,6 +19,7 @@ import { getTranscripts } from './transcripts'
 import { flushPendingSyncs } from './fsutil'
 import { initHealthLogging } from './health'
 import { TerminalManager } from './terminal'
+import { WorkspaceTabManager } from './workspaceTabs'
 import {
   applyNavigationGuards,
   loadRenderer,
@@ -38,7 +41,7 @@ import { captureRunningTurns } from './shutdownResume'
 import { setWindowOpener } from './notifications'
 import { initNotice } from './notice'
 import { initFeatures } from './features'
-import { initPreview } from './preview'
+import { initPreview, previewIssues } from './preview'
 import { disposeAuthSessions } from './auth'
 import { reapDescendants } from './reaper'
 // 스킴 등록은 이 import 의 부수효과로, app ready 전에 일어나야 한다([[artifactScheme]]).
@@ -188,6 +191,19 @@ process.env.WOOI_TOOL_SHIM = toolShimPath()
 initToolPermission({ dispatch: (request) => dispatch(IPC.evtPermission, request) })
 
 const terminals = new TerminalManager(dispatch)
+// 콘텐츠 영역 맨 위 탭 스트립(대화·dev 프리뷰·웹·파일·아티팩트·스택)의 소유자([[main/workspaceTabs]]).
+const tabs = new WorkspaceTabManager(dispatch)
+// 얹은 웹 뷰(dev 프리뷰·웹 탭)의 소유자. 창보다 오래 살아야 한다 — 패널을 분리한 창으로
+// 떼었다 붙이는 동안 뷰가 살아 있어야 페이지가 처음부터 다시 로드되지 않는다.
+const views = new HostedViewManager(dispatch, {
+  // 콘솔·네트워크 수집을 뷰 수명에 묶는다. 첫 loadURL 보다 먼저 붙어야 페이지의 첫 콘솔
+  // 줄부터 잡히는데, 그 시점을 아는 것은 뷰를 만드는 쪽뿐이다([[main/webViews]]).
+  onCreated: (tabId, workspaceId, contents) => previewIssues().watch(tabId, workspaceId, contents),
+  // 뷰(캐시) 하나가 죽는 것과 워크스페이스가 통째로 사라지는 것은 다르다 — 여기서는 이 탭의
+  // 수집만 멈추고 모아 둔 문제는 남긴다(탭이 다시 뷰를 얻으면 이어서 보인다). 워크스페이스
+  // 전체 정리는 disposeWorkspace 가 따로 있다.
+  onDestroyed: (tabId) => previewIssues().unwatch(tabId)
+})
 
 const stackedWaits = initStackedWaits({
   sendMessage: (workspaceId, text, opts) =>
@@ -206,6 +222,13 @@ initAgentTools({
   scripts,
   sessions,
   terminals,
+  tabs,
+  views,
+  // previewIssues() 는 initPreview()(app.whenReady 안)가 불려야 채워진다. 여기 initAgentTools 는
+  // 그보다 먼저 모듈 로드 시점에 도니, 값을 지금 캡처하지 않고 실제 호출 시점까지 늦춘다.
+  previewIssues: {
+    disposeWorkspace: (workspaceId) => previewIssues().disposeWorkspace(workspaceId)
+  },
   pruneFanoutGroups,
   broadcastState: () => dispatch(IPC.evtState, getStore().getState()),
   sendMessage: (workspaceId, text, opts) =>
@@ -335,11 +358,18 @@ app.whenReady().then(() => {
   // 미설치로 보이거나 child 프로세스가 토큰/설정을 못 읽는 일이 없게 한다.
   hydrateEnvFromLoginShell()
   applyContentSecurityPolicy()
-  // Preview 게스트의 울타리는 창보다 먼저 세운다 — will-attach-webview 를 놓치면 그 webview 는
-  // 우리가 강제하려던 설정 없이 붙는다([[preview]]).
-  initPreview(dispatch)
-  // 아티팩트 세션은 워크스페이스마다 하나라, 게스트가 붙는 순간 게으르게 선다
-  // ([[artifactProtocol]] ensureArtifactSession). 여기서는 방송 통로만 건네준다.
+  // 메뉴는 창보다 먼저 깐다 — 기본 메뉴가 한 번이라도 붙으면 그 사이에 눌린 `⌘R` 이
+  // 렌더러를 통째로 새로 읽는다. 명령은 방송하지 않고 메인 창에만 보낸다(메뉴 항목은
+  // 전부 메인 창 UI 에 대한 것이고, 분리한 패널 창이 포커스를 쥐고 있어도 동작해야 한다).
+  installAppMenu((command) => {
+    showMainWindow()
+    mainWindow?.webContents.send(IPC.evtMenuCommand, command)
+  })
+  // Preview 세션 정책(권한 전면 거부)을 창보다 먼저 세운다. 게스트 울타리는 뷰를 만드는
+  // 자리에서 걸리므로([[main/webViews]]) 여기서 놓칠 일이 없다.
+  initPreview(dispatch, views)
+  // 아티팩트 세션은 워크스페이스마다 하나라 뷰를 만드는 자리에서 게으르게 선다
+  // ([[main/webViews]] ensure). 여기서는 방송 통로만 건네준다.
   initArtifactDispatch(dispatch)
   // 원격 브리지는 IPC 등록보다 **먼저** 만들어야 한다 — 핸들러가 getRemoteBridge() 를 부른다.
   // 만드는 것 자체는 아무 자원도 잡지 않는다(설정을 읽을 뿐이다). 실제 연결은 아래에서
@@ -355,7 +385,16 @@ app.whenReady().then(() => {
     (workspaceId) => dispatch(IPC.evtRemoteRead, workspaceId),
     remoteOverride || getStore().getState().settings.remoteAccessAvailable
   )
-  registerIpc({ sessions, scripts, terminals, panes, dispatch, getWindow: () => mainWindow })
+  registerIpc({
+    sessions,
+    scripts,
+    terminals,
+    tabs,
+    views,
+    panes,
+    dispatch,
+    getWindow: () => mainWindow
+  })
   // 기동 시점에는 도는 워크스페이스가 없다(store 가 남은 'running' 을 'idle' 로 씻는다) —
   // 설정만 물려주고, 실제 판단은 첫 방송부터 시작한다.
   initSleepBlocker(getStore().getState().settings.keepAwakeWhileRunning)

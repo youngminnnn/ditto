@@ -1,4 +1,4 @@
-import { app, dialog, shell, BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -101,7 +101,8 @@ import type {
   MigrationScan,
   MigrationScanArgs,
   ReviewVerdict,
-  TranscriptSearchResult
+  TranscriptSearchResult,
+  WorkspaceTabKind
 } from '@shared/types'
 import {
   cascadeRetarget,
@@ -216,6 +217,8 @@ import type {
   StackTrainResult,
   UpdateFromBaseResult,
   DiscardHunkResult,
+  HostedViewKind,
+  HostedViewLayout,
   Workspace
 } from '@shared/types'
 import type { AgentOrchestrator } from './agent/orchestrator'
@@ -223,16 +226,11 @@ import { deliverApprovedPeerMessage } from './agent/tools/peer'
 import { resolvePeerMessage } from './agent/tools/peerLedger'
 import { stackedWaits } from './stackedWait'
 import type { PaneWindows } from './paneWindows'
-import {
-  cancelPreviewPick,
-  capturePreview,
-  forgetPreviewGuest,
-  pickPreviewElement,
-  previewIssues,
-  watchPreviewIssues
-} from './preview'
+import { cancelPreviewPick, capturePreview, pickPreviewElement, previewIssues } from './preview'
 import type { ScriptRunner } from './scripts'
 import type { TerminalManager } from './terminal'
+import type { WorkspaceTabManager } from './workspaceTabs'
+import type { HostedViewManager } from './webViews'
 
 /** 단방향 이벤트를 모든 창에 방송하는 함수. main 엔트리가 소유한 것 하나를 공유한다. */
 type Dispatch = (channel: string, payload: unknown) => void
@@ -241,6 +239,8 @@ interface IpcContext {
   sessions: AgentOrchestrator
   scripts: ScriptRunner
   terminals: TerminalManager
+  tabs: WorkspaceTabManager
+  views: HostedViewManager
   panes: PaneWindows
   /**
    * main 엔트리의 dispatch 를 그대로 받는다. registerIpc 가 자체 dispatch 를 갖고 있으면
@@ -538,6 +538,9 @@ export function registerIpc(ctx: IpcContext): void {
     sessions: ctx.sessions,
     scripts: ctx.scripts,
     terminals: ctx.terminals,
+    tabs: ctx.tabs,
+    views: ctx.views,
+    previewIssues: previewIssues(),
     broadcastState
   }
   /** 삭제는 store 에서 레코드를 없애므로 그 id 를 들고 있던 fan-out 그룹까지 정리한다. */
@@ -1612,6 +1615,34 @@ export function registerIpc(ctx: IpcContext): void {
     return ctx.scripts.getOutput(workspaceId, scriptId)
   })
 
+  // ── 얹은 웹 뷰(dev 프리뷰·웹 탭) ────────────────────────────────────────
+
+  handle(
+    IPC.viewEnsure,
+    (_e, tabId: string, workspaceId: string, kind: HostedViewKind, initialUrl?: string) =>
+      ctx.views.ensure(tabId, workspaceId, kind, initialUrl)
+  )
+  // 어느 창에 붙일지는 **보낸 쪽에서 읽는다.** 렌더러가 창 id 를 골라 보내면, 다른 창의
+  // 레이아웃에 뷰를 얹어 달라는 요청이 성립한다.
+  handle(IPC.viewAttach, (e, tabId: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win) ctx.views.attach(tabId, win.id)
+  })
+  handle(IPC.viewDetach, (_e, tabId: string) => ctx.views.detach(tabId))
+  handle(IPC.viewLoad, (_e, tabId: string, url: string) => ctx.views.load(tabId, url))
+  handle(IPC.viewReload, (_e, tabId: string) => ctx.views.reload(tabId))
+  handle(IPC.viewStop, (_e, tabId: string) => ctx.views.stop(tabId))
+  handle(IPC.viewGoBack, (_e, tabId: string) => ctx.views.goBack(tabId))
+  handle(IPC.viewGoForward, (_e, tabId: string) => ctx.views.goForward(tabId))
+  handle(IPC.viewDestroy, (_e, tabId: string) => ctx.views.destroy(tabId))
+
+  // `handle` 이 아니라 `ipcMain.on` 인 유일한 채널이다. 분할바를 끄는 동안 프레임마다
+  // 나가는 값이라 회신을 만들 이유가 없다(채널 정의의 주석 참고).
+  ipcMain.on(IPC.viewSetLayout, (e, layouts: HostedViewLayout[]) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win) ctx.views.applyLayout(win.id, layouts)
+  })
+
   // ── Preview 패널 ───────────────────────────────────────────────────────
 
   /** Preview 가 마지막으로 본 주소를 워크스페이스에 적어 둔다. 값이 그대로면 방송하지 않는다. */
@@ -1634,15 +1665,16 @@ export function registerIpc(ctx: IpcContext): void {
   // 다른 창에 떠 있을 수 있어(둘 다 분리 가능) renderer 끼리 직접 이야기할 방법이 없다.
   handle(IPC.previewOpen, (_e, workspaceId: string, url: string) => {
     rememberPreviewUrl(workspaceId, url)
-    dispatch(IPC.evtPreviewOpen, { workspaceId, url })
+    // 사람이 누른 것이므로 그 탭으로 옮긴다 — 누른 이유가 곧 보려는 것이다.
+    dispatch(IPC.evtPreviewOpen, { workspaceId, url, activate: true })
   })
 
   // 캡처는 main 이 한다(renderer 에는 webContents 가 없다). 찍은 이미지는 호출자에게 돌려주지
   // 않고 방송한다 — 컴포저는 메인 창에만 있고, 캡처를 누른 창은 분리된 work 창일 수 있다.
-  handle(IPC.previewCapture, async (_e, workspaceId: string, webContentsId: number) => {
+  handle(IPC.previewCapture, async (_e, workspaceId: string, tabId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return { error: 'That workspace is gone.' }
-    const { image, error } = await capturePreview(ws.previewUrl ?? '', webContentsId)
+    const { image, error } = await capturePreview(ws.previewUrl ?? '', tabId)
     if (error || !image) return { error: error ?? 'Could not capture the preview.' }
     dispatch(IPC.evtComposerAttach, { workspaceId, image })
     return {}
@@ -1650,32 +1682,29 @@ export function registerIpc(ctx: IpcContext): void {
 
   // 요소 픽커. 사용자가 고를 때까지(또는 취소·타임아웃까지) 이 핸들러가 매달려 있는다 —
   // 렌더러는 그동안 "고르는 중" 을 보여 주고, 결과는 캡처와 같은 우편함으로 흘러간다.
-  handle(IPC.previewPickElement, async (_e, workspaceId: string, webContentsId: number) => {
+  handle(IPC.previewPickElement, async (_e, workspaceId: string, tabId: string) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return { error: 'That workspace is gone.' }
-    const { attachment, error } = await pickPreviewElement(ws.previewUrl ?? '', webContentsId)
+    const { attachment, error } = await pickPreviewElement(ws.previewUrl ?? '', tabId)
     if (error || !attachment) return { error: error ?? 'Could not read that element.' }
     dispatch(IPC.evtComposerAttach, { workspaceId, ...attachment })
     return {}
   })
 
-  handle(IPC.previewCancelPick, (_e, webContentsId: number) => {
-    cancelPreviewPick(webContentsId)
+  handle(IPC.previewCancelPick, (_e, tabId: string) => {
+    cancelPreviewPick(tabId)
   })
 
   // 콘솔·네트워크 문제 수집. 목록은 여기서 당겨 가고, 개수만 evtPreviewIssues 로 방송된다
   // — 매 콘솔 줄을 IPC 로 밀면 폭주하는 dev 로그가 메인 힙을 밀어 올린다([[main/previewIssues]]).
-  handle(IPC.previewWatchIssues, (_e, workspaceId: string, webContentsId: number) => {
-    watchPreviewIssues(workspaceId, webContentsId)
-  })
+  // 수집을 시작·중단하는 IPC 는 없다. 뷰를 만든 쪽이 곧 아는 쪽이라 webViews 의 수명 훅이
+  // 직접 붙이고 뗀다([[main/webViews]]) — 렌더러가 dom-ready 에서 알려 주던 우회가 사라졌다.
+  // 워크스페이스가 아니라 tabId 로 키를 잡는다 — 한 워크스페이스에 탭이 여럿일 수 있어서다.
+  handle(IPC.previewListIssues, (_e, tabId: string) => previewIssues().list(tabId))
 
-  handle(IPC.previewUnwatchIssues, (_e, webContentsId: number) => {
-    previewIssues().unwatch(webContentsId)
-    // 에이전트 도구가 이 워크스페이스의 게스트를 찾는 표도 같은 자리에서 지운다([[main/preview]]).
-    forgetPreviewGuest(webContentsId)
+  handle(IPC.previewClearIssues, (_e, tabId: string) => {
+    previewIssues().clear(tabId)
   })
-
-  handle(IPC.previewListIssues, (_e, workspaceId: string) => previewIssues().list(workspaceId))
 
   handle(IPC.artifactsList, (_e, workspaceId: string) => {
     try {
@@ -1703,16 +1732,12 @@ export function registerIpc(ctx: IpcContext): void {
     }
   })
 
-  handle(IPC.previewClearIssues, (_e, workspaceId: string) => {
-    previewIssues().clear(workspaceId)
-  })
-
-  handle(IPC.previewSendIssues, (_e, workspaceId: string, issueIds: string[]) => {
+  handle(IPC.previewSendIssues, (_e, workspaceId: string, tabId: string, issueIds: string[]) => {
     const ws = store.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return { error: 'That workspace is gone.' }
     const wanted = new Set(issueIds)
     const picked = previewIssues()
-      .list(workspaceId)
+      .list(tabId)
       .filter((i) => wanted.has(i.id))
     if (!picked.length) return { error: 'Nothing to send.' }
     dispatch(IPC.evtComposerAttach, {
@@ -3436,6 +3461,30 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.terminalTabSelect, (_e, workspaceId: string, terminalId: string) =>
     ctx.terminals.selectTab(workspaceId, terminalId)
   )
+
+  // 워크스페이스 콘텐츠 탭(대화 위 크롬형 탭 스트립) — 터미널 탭과 같은 이유로 얇은 위임이다.
+
+  handle(IPC.tabsGet, (_e, workspaceId: string) => ctx.tabs.tabs(workspaceId))
+
+  handle(
+    IPC.tabsOpen,
+    (_e, workspaceId: string, opts: { kind: WorkspaceTabKind; target?: string; title?: string }) =>
+      ctx.tabs.openTab(workspaceId, opts)
+  )
+
+  handle(IPC.tabsClose, (_e, workspaceId: string, tabId: string) =>
+    ctx.tabs.closeTab(workspaceId, tabId)
+  )
+
+  handle(IPC.tabsSelect, (_e, workspaceId: string, tabId: string) =>
+    ctx.tabs.selectTab(workspaceId, tabId)
+  )
+
+  handle(IPC.tabsRename, (_e, workspaceId: string, tabId: string, title: string) =>
+    ctx.tabs.renameTab(workspaceId, tabId, title)
+  )
+
+  handle(IPC.tabsReopen, (_e, workspaceId: string) => ctx.tabs.reopenTab(workspaceId))
 
   // ── Dock 미확인 배지 ─────────────────────────────────────────────────────
 

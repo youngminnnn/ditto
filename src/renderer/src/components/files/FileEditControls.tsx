@@ -7,6 +7,10 @@ import type { FileEditor } from './useFileEditor'
  *
  * 읽기 전용일 땐 Edit 하나, 편집 중일 땐 Save + Cancel 이다. 저장은 **명시적으로** 누른다 —
  * 자동 저장은 에이전트가 같은 파일을 만지는 중에 조용히 끼어들 수 있어서 쓰지 않는다.
+ *
+ * `compact` 는 글자를 빼고 아이콘만 남기는데, 그러면 버튼에 이름이 없어진다. `title` 은 설명
+ * 문장이라 이름 대신 쓰기엔 길다("Edit this file (⌘E)"). 그래서 `aria-label` 로 짧은 이름을
+ * 따로 준다 — 좁은 패널에서도 스크린리더와 테스트가 같은 이름으로 이 버튼을 부를 수 있어야 한다.
  */
 export default function FileEditControls({
   editor,
@@ -25,6 +29,7 @@ export default function FileEditControls({
       <button
         onClick={editor.begin}
         disabled={!editor.canEdit}
+        aria-label="Edit"
         className={`${base} ${pad}`}
         title={
           editor.canEdit
@@ -43,13 +48,19 @@ export default function FileEditControls({
       <button
         onClick={() => void editor.save()}
         disabled={!editor.dirty || editor.saving}
+        aria-label={editor.saving ? 'Saving' : 'Save'}
         className={`${base} ${pad} !text-[var(--accent-400)] hover:!text-[var(--accent-300)]`}
         title={editor.dirty ? 'Save to disk (⌘S)' : 'Nothing to save'}
       >
         {editor.saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
         {!compact && (editor.saving ? 'Saving…' : 'Save')}
       </button>
-      <button onClick={editor.cancel} className={`${base} ${pad}`} title="Stop editing (Esc)">
+      <button
+        onClick={editor.cancel}
+        aria-label="Cancel"
+        className={`${base} ${pad}`}
+        title="Stop editing (Esc)"
+      >
         {compact ? '✕' : 'Cancel'}
       </button>
     </>

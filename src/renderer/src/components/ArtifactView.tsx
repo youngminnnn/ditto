@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { artifactPartition } from '@shared/types'
+import { useEffect, useState } from 'react'
 import type { ArtifactKind } from '@shared/types'
 import { artifactUrl } from '@shared/artifactUrl'
-import type { PreviewWebview } from '../lib/webview'
+import { useHostedView } from '../lib/hostedView'
 import { MarkdownBody } from './ChatPrimitives'
 
 /**
@@ -13,17 +12,25 @@ import { MarkdownBody } from './ChatPrimitives'
  * 이 파일 하나로 끝나도록, "무엇을 고를까" 는 [[ArtifactPanel]] 에 두고 여기는 "고른 것을
  * 어떻게 띄우나" 만 안다.
  *
- * 그래서 이 컴포넌트가 받는 것은 아티팩트의 좌표(workspaceId · id · version · kind)뿐이다.
- * 목록도 버전 드롭다운도 prop 으로 안 받는다 — 받는 순간 껍데기가 여기로 새어 든다.
+ * 그래서 이 컴포넌트가 받는 것은 아티팩트의 좌표(workspaceId · id · version · kind)와, 뷰가
+ * 앉을 탭의 id 뿐이다. 목록도 버전 드롭다운도 prop 으로 안 받는다 — 받는 순간 껍데기가
+ * 여기로 새어 든다.
+ *
+ * 게스트는 `<webview>` 가 아니라 main 이 소유하는 뷰다([[main/webViews]]). 여기서 놓는 것은
+ * 자리표시자 하나이고, 파티션·세션·이동 가드는 전부 뷰를 만드는 쪽이 정한다 — 렌더러가
+ * 태그에 적어 둔 값을 나중에 다시 강제할 일이 없다.
  */
 export default function ArtifactView({
   workspaceId,
+  tabId,
   artifactId,
   version,
   kind,
   active
 }: {
   workspaceId: string
+  /** 이 아티팩트를 담은 탭의 id. 뷰의 상태 방송이 이 id 로 온다. */
+  tabId: string
   /** 아직 아무것도 없으면 null — 게스트는 붙여 두고 화면만 비운다. */
   artifactId: string | null
   version: number | null
@@ -31,9 +38,7 @@ export default function ArtifactView({
   /** 지금 보이는지. 감춰져 있는 동안에는 원본을 당겨 오지 않는다. */
   active: boolean
 }): React.JSX.Element {
-  const viewRef = useRef<PreviewWebview | null>(null)
-  // 게스트가 붙기 전에는 loadURL 이 던진다. dom-ready 를 본 뒤에만 명령을 보낸다.
-  const [ready, setReady] = useState(false)
+  const { ref, attached } = useHostedView({ tabId, workspaceId, kind: 'artifact' })
   /**
    * 마크다운은 웹뷰를 타지 않는다 — 앱 안에서 기존 MarkdownBody 로 그린다.
    * 어느 (id, version) 의 것인지 함께 들고 있어야 선택을 바꾼 직후 옛 본문이 잠깐 남지 않는다.
@@ -48,16 +53,7 @@ export default function ArtifactView({
       ? markdown.text
       : null
 
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-    const onDomReady = (): void => setReady(true)
-    view.addEventListener('dom-ready', onDomReady)
-    return () => view.removeEventListener('dom-ready', onDomReady)
-  }, [])
-
-  // 고른 것을 게스트에 밀어 넣는다. `src` prop 이 아니라 명령형 loadURL 이어야 한다 —
-  // prop 에 매달면 상태가 한 번 흐를 때마다 보던 화면이 처음으로 되감긴다.
+  // 고른 것을 게스트에 밀어 넣는다. 명령형이라 "고르면 간다" 가 그대로 코드가 된다.
   useEffect(() => {
     if (artifactId === null || version === null) return
 
@@ -72,27 +68,19 @@ export default function ArtifactView({
       }
     }
 
-    const view = viewRef.current
-    if (!view || !ready) return
-    void view.loadURL(artifactUrl(workspaceId, artifactId, version)).catch(() => {
-      /* 게스트가 사라지는 중. 다음 선택이 다시 시도한다. */
-    })
+    if (!attached) return undefined
+    void window.api.views.load(tabId, artifactUrl(workspaceId, artifactId, version))
     return undefined
-  }, [workspaceId, artifactId, version, kind, ready, active])
+  }, [workspaceId, tabId, artifactId, version, kind, attached, active])
 
   return (
     <div className="relative flex-1 min-h-0 bg-white">
-      {/* 게스트는 언마운트하지 않고 감춘다 — 마크다운으로 옮겨 갈 때마다 게스트를 버리면
-          다시 HTML 아티팩트를 열 때 처음부터 붙어야 한다. */}
-      <webview
-        ref={(el) => {
-          viewRef.current = el
-        }}
-        src={BOOT_URL}
-        partition={artifactPartition(workspaceId)}
-        webpreferences={GUEST_PREFS}
+      {/* 자리표시자다. 마크다운을 볼 때는 크기를 0 으로 접어 뷰가 스스로 숨는다 — 언마운트하면
+          HTML 아티팩트로 돌아올 때 페이지가 처음부터 다시 로드된다([[lib/hostedView]]). */}
+      <div
+        ref={ref}
+        data-hosted-view={tabId}
         className={isMarkdown ? 'hidden' : 'absolute inset-0'}
-        style={{ width: '100%', height: '100%' }}
       />
       {isMarkdown && markdownText !== null && (
         <div className="absolute inset-0 overflow-auto bg-neutral-950 px-5 py-4">
@@ -104,13 +92,3 @@ export default function ArtifactView({
     </div>
   )
 }
-
-/** Preview 와 같은 값. 태그만 읽는 사람에게도 "이 뷰는 격리돼 있다" 가 보여야 한다. */
-const GUEST_PREFS = 'contextIsolation=yes,sandbox=yes,nodeIntegration=no,javascript=yes'
-
-/**
- * 게스트를 붙이기 위한 최초 `src`. **반드시 있어야 하고, 반드시 상수여야 한다** —
- * 이유는 [[PreviewPanel]] 의 같은 상수에 적어 두었다(빈 `src` 면 게스트가 안 생기고,
- * React 가 매 렌더마다 prop 을 다시 써 넣으면 보던 페이지가 되감긴다).
- */
-const BOOT_URL = 'about:blank'

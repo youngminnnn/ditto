@@ -8,10 +8,13 @@ import { launchWooi, withScratchRepo } from '../harness.mjs'
 /**
  * 에이전트의 프리뷰 도구는 **메인 밖에서 절반이 일어난다.**
  *
- * `open_preview` 는 메인에서 시작하지만, 그 다음은 렌더러가 Preview 탭을 열고 `<webview>` 게스트를
- * 붙이고 dom-ready 에 자기를 등록해야 비로소 메인이 그 게스트를 찾을 수 있다. 그리고 콘솔·네트워크
- * 문제는 진짜 Electron 세션에서만 나온다. 유닛 테스트는 이 사슬을 통째로 mock 으로 대체하므로,
- * 여기서 보는 것은 **그 mock 이 실제와 같은가** 다.
+ * `open_preview` 는 메인에서 시작하지만, 그 다음은 렌더러가 Preview 탭을 열고 자리표시자를 놓아야
+ * 비로소 메인이 그 자리에 뷰를 붙인다([[main/webViews]]). 그리고 콘솔·네트워크 문제는 진짜
+ * Electron 세션에서만 나온다. 유닛 테스트는 이 사슬을 통째로 mock 으로 대체하므로, 여기서 보는
+ * 것은 **그 mock 이 실제와 같은가** 다.
+ *
+ * 게스트는 DOM 에 없다. 그래서 이 스펙은 게스트를 찾을 때 Playwright 셀렉터가 아니라 메인의
+ * 세션 동일성을 쓴다 — 파티션이 곧 신원이라, 뷰 구현이 바뀌어도 이 판정은 흔들리지 않는다.
  *
  * 그래서 진짜 dev 서버를 띄운다 — run 스크립트로 작은 HTTP 서버를 돌리고, 그 로그에서 주소를
  * 뽑아 프리뷰를 열고, 그 페이지가 실제로 찍은 콘솔 에러와 404 를 도구로 다시 읽는다. 사용자가
@@ -97,7 +100,22 @@ async function runCommand(win, text) {
     }
     const body = await card.innerText()
     if (!body.includes('Running…')) {
+      // 카드는 정착했다. 그런데 위의 `pre` 개수 확인과 이 본문 읽기는 **별개의 왕복**이라,
+      // 결과가 막 그려지는 순간에는 앞에서 0 을 보고 뒤에서 이미 그려진 `<pre>` 의 글자를 읽는
+      // 어긋남이 난다(본문에 JSON 이 있는데 `pre` 가 없다는 모순으로 나타난다). 정착한 뒤에
+      // 한 번 더 기다려 주면 그 틈이 닫힌다 — 진짜 실패는 `<pre>` 를 만들지 않으므로 그대로 걸린다.
+      const settled = card.locator('pre').first()
+      const hasResult = await settled
+        .waitFor({ state: 'attached', timeout: 1000 })
+        .then(() => true)
+        .catch(() => false)
+      // **읽고 나서 닫는다** — 위 빠른 경로와 같은 순서다. Escape 는 카드를 걷어내는데,
+      // `waitFor({ state: 'attached' })` 는 DOM 에 붙은 순간 통과하는 반면 `innerText()` 는
+      // 보이는 요소를 요구한다. 먼저 누르면 방금 붙은 `<pre>` 가 사라진 뒤에 글자를 읽으려다
+      // 30초를 기다리고 죽는다 — 기계가 한가하면 안 나고 전체 실행에서만 나는 종류다.
+      const text = hasResult ? await settled.innerText() : null
       await box.press('Escape')
+      if (text != null) return { result: JSON.parse(text) }
       return { error: body }
     }
     await win.waitForTimeout(100)
@@ -169,7 +187,14 @@ export default async function 에이전트가_프리뷰를_열고_에러를_읽�
         }
         const origin = new URL(opened.url).origin
 
-        // 4. 도구가 말만 한 것이 아니라 **화면이 실제로 그렇게 되었는지** 본다. 게스트가 붙고
+        // 4. 에이전트가 연 탭은 화면을 옮기지 않는다 — 사용자가 읽던 대화가 갈리면 안 되기
+        //    때문이다([[shared/types]] PreviewOpenEvent.activate). 그래서 화면을 보려면
+        //    사용자가 하듯 탭을 눌러야 한다. 탭이 생겼다는 것 자체가 첫 단언이다.
+        const devTab = wooi.win.getByRole('tab', { name: /127\.0\.0\.1:\d+/ })
+        await devTab.waitFor()
+        await devTab.click()
+
+        //    도구가 말만 한 것이 아니라 **화면이 실제로 그렇게 되었는지** 본다. 게스트가 붙고
         //    주소창이 그 주소를 비추는 것이 렌더러까지 신호가 닿았다는 증거다.
         const address = wooi.win.locator('input[aria-label="Preview address"]')
         await address.waitFor()
@@ -182,7 +207,18 @@ export default async function 에이전트가_프리뷰를_열고_에러를_읽�
             `preview address bar did not follow the tool: ${await address.inputValue()}`
           )
         }
-        if ((await wooi.win.locator('webview').count()) === 0) {
+        // 게스트는 이제 DOM 엘리먼트가 아니라 main 이 소유하는 뷰다([[main/webViews]]) —
+        // Playwright 로는 안 보이므로 세션으로 확인한다. 렌더러가 놓는 자리표시자도 함께 본다:
+        // 자리표시자만 있고 게스트가 없으면 "탭은 열렸는데 뷰가 안 붙었다" 는 뜻이다.
+        if ((await wooi.win.locator('[data-hosted-view]').count()) === 0) {
+          throw new Error('the preview tab opened without a placeholder for the guest')
+        }
+        const guestAttached = await wooi.app.evaluate(({ webContents, session }) =>
+          webContents
+            .getAllWebContents()
+            .some((wc) => wc.session === session.fromPartition('persist:wooi-preview'))
+        )
+        if (!guestAttached) {
           throw new Error('the preview tab opened without attaching a guest')
         }
 
@@ -207,8 +243,11 @@ export default async function 에이전트가_프리뷰를_열고_에러를_읽�
 
         // 6. capture_preview 가 딛고 선 가정 — 우리가 연 게스트는 화면에 있을 때 실제로 그려진다.
         //    핸들러는 유닛 테스트가 보므로 여기서는 플랫폼 쪽만 확인한다.
-        const painted = await wooi.app.evaluate(async ({ webContents }) => {
-          const guest = webContents.getAllWebContents().find((wc) => wc.getType() === 'webview')
+        const painted = await wooi.app.evaluate(async ({ webContents, session }) => {
+          // 파티션이 곧 신원이다. getType() 은 뷰 구현에 묶여 있어 이관 때마다 흔들린다.
+          const guest = webContents
+            .getAllWebContents()
+            .find((wc) => wc.session === session.fromPartition('persist:wooi-preview'))
           if (!guest) return { found: false }
           const image = await guest.capturePage()
           const size = image.getSize()

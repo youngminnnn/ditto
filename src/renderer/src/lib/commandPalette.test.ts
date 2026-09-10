@@ -104,7 +104,7 @@ describe('buildActionItems', () => {
 
   it('구분 기호는 이유 문장에서 빠진다', () => {
     const prevNext = buildActionItems(READY).find((i) => i.label === 'Previous / next workspace')
-    expect(prevNext?.disabledReason).toBe('Press ⌘↑ ⌘↓ where it applies.')
+    expect(prevNext?.disabledReason).toBe('Press ⌥⌘↑ ⌥⌘↓ where it applies.')
   })
 })
 
@@ -299,7 +299,7 @@ describe('paletteSections', () => {
   it('빈 질의에서는 워크스페이스가 맨 위다', () => {
     const sections = paletteSections(items, '')
     expect(sections[0].kind).toBe('workspace')
-    // 사이드바 순서를 그대로 지킨다 — ⌘1–9 번호 배지와 어긋나면 안 된다.
+    // 사이드바 순서를 그대로 지킨다 — ⌥⌘1–9 번호 배지와 어긋나면 안 된다.
     expect(sections[0].items.map((i) => i.label)).toEqual(['zeta', 'alpha'])
   })
 

@@ -3,7 +3,7 @@ import { AGENT_TOOL_IMAGE_KEY } from '@shared/agentToolContent'
 import { detectDevUrl } from '@shared/devUrl'
 import type { PreviewIssue } from '@shared/previewIssues'
 import type { RunScript, Workspace } from '@shared/types'
-import { captureForAgent, previewGuestFor, previewIssues, requestPreviewOpen } from '../../preview'
+import { captureForAgent, previewGuestFor, previewIssues, previewTabFor } from '../../preview'
 import { getStore } from '../../store'
 import type { AgentToolDeps, AgentToolHandler } from './registry'
 
@@ -21,13 +21,13 @@ import type { AgentToolDeps, AgentToolHandler } from './registry'
  * 러너를 쓴다) — 에이전트를 위한 별도의 헤드리스 브라우저를 띄우면 둘이 서로 다른 화면을 보게
  * 되고, 사용자는 에이전트가 무엇을 보고 그렇게 말하는지 확인할 길이 없어진다.
  *
- * 그 선택의 대가는 **화면에 열려 있어야 한다** 는 것이다. Wooi 는 선택된 워크스페이스의
- * WorkPanel 만 마운트하므로(WorkArea 의 key) 게스트도 그때만 존재한다. 이 제약은 감추지 않고
- * 실패 사유에 그대로 적는다.
+ * 뷰의 주인이 main 이 되면서 "화면에 열려 있어야 한다" 는 제약은 **열 때만** 사라졌다
+ * ([[main/webViews]]) — 이제 백그라운드 워크스페이스에서도 프리뷰를 열고 콘솔 문제를 읽을 수
+ * 있다. 다만 **찍는 것**은 여전히 화면에 그려지고 있어야 한다. 안 그려지는 화면은 캡처할 픽셀
+ * 자체가 없다. 이 제약은 감추지 않고 실패 사유에 그대로 적는다.
  */
 
-/** Preview 탭이 뜨고 게스트가 붙기를 기다리는 시간. 보통 1 초 안쪽이다. */
-const GUEST_WAIT_MS = 10_000
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 캡처 전에 로딩이 끝나기를 기다리는 시간. HMR 직후에 찍으면 중간 화면이 나온다. */
 const SETTLE_WAIT_MS = 3_000
@@ -147,27 +147,7 @@ function urlFor(origin: string, path: string): string {
   return target.toString()
 }
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-/** Preview 게스트가 붙기를 기다린다. 시간 안에 안 붙으면 null. */
-async function waitForGuest(workspaceId: string): Promise<WebContents | null> {
-  const deadline = Date.now() + GUEST_WAIT_MS
-  for (;;) {
-    const guest = previewGuestFor(workspaceId)
-    if (guest) return guest
-    if (Date.now() >= deadline) return null
-    await delay(POLL_MS)
-  }
-}
-
-const NO_PANEL =
-  'Wooi could not open the preview for this workspace. The preview only exists for the ' +
-  'workspace that is currently open on screen, so ask the user to select this workspace (or ' +
-  'detach its work panel) and call this again.'
-
-const NOT_OPEN =
-  'The preview is not open for this workspace. Call open_preview first — and note that the ' +
-  'preview only exists while this workspace is the one open on screen.'
+const NOT_OPEN = 'The preview is not open for this workspace. Call open_preview first.'
 
 /**
  * 게스트를 그 주소로 보낸다.
@@ -175,8 +155,10 @@ const NOT_OPEN =
  * 이동을 **메인이 직접** 하는 이유: 렌더러에게 이동을 시키면 성공했는지 실패했는지가 돌아오지
  * 않는다. `loadURL` 은 실패를 그대로 던지므로(ERR_CONNECTION_REFUSED 등) 그 문장이 곧 "왜 안
  * 되는지" 가 된다 — 이 앱이 실패 사유를 뭉개지 않는 방식이다.
+ *
+ * 웹 탭을 여는 도구도 같은 이유로 이것을 쓴다([[agent/tools/tabs]]).
  */
-async function load(guest: WebContents, url: string): Promise<void> {
+export async function loadGuest(guest: WebContents, url: string): Promise<void> {
   try {
     await guest.loadURL(url)
   } catch (err) {
@@ -195,14 +177,27 @@ export const openPreview: AgentToolHandler = async (deps, workspaceId, args) => 
   if (!origin) throw new Error(noDevServerReason(deps, ws))
   const url = urlFor(origin, path)
 
-  // 빈 주소로 방송한다 — 탭만 열고 이동은 하지 말라는 뜻이다. 이동은 아래에서 메인이 한다.
-  requestPreviewOpen(workspaceId, '')
+  // 탭과 뷰를 **여기서 직접** 만든다. 예전에는 "탭을 열어라" 를 방송하고 렌더러가 게스트를
+  // 붙일 때까지 폴링했는데, 그러면 프리뷰가 "지금 화면에 열린 워크스페이스" 에만 존재하게
+  // 된다 — 에이전트가 백그라운드 워크스페이스에서 부르면 영영 실패했다. 뷰의 주인이 main 이
+  // 되면서 그 전제가 사라졌다([[main/webViews]]).
+  //
+  // 화면은 옮기지 않는다(`activate: false`) — 사용자가 읽던 대화가 예고 없이 갈리면 안 된다.
+  const state = deps.tabs.openTab(workspaceId, {
+    kind: 'dev',
+    target: origin,
+    activate: false
+  })
+  const tab = state.tabs.find((t) => t.kind === 'dev' && t.target === origin)
+  if (!tab) throw new Error('Wooi could not open a preview tab for this workspace.')
+  // 주소는 넘기지 않는다 — 이동은 아래에서 메인이 직접 해야 실패 사유가 돌아온다.
+  deps.views.ensure(tab.id, workspaceId, 'dev')
 
-  const guest = await waitForGuest(workspaceId)
-  if (!guest) throw new Error(NO_PANEL)
+  const guest = previewGuestFor(workspaceId)
+  if (!guest) throw new Error('Wooi could not attach a preview for this workspace.')
 
   try {
-    await load(guest, url)
+    await loadGuest(guest, url)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(`Could not load ${url} — ${message}. ${noDevServerReason(deps, ws)}`, {
@@ -265,7 +260,9 @@ function ordered(issues: readonly PreviewIssue[]): PreviewIssue[] {
 export const readPreviewIssues: AgentToolHandler = async (_deps, workspaceId) => {
   const ws = workspaceOf(workspaceId)
   const guest = previewGuestFor(workspaceId)
-  const all = previewIssues().list(workspaceId)
+  // 수집기는 탭 단위로 키를 잡는다 — 워크스페이스로 물으면 아무것도 안 나온다([[main/previewIssues]]).
+  const tabId = previewTabFor(workspaceId)
+  const all = tabId ? previewIssues().list(tabId) : []
 
   const kept: Array<Omit<PreviewIssue, 'id' | 'ts'>> = []
   let bytes = 0

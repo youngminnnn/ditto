@@ -30,10 +30,10 @@ export function rendererWebPreferences(): Electron.WebPreferences {
     sandbox: false,
     contextIsolation: true,
     nodeIntegration: false,
-    // Preview 탭이 `<webview>` 로 워크트리의 dev 서버를 그린다([[preview]]). 메인 창뿐 아니라
-    // 분리한 work 창도 같은 패널을 그리므로 창을 가리지 않고 켠다. 게스트 쪽 설정(파티션·샌드박스·
-    // preload 제거)은 태그 속성이 아니라 main 의 will-attach-webview 가 강제한다.
-    webviewTag: true
+    // 게스트는 main 이 소유하는 뷰다([[main/webViews]]) — 렌더러가 `<webview>` 태그를 붙일 수
+    // 있게 열어 둘 이유가 없다. 꺼 두면 렌더러가 한 번 흔들려도(XSS·의존성 사고) 그 길로
+    // 격리되지 않은 게스트를 만들 수 없다.
+    webviewTag: false
   }
 }
 

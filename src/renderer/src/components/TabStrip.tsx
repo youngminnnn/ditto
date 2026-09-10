@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { MessageSquare, Globe, FileCode, Layers, Sparkles, Plus, X } from 'lucide-react'
+import MenuPanel, { menuItemCls } from './MenuPanel'
 import type { WorkspaceTab } from '@shared/types'
 
 /**
@@ -22,9 +24,16 @@ export default function TabStrip({
   activeId: string
   onSelect: (tabId: string) => void
   onClose: (tabId: string) => void
-  /** 빈 웹 탭을 연다. 주소창에 커서가 가 있으니 다음 동작은 주소를 치는 것뿐이다. */
-  onNew: () => void
+  /**
+   * 새 탭을 연다.
+   *
+   * 종류를 고르게 하는 이유: 열 수 있는 것 중에 **다른 입구가 없는 것**이 있다. 아티팩트가
+   * 그렇다 — 에이전트가 만들 때 탭이 생기지만 닫고 나면 다시 열 길이 사라진다(dev 는 스크립트
+   * 패널, 파일은 All files·퀵오픈이라는 입구가 따로 있다).
+   */
+  onNew: (kind: 'web' | 'artifact') => void
 }): React.JSX.Element {
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div
       role="tablist"
@@ -40,14 +49,44 @@ export default function TabStrip({
           onClose={() => onClose(tab.id)}
         />
       ))}
-      <button
-        onClick={onNew}
-        aria-label="New tab"
-        title="New tab"
-        className="shrink-0 mb-[3px] grid h-6 w-6 place-items-center rounded-md text-neutral-500 hover:bg-[var(--surface)] hover:text-neutral-200"
-      >
-        <Plus size={13} />
-      </button>
+      <div className="relative shrink-0 mb-[3px]">
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-label="New tab"
+          aria-expanded={menuOpen}
+          title="New tab"
+          className="grid h-6 w-6 place-items-center rounded-md text-neutral-500 hover:bg-[var(--surface)] hover:text-neutral-200"
+        >
+          <Plus size={13} />
+        </button>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+            <MenuPanel className="absolute left-0 top-full z-50 mt-1 w-44">
+              <button
+                className={menuItemCls}
+                onClick={() => {
+                  setMenuOpen(false)
+                  onNew('web')
+                }}
+              >
+                <Globe size={12} className="shrink-0" />
+                New web tab
+              </button>
+              <button
+                className={menuItemCls}
+                onClick={() => {
+                  setMenuOpen(false)
+                  onNew('artifact')
+                }}
+              >
+                <Sparkles size={12} className="shrink-0 text-[var(--accent-400)]" />
+                Artifacts
+              </button>
+            </MenuPanel>
+          </>
+        )}
+      </div>
     </div>
   )
 }

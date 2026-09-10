@@ -1333,7 +1333,7 @@ export default function App(): React.JSX.Element {
                 activeId={wsTabs.activeId}
                 onSelect={wsTabs.select}
                 onClose={wsTabs.close}
-                onNew={() => wsTabs.open({ kind: 'web' })}
+                onNew={(kind) => wsTabs.open({ kind })}
               />
               {wsTabs.active && (wsTabs.active.kind === 'dev' || wsTabs.active.kind === 'web') ? (
                 <BrowserTab

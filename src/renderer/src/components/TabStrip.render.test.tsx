@@ -60,10 +60,16 @@ describe('TabStrip', () => {
     expect(screen.getByRole('tab', { name: 'preview.ts' })).toBeInTheDocument()
   })
 
-  it('새 탭 버튼은 빈 웹 탭을 요청한다', () => {
+  it('새 탭 버튼은 종류를 고르게 한다 — 아티팩트는 여기 말고 다시 열 입구가 없다', () => {
     const { onNew } = renderStrip([work])
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
-    expect(onNew).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New web tab' }))
+    expect(onNew).toHaveBeenCalledWith('web')
+
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Artifacts' }))
+    expect(onNew).toHaveBeenCalledWith('artifact')
   })
 
   it('사용자가 붙인 이름이 있으면 그것이 이긴다', () => {

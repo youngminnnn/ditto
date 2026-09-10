@@ -109,8 +109,13 @@ async function runCommand(win, text) {
         .waitFor({ state: 'attached', timeout: 1000 })
         .then(() => true)
         .catch(() => false)
+      // **읽고 나서 닫는다** — 위 빠른 경로와 같은 순서다. Escape 는 카드를 걷어내는데,
+      // `waitFor({ state: 'attached' })` 는 DOM 에 붙은 순간 통과하는 반면 `innerText()` 는
+      // 보이는 요소를 요구한다. 먼저 누르면 방금 붙은 `<pre>` 가 사라진 뒤에 글자를 읽으려다
+      // 30초를 기다리고 죽는다 — 기계가 한가하면 안 나고 전체 실행에서만 나는 종류다.
+      const text = hasResult ? await settled.innerText() : null
       await box.press('Escape')
-      if (hasResult) return { result: JSON.parse(await settled.innerText()) }
+      if (text != null) return { result: JSON.parse(text) }
       return { error: body }
     }
     await win.waitForTimeout(100)

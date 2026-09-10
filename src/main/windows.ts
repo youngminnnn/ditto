@@ -30,10 +30,10 @@ export function rendererWebPreferences(): Electron.WebPreferences {
     sandbox: false,
     contextIsolation: true,
     nodeIntegration: false,
-    // 이제 아무도 `<webview>` 를 쓰지 않는다 — 게스트는 main 이 소유하는 뷰다([[main/webViews]]).
-    // 그런데도 아직 켜 둔 이유는 하나뿐이다: 이관이 끝났다고 확신하기 전에 끄면 되돌릴 길이
-    // 사라진다. 마지막 단계에서 false 로 내리고 이 주석도 함께 지운다.
-    webviewTag: true
+    // 게스트는 main 이 소유하는 뷰다([[main/webViews]]) — 렌더러가 `<webview>` 태그를 붙일 수
+    // 있게 열어 둘 이유가 없다. 꺼 두면 렌더러가 한 번 흔들려도(XSS·의존성 사고) 그 길로
+    // 격리되지 않은 게스트를 만들 수 없다.
+    webviewTag: false
   }
 }
 

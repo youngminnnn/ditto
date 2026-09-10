@@ -43,6 +43,7 @@ import WorkArea from './components/WorkArea'
 import Splitter from './components/Splitter'
 import TabStrip from './components/TabStrip'
 import BrowserTab from './components/tabs/BrowserTab'
+import ArtifactTab from './components/tabs/ArtifactTab'
 import FileTab from './components/tabs/FileTab'
 import StackTab from './components/tabs/StackTab'
 import { useWorkspaceTabs } from './lib/workspaceTabs'
@@ -162,6 +163,26 @@ export default function App(): React.JSX.Element {
         activate: e.activate
       })
       if (e.workspaceId === selectedId) setPreviewNav({ url: e.url, seq: ++previewSeq.current })
+    })
+  }, [selectedId])
+
+  // create_artifact 가 방금 만든 것. 프리뷰와 같은 이유로 **화면을 옮기지 않는다** — 이 신호는
+  // 에이전트만 쏘고(사람이 누르는 입구가 없다), 읽던 대화가 예고 없이 갈리면 안 된다.
+  const [artifactNav, setArtifactNav] = useState<{
+    artifactId: string
+    version: number
+    seq: number
+  } | null>(null)
+  const artifactSeq = useRef(0)
+  useEffect(() => {
+    return window.api.artifact.onOpen((e) => {
+      void window.api.tabs.open(e.workspaceId, { kind: 'artifact', activate: false })
+      if (e.workspaceId === selectedId)
+        setArtifactNav({
+          artifactId: e.artifactId,
+          version: e.version,
+          seq: ++artifactSeq.current
+        })
     })
   }, [selectedId])
   const rightBase = useRef(rightWidth)
@@ -1320,6 +1341,13 @@ export default function App(): React.JSX.Element {
                   workspace={selected}
                   tab={wsTabs.active}
                   navTarget={wsTabs.active.kind === 'dev' ? previewNav : null}
+                />
+              ) : wsTabs.active?.kind === 'artifact' ? (
+                <ArtifactTab
+                  key={wsTabs.active.id}
+                  workspace={selected}
+                  tabId={wsTabs.active.id}
+                  target={artifactNav}
                 />
               ) : wsTabs.active?.kind === 'file' ? (
                 // key 를 일부러 안 건다 — 이유는 FileTab 자신의 주석 참고(파일 탭 사이를

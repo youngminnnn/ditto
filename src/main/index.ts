@@ -44,6 +44,9 @@ import { initFeatures } from './features'
 import { initPreview, previewIssues } from './preview'
 import { disposeAuthSessions } from './auth'
 import { reapDescendants } from './reaper'
+// 스킴 등록은 이 import 의 부수효과로, app ready 전에 일어나야 한다([[artifactScheme]]).
+import './artifactScheme'
+import { initArtifactDispatch } from './artifactProtocol'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -365,6 +368,9 @@ app.whenReady().then(() => {
   // Preview 세션 정책(권한 전면 거부)을 창보다 먼저 세운다. 게스트 울타리는 뷰를 만드는
   // 자리에서 걸리므로([[main/webViews]]) 여기서 놓칠 일이 없다.
   initPreview(dispatch, views)
+  // 아티팩트 세션은 워크스페이스마다 하나라 뷰를 만드는 자리에서 게으르게 선다
+  // ([[main/webViews]] ensure). 여기서는 방송 통로만 건네준다.
+  initArtifactDispatch(dispatch)
   // 원격 브리지는 IPC 등록보다 **먼저** 만들어야 한다 — 핸들러가 getRemoteBridge() 를 부른다.
   // 만드는 것 자체는 아무 자원도 잡지 않는다(설정을 읽을 뿐이다). 실제 연결은 아래에서
   // 사용자가 켜 둔 경우에만 일어난다.

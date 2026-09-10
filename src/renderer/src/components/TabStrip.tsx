@@ -1,4 +1,4 @@
-import { MessageSquare, Globe, FileCode, Layers, Plus, X } from 'lucide-react'
+import { MessageSquare, Globe, FileCode, Layers, Sparkles, Plus, X } from 'lucide-react'
 import type { WorkspaceTab } from '@shared/types'
 
 /**
@@ -111,6 +111,9 @@ function TabIcon({ tab }: { tab: WorkspaceTab }): React.JSX.Element {
     return <span className="shrink-0 h-[7px] w-[7px] rounded-full bg-[var(--success-400)]" />
   if (tab.kind === 'file') return <FileCode size={12} className="shrink-0" />
   if (tab.kind === 'stack') return <Layers size={12} className="shrink-0" />
+  // 모델이 만든 것은 한눈에 갈려야 한다 — dev 서버나 진짜 사이트로 착각하면 안 된다.
+  if (tab.kind === 'artifact')
+    return <Sparkles size={12} className="shrink-0 text-[var(--accent-400)]" />
   return <Globe size={12} className="shrink-0" />
 }
 
@@ -119,6 +122,7 @@ function tabLabel(tab: WorkspaceTab): string {
   if (tab.kind === 'work') return 'Work'
   // target 은 앵커 워크스페이스 id라 그대로 쓰면 읽을 수 없다 — 종류 이름으로 대신한다.
   if (tab.kind === 'stack') return 'Stack'
+  if (tab.kind === 'artifact') return 'Artifacts'
   if (!tab.target) return tab.kind
   try {
     const url = new URL(tab.target)

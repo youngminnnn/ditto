@@ -5,6 +5,7 @@ import {
   Animated,
   FlatList,
   Dimensions,
+  Image,
   Keyboard,
   Modal,
   Platform,
@@ -28,8 +29,14 @@ import {
   CircleDashed,
   Copy,
   CornerDownRight,
+  Camera,
+  FileText,
+  FolderOpen,
+  Image as ImageGlyph,
+  Images,
   ListTodo,
   Maximize2,
+  Paperclip,
   Square,
   Terminal,
   Users,
@@ -39,9 +46,14 @@ import {
 } from 'lucide-react-native'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { ChatItem, PermissionRequest } from '@shared/types'
+import type { ChatAttachment, ChatItem, PermissionRequest } from '@shared/types'
 import { workspaceDisplayName } from '@shared/types'
 import { diffFilePath, diffStat } from '@shared/diff'
+import {
+  REMOTE_MAX_ATTACHMENTS,
+  REMOTE_MAX_ATTACHMENT_TOTAL_BYTES,
+  isRemoteImageMediaType
+} from '@shared/remote'
 import { formatToolGroup } from '@shared/toolGroups'
 import { BrandMark } from '../../../src/components/BrandMark'
 import { DemoBanner } from '../../../src/components/DemoBanner'
@@ -62,6 +74,14 @@ import type { Theme } from '../../../src/theme'
 import { activityLabel } from '../../../src/chat/activity'
 import { buildChatRows, type ChatRowModel, type ToolCardModel } from '../../../src/chat/rows'
 import { isPermissionRequest, isQuestionRequest } from '../../../src/chat/questions'
+import { chunkBase64 } from '../../../src/attachments/chunks'
+import {
+  AttachmentError,
+  pickCameraPhoto,
+  pickDocuments,
+  pickImages,
+  type PendingAttachment
+} from '../../../src/attachments/pick'
 
 const PAGE_SIZE = 100
 const WATCH_REFRESH_MS = 40_000
@@ -560,6 +580,94 @@ function ToolCard({ card }: { card: ToolCardModel }): React.JSX.Element {
   )
 }
 
+function AttachSheetRow({
+  icon: Icon,
+  label,
+  onPress
+}: {
+  icon: LucideIcon
+  label: string
+  onPress: () => void
+}): React.JSX.Element {
+  const theme = useTheme()
+  const styles = useThemedStyles(makeStyles)
+  return (
+    <Pressable style={styles.attachSheetRow} onPress={onPress}>
+      <Icon color={theme.textMuted} size={17} />
+      <Text style={styles.attachSheetLabel}>{label}</Text>
+    </Pressable>
+  )
+}
+
+/** 보내기 전 컴포저에 얹힌 첨부 하나. 이미지는 썸네일로, 나머지는 이름으로 보여 준다. */
+function AttachmentChip({
+  attachment,
+  disabled,
+  onRemove
+}: {
+  attachment: PendingAttachment
+  disabled: boolean
+  onRemove: () => void
+}): React.JSX.Element {
+  const theme = useTheme()
+  const styles = useThemedStyles(makeStyles)
+  return (
+    <View style={styles.chip}>
+      {attachment.previewUri !== undefined ? (
+        <Image source={{ uri: attachment.previewUri }} style={styles.chipThumb} />
+      ) : (
+        <View style={styles.chipThumb}>
+          <FileText color={theme.textMuted} size={16} />
+        </View>
+      )}
+      <View style={styles.chipText}>
+        <Text style={styles.chipName} numberOfLines={1}>
+          {attachment.name}
+        </Text>
+        <Text style={styles.chipSize}>{Math.max(1, Math.round(attachment.bytes / 1024))} KB</Text>
+      </View>
+      <Pressable
+        style={[styles.chipRemove, disabled && styles.disabled]}
+        disabled={disabled}
+        onPress={onRemove}
+        accessibilityLabel={`Remove ${attachment.name}`}
+      >
+        <X color={theme.textMuted} size={14} />
+      </Pressable>
+    </View>
+  )
+}
+
+/**
+ * 이미 보낸 메시지에 딸린 첨부. 트랜스크립트에는 이름과 형식만 남으므로(본문은 모델에만
+ * 필요하다) 데스크톱처럼 칩으로만 보여 준다.
+ */
+function SentAttachments({
+  attachments
+}: {
+  attachments?: ChatAttachment[]
+}): React.JSX.Element | null {
+  const theme = useTheme()
+  const styles = useThemedStyles(makeStyles)
+  if (attachments === undefined || attachments.length === 0) return null
+  return (
+    <View style={styles.sentRow}>
+      {attachments.map((attachment, index) => (
+        <View key={`${attachment.name}-${index}`} style={styles.sentChip}>
+          {isRemoteImageMediaType(attachment.mediaType) ? (
+            <ImageGlyph color={theme.textMuted} size={11} />
+          ) : (
+            <FileText color={theme.textMuted} size={11} />
+          )}
+          <Text style={styles.sentName} numberOfLines={1}>
+            {attachment.name}
+          </Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 function ChatRow({ row }: { row: ChatRowModel }): React.JSX.Element | null {
   const theme = useTheme()
   const styles = useThemedStyles(makeStyles)
@@ -589,6 +697,7 @@ function ChatRow({ row }: { row: ChatRowModel }): React.JSX.Element | null {
                 울타리를 가리면 말풍선 안에 가로 ScrollView 가 생겨 레이아웃이 무너진다
                 (UserText 주석 참고). */}
             <UserText text={item.text} />
+            <SentAttachments attachments={item.attachments} />
           </View>
         </View>
       )
@@ -704,6 +813,10 @@ export default function WorkspaceScreen(): React.JSX.Element {
   })
   const [items, setItems] = useState<ChatItem[]>([])
   const [text, setText] = useState('')
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [picking, setPicking] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [uploaded, setUploaded] = useState<{ done: number; total: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [hasOlder, setHasOlder] = useState(true)
@@ -804,9 +917,84 @@ export default function WorkspaceScreen(): React.JSX.Element {
     }
   }, [command, hasOlder, items, loadingOlder, mergeItems, workspaceId])
 
+  /**
+   * 고른 첨부를 예산 안에서만 받는다. 넘치는 것은 **조용히 버리지 않고** 말해 준다 —
+   * 보냈다고 믿은 첨부가 빠지는 것이 아예 못 붙이는 것보다 나쁘다.
+   */
+  const addAttachments = useCallback(
+    (picked: PendingAttachment[]): void => {
+      if (picked.length === 0) return
+      const accepted: PendingAttachment[] = []
+      let bytes = attachments.reduce((sum, item) => sum + item.bytes, 0)
+      let dropped = 0
+      for (const item of picked) {
+        const full = attachments.length + accepted.length >= REMOTE_MAX_ATTACHMENTS
+        if (full || bytes + item.bytes > REMOTE_MAX_ATTACHMENT_TOTAL_BYTES) {
+          dropped += 1
+          continue
+        }
+        accepted.push(item)
+        bytes += item.bytes
+      }
+      if (accepted.length > 0) setAttachments([...attachments, ...accepted])
+      if (dropped > 0) {
+        setError(
+          `${dropped} attachment${dropped === 1 ? '' : 's'} didn't fit — a message can carry ${REMOTE_MAX_ATTACHMENTS} files and ${Math.round(REMOTE_MAX_ATTACHMENT_TOTAL_BYTES / 1024)} KB in total.`
+        )
+      }
+    },
+    [attachments]
+  )
+
+  const runPicker = useCallback(
+    async (pick: () => Promise<PendingAttachment[]>): Promise<void> => {
+      setPicking(true)
+      try {
+        addAttachments(await pick())
+      } catch (pickError) {
+        setError(
+          pickError instanceof AttachmentError ? pickError.message : errorMessage(pickError)
+        )
+      } finally {
+        setPicking(false)
+      }
+    },
+    [addAttachments]
+  )
+
+  /**
+   * 첨부 메뉴를 연다. `Alert` 를 쓰지 않는 이유는 **안드로이드가 버튼을 세 개까지만** 그리기
+   * 때문이다 — 보관함·카메라·파일에 취소까지 네 개라 한 항목이 조용히 사라진다.
+   */
+  const attach = useCallback((): void => {
+    if (attachments.length >= REMOTE_MAX_ATTACHMENTS) {
+      setError(`A message can carry ${REMOTE_MAX_ATTACHMENTS} attachments.`)
+      return
+    }
+    Keyboard.dismiss()
+    setMenuOpen(true)
+  }, [attachments.length])
+
+  const chooseSource = useCallback(
+    (source: 'library' | 'camera' | 'files'): void => {
+      setMenuOpen(false)
+      const remaining = REMOTE_MAX_ATTACHMENTS - attachments.length
+      if (remaining <= 0) return
+      void runPicker(() =>
+        source === 'library'
+          ? pickImages(remaining)
+          : source === 'camera'
+            ? pickCameraPhoto()
+            : pickDocuments(remaining)
+      )
+    },
+    [attachments.length, runPicker]
+  )
+
   const send = useCallback(async (): Promise<void> => {
     const prompt = text.trim()
-    if (command === null || workspaceId === undefined || prompt.length === 0 || sending) return
+    if (command === null || workspaceId === undefined || sending) return
+    if (prompt.length === 0 && attachments.length === 0) return
     if (new TextEncoder().encode(prompt).length > MAX_PROMPT_BYTES) {
       setError('Message is too large. Keep it under 32 KiB.')
       return
@@ -823,17 +1011,61 @@ export default function WorkspaceScreen(): React.JSX.Element {
     setSending(true)
     setError(null)
     try {
-      await command('chat:send', [workspaceId, prompt])
+      // 첨부 본문은 명령 하나에 들어가지 않아 조각으로 먼저 올라간다. 조각은 결과를 기다리지
+      // 않고 **순서대로 꽂아만 둔다** — 랩탑이 넣은 순서대로 처리하므로 아래 chat:send 보다
+      // 반드시 먼저 도착하고, 빠진 조각은 그 chat:send 의 오류로 한 번에 드러난다.
+      if (attachments.length > 0) {
+        const plan = attachments.map((item) => ({ item, chunks: chunkBase64(item.base64) }))
+        const total = plan.reduce((sum, entry) => sum + entry.chunks.length, 0)
+        let done = 0
+        setUploaded({ done, total })
+        for (const { item, chunks } of plan) {
+          for (const [index, chunk] of chunks.entries()) {
+            await command('remote:upload', [item.id, index, chunks.length, chunk], {
+              awaitResult: false
+            })
+            done += 1
+            setUploaded({ done, total })
+          }
+        }
+      }
+      // 첨부가 없으면 인자를 두 개만 보낸다 — 첨부를 모르는 옛 랩탑은 인자 수부터 거절한다.
+      await command(
+        'chat:send',
+        attachments.length === 0
+          ? [workspaceId, prompt]
+          : [
+              workspaceId,
+              prompt,
+              attachments.map(({ id, name, mediaType }) => ({ uploadId: id, name, mediaType }))
+            ]
+      )
       setText('')
+      setAttachments([])
       // 위로 올려 읽던 중이었다면 방금 보낸 말이 화면 밖에 남는다. 보낸 사람은 그것부터 본다.
       jumpToLatest()
       await loadLatest()
     } catch (sendError) {
-      setError(errorMessage(sendError))
+      setError(
+        attachments.length > 0
+          ? `${errorMessage(sendError)} If your computer runs an older Wooi, update it — attachments need a newer desktop app.`
+          : errorMessage(sendError)
+      )
     } finally {
+      setUploaded(null)
       setSending(false)
     }
-  }, [authenticate, command, jumpToLatest, loadLatest, sending, text, workspace, workspaceId])
+  }, [
+    attachments,
+    authenticate,
+    command,
+    jumpToLatest,
+    loadLatest,
+    sending,
+    text,
+    workspace,
+    workspaceId
+  ])
 
   const stop = useCallback(async (): Promise<void> => {
     if (command === null || workspaceId === undefined || stopping) return
@@ -860,6 +1092,8 @@ export default function WorkspaceScreen(): React.JSX.Element {
 
   const modeFooter = workspace?.permissionModeFooter ?? null
   const statusLine = workspace?.statusLine ?? null
+  // 첨부만 있고 본문이 비어도 보낼 수 있다 — 데스크톱 컴포저와 같은 규칙이다.
+  const canSend = text.trim().length > 0 || attachments.length > 0
 
   const repoName = useRemoteStore(
     (store) => store.state?.repos.find((repo) => repo.id === workspace?.repoId)?.name ?? null
@@ -1050,7 +1284,46 @@ export default function WorkspaceScreen(): React.JSX.Element {
         <View style={styles.dock}>
           <ActivityPill label={activity} />
           <WorkspaceStatusBar status={statusLine} />
+          {attachments.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.trayRow}
+              style={styles.tray}
+            >
+              {attachments.map((attachment) => (
+                <AttachmentChip
+                  key={attachment.id}
+                  attachment={attachment}
+                  disabled={sending}
+                  onRemove={() =>
+                    setAttachments((current) =>
+                      current.filter((item) => item.id !== attachment.id)
+                    )
+                  }
+                />
+              ))}
+            </ScrollView>
+          ) : null}
           <View style={styles.composer}>
+            <Pressable
+              accessibilityLabel="Attach a photo or file"
+              accessibilityRole="button"
+              disabled={sending || picking}
+              onPress={attach}
+              style={({ pressed }) => [
+                styles.circleButton,
+                styles.attachButton,
+                (sending || picking) && styles.disabled,
+                pressed && styles.buttonPressed
+              ]}
+            >
+              {picking ? (
+                <ActivityIndicator color={theme.textMuted} size="small" />
+              ) : (
+                <Paperclip color={theme.textMuted} size={19} />
+              )}
+            </Pressable>
             <TextInput
               style={styles.input}
               value={text}
@@ -1087,16 +1360,22 @@ export default function WorkspaceScreen(): React.JSX.Element {
             <Pressable
               accessibilityLabel="Send"
               accessibilityRole="button"
-              disabled={sending || text.trim().length === 0}
+              disabled={sending || !canSend}
               onPress={() => void send()}
               style={({ pressed }) => [
                 styles.circleButton,
                 styles.sendButton,
-                (sending || text.trim().length === 0) && styles.disabled,
+                (sending || !canSend) && styles.disabled,
                 pressed && styles.buttonPressed
               ]}
             >
-              {sending ? (
+              {/* 첨부는 조각으로 나뉘어 올라가느라 몇 초씩 걸린다. 그동안 회전만 보여 주면
+                  멈춘 것인지 가는 것인지 알 수 없어서, 올리는 동안에만 진행률을 띄운다. */}
+              {uploaded !== null ? (
+                <Text style={styles.sendProgress}>
+                  {Math.round((uploaded.done / Math.max(1, uploaded.total)) * 100)}%
+                </Text>
+              ) : sending ? (
                 <ActivityIndicator color={theme.onAccentStrong} size="small" />
               ) : (
                 <ArrowUp color={theme.onAccentStrong} size={20} strokeWidth={2.6} />
@@ -1108,6 +1387,21 @@ export default function WorkspaceScreen(): React.JSX.Element {
             <PermissionModeFooter footer={modeFooter} />
           ) : null}
         </View>
+        {/* 네이티브 Modal 이 아니라 화면 안의 겹침이다 — iOS 에서 모달이 닫히는 도중에 사진
+            선택기를 띄우면 표시 자체가 실패한다. 겹침에는 그 타이밍 문제가 없다. */}
+        {menuOpen ? (
+          <Pressable style={styles.attachSheetBackdrop} onPress={() => setMenuOpen(false)}>
+            <View style={styles.attachSheet}>
+              <AttachSheetRow
+                icon={Images}
+                label="Photo library"
+                onPress={() => chooseSource('library')}
+              />
+              <AttachSheetRow icon={Camera} label="Take a photo" onPress={() => chooseSource('camera')} />
+              <AttachSheetRow icon={FolderOpen} label="Files" onPress={() => chooseSource('files')} />
+            </View>
+          </Pressable>
+        ) : null}
       </View>
     </SafeAreaView>
   )
@@ -1342,6 +1636,76 @@ const makeStyles = (theme: Theme) =>
       paddingBottom: 10,
       paddingHorizontal: 10
     },
+    // 크기와 둥글기는 circleButton 이 준다 — Send·Stop 과 같은 원형 언어를 쓰기 위해서다.
+    attachButton: { backgroundColor: theme.bg2, borderColor: theme.surface2, borderWidth: 1 },
+    attachSheetBackdrop: {
+      // 스크림은 테마 토큰을 쓰지 않는다 — 라이트에서도 시트를 띄우는 것은 검은 반투명이다.
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      bottom: 0,
+      justifyContent: 'flex-end',
+      left: 0,
+      padding: 14,
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      zIndex: 10
+    },
+    attachSheet: {
+      backgroundColor: theme.bg2,
+      borderColor: theme.border,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      overflow: 'hidden'
+    },
+    attachSheetRow: {
+      alignItems: 'center',
+      borderBottomColor: theme.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+      gap: 11,
+      paddingHorizontal: 16,
+      paddingVertical: 15
+    },
+    attachSheetLabel: { color: theme.text, fontSize: 15 },
+    tray: { maxHeight: 60 },
+    trayRow: { gap: 8, paddingBottom: 8, paddingHorizontal: 10 },
+    chip: {
+      alignItems: 'center',
+      backgroundColor: theme.bg2,
+      borderColor: theme.surface2,
+      borderRadius: 8,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: 7,
+      maxWidth: 210,
+      paddingLeft: 4,
+      paddingRight: 6,
+      paddingVertical: 4
+    },
+    chipThumb: {
+      alignItems: 'center',
+      backgroundColor: theme.bg3,
+      borderRadius: 5,
+      height: 30,
+      justifyContent: 'center',
+      width: 30
+    },
+    chipText: { flexShrink: 1 },
+    chipName: { color: theme.text, fontSize: 11, fontWeight: '600' },
+    chipSize: { color: theme.textFaint, fontSize: 9, marginTop: 1 },
+    chipRemove: { alignItems: 'center', height: 22, justifyContent: 'center', width: 22 },
+    sentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+    sentChip: {
+      alignItems: 'center',
+      backgroundColor: theme.bg3,
+      borderRadius: 4,
+      flexDirection: 'row',
+      gap: 4,
+      maxWidth: 200,
+      paddingHorizontal: 6,
+      paddingVertical: 3
+    },
+    sentName: { color: theme.textMuted, fontSize: 10, flexShrink: 1 },
     input: {
       backgroundColor: theme.bg2,
       borderColor: theme.surface2,
@@ -1366,6 +1730,7 @@ const makeStyles = (theme: Theme) =>
       width: 44
     },
     sendButton: { backgroundColor: theme.accentStrong },
+    sendProgress: { color: theme.onAccentStrong, fontSize: 11, fontWeight: '700' },
     // 멈춤은 파괴적이지 않다 — 솔리드 빨강은 과하다. 데스크톱과 같은 틴트 + 테두리로 둔다.
     stopButton: {
       backgroundColor: theme.dangerSurface,

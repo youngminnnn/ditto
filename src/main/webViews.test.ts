@@ -149,11 +149,15 @@ describe('HostedViewManager', () => {
     // `partitionFor` 가 삼항이던 시절에는 "웹이 아니면 dev" 였다. 종류를 하나 더하면 그것이
     // 아무 말 없이 dev 서버의 **영속** 세션을 쓰게 되는데, 아티팩트가 정확히 그 경우다 —
     // 모델이 쓴 코드가 우리 쿠키에 닿는 것은 파티션 분리가 막으려던 바로 그것이다.
-    expect(partitionFor('dev')).toBe(PREVIEW_PARTITION)
-    expect(partitionFor('web')).toBe(BROWSER_PARTITION)
+    expect(partitionFor('dev', 'ws-1')).toBe(PREVIEW_PARTITION)
+    expect(partitionFor('web', 'ws-1')).toBe(BROWSER_PARTITION)
+    // 아티팩트는 워크스페이스마다 갈리고 영속하지 않는다 — 모델이 쓴 코드의 스토리지가
+    // 워크스페이스 경계를 넘거나 디스크에 남으면 안 된다.
+    expect(partitionFor('artifact', 'ws-1')).not.toBe(partitionFor('artifact', 'ws-2'))
+    expect(partitionFor('artifact', 'ws-1')).not.toMatch(/^persist:/)
     // 타입에 없는 종류가 흘러 들어오면 조용히 넘어가지 않고 던진다(컴파일러가 먼저 잡지만,
     // 런타임 경로로 새 kind 가 들어오는 경우까지 닫는다).
-    expect(() => partitionFor('artifact' as never)).toThrow(/no session partition/)
+    expect(() => partitionFor('nope' as never, 'ws-1')).toThrow(/no session partition/)
   })
 
   it('같은 tabId 로 두 번 ensure 해도 뷰는 하나다', async () => {

@@ -81,9 +81,25 @@ export function applyGuestGuards(contents: WebContents): void {
   })
 }
 
-/** 이 종류의 게스트가 쓸 세션 파티션. dev 와 웹을 갈라 쿠키가 서로 새지 않게 한다. */
+/**
+ * 이 종류의 게스트가 쓸 세션 파티션. dev 와 웹을 갈라 쿠키가 서로 새지 않게 한다.
+ *
+ * `switch` + `never` 로 쓴 이유가 있다. 삼항으로 두면 "웹이 아니면 dev" 가 되어, 나중에
+ * 종류를 하나 더할 때 **아무 말 없이 dev 서버의 영속 세션을 쓰게 된다.** 아티팩트가 정확히
+ * 그 경우다 — 모델이 쓴 코드가 우리 dev 서버의 쿠키·스토리지에 닿는 것은 이 파티션 분리가
+ * 막으려던 바로 그것이다. 여기서 컴파일이 깨지면 세션을 어디에 둘지 반드시 고르게 된다.
+ */
 export function partitionFor(kind: HostedViewKind): string {
-  return kind === 'web' ? BROWSER_PARTITION : PREVIEW_PARTITION
+  switch (kind) {
+    case 'dev':
+      return PREVIEW_PARTITION
+    case 'web':
+      return BROWSER_PARTITION
+    default: {
+      const unhandled: never = kind
+      throw new Error(`webViews: no session partition chosen for kind "${String(unhandled)}"`)
+    }
+  }
 }
 
 /** 뷰 하나를 만들 때 강제하는 설정. 예전 `will-attach-webview` 가 하던 일을 그대로 옮겼다. */

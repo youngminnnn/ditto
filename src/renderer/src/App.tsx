@@ -39,12 +39,12 @@ import ChatView from './components/ChatView'
 import SubagentChatView from './components/SubagentChatView'
 import { nextSubagent, subagentCycle } from './lib/subagentRows'
 import ArchivedChatView from './components/ArchivedChatView'
-import FileViewerOverlay from './components/FileViewerOverlay'
 import FileQuickOpen from './components/FileQuickOpen'
 import WorkArea from './components/WorkArea'
 import Splitter from './components/Splitter'
 import TabStrip from './components/TabStrip'
 import BrowserTab from './components/tabs/BrowserTab'
+import FileTab from './components/tabs/FileTab'
 import { useWorkspaceTabs } from './lib/workspaceTabs'
 import EmptyState from './components/EmptyState'
 import Overview from './components/Overview'
@@ -73,8 +73,13 @@ import type { ExportConversationDetail } from './components/ExportMenu'
 /**
  * 대화 입력창이 지금 화면에 닿아 있는가.
  *
- * 리뷰 화면·팬아웃 비교·파일 뷰어는 대화를 통째로 덮는다. 그 위에서 친 글자를 뒤쪽 textarea 에
- * 몰래 넣으면 사용자는 자기 글이 어디로 갔는지 알 수 없다 — ⌘L 이 같은 이유로 같은 판정을 쓴다.
+ * 리뷰 화면·팬아웃 비교는 대화를 통째로 덮는다. 그 위에서 친 글자를 뒤쪽 textarea 에 몰래
+ * 넣으면 사용자는 자기 글이 어디로 갔는지 알 수 없다 — ⌘L 이 같은 이유로 같은 판정을 쓴다.
+ *
+ * 파일 탭은(dev·web 탭과 마찬가지로) 여기서 따로 가리지 않는다 — 대화를 덮는 오버레이가
+ * 아니라 그 자리를 통째로 갈아 끼우는 탭이라 ChatView 자체가 마운트되지 않고, 대신 자기
+ * 컴포저를 들고 있다([[components/tabs/FileTab]]). 전역 타이핑 리다이렉트·⌘L 이 그 컴포저로
+ * 가도 안전한 이유도 같다 — 워크스페이스가 같으면 어느 탭의 컴포저든 같은 초안을 공유한다.
  *
  * 열린 모달(`overlayOpen`)은 보지 않는다. 부르는 쪽 둘 다 이미 그 답을 알고 있다 — 전역
  * keydown 은 모달이 떠 있으면 위에서 return 하고, ⌘K 팔레트는 항목을 고르는 즉시 닫힌다.
@@ -84,10 +89,8 @@ function chatComposerReachable(
   st: Parameters<typeof paneState>[0] & {
     activeFanoutGroupId: string | null
     activeStackWorkspaceId: string | null
-  },
-  fileViewerVisible: boolean
+  }
 ): boolean {
-  if (fileViewerVisible) return false
   if (st.activeFanoutGroupId || st.activeStackWorkspaceId) return false
   // 나란히 두 칸을 띄웠으면 "닿는" 입력창은 포커스된 칸의 것 하나뿐이다. 리뷰 칸을 보는 중에
   // 뒤쪽 대화의 입력창을 채우면, 분할이 아닐 때와 똑같이 글이 어디로 갔는지 알 수 없게 된다.
@@ -206,14 +209,16 @@ export default function App(): React.JSX.Element {
   const [reviewStartOpen, setReviewStartOpen] = useState(false)
   const [issueRepoId, setIssueRepoId] = useState<string | null>(null)
   const [prRepoId, setPrRepoId] = useState<string | null>(null)
-  // ⇧⌘O 파일 퀵 오픈. 큰 파일 뷰어의 "주소창" 역할을 겸한다.
+  // ⇧⌘O 파일 퀵 오픈. 고르면 파일 탭이 열린다(store.openFileViewer).
   const [quickOpenFile, setQuickOpenFile] = useState(false)
   const activeReviewId = useStore((s) => s.activeReviewId)
   const activeFanoutGroupId = useStore((s) => s.activeFanoutGroupId)
   const activeStackWorkspaceId = useStore((s) => s.activeStackWorkspaceId)
   const splitPane = useStore((s) => s.splitPane)
   const splitFocus = useStore((s) => s.splitFocus)
-  const fileViewer = useStore((s) => s.fileViewer)
+  // openFileViewer 가 활성 파일 탭에 보내는 이동 명령(줄 번호) — 탭 자체를 여는 것은
+  // openFileViewer 안에서 이미 끝났고, 여기서는 그 탭에게 "이 줄로 스크롤해" 만 전달한다.
+  const fileNav = useStore((s) => s.fileNav)
   // ⌘K 팔레트가 "승인할 게 없다" 를 이유로 쓴다. 셀렉터로 받아야 팔레트를 열어 둔 채 새 권한이
   // 들어와도 그 행이 따라 살아난다.
   const approvablePermissionCount = useStore((s) => s.approvablePermissionCount())
@@ -290,26 +295,17 @@ export default function App(): React.JSX.Element {
     prRepoId !== null ||
     quickOpenFile
 
-  // 큰 파일 뷰어가 실제로 화면에 떠 있는지 — 리뷰 화면에 들어가 있으면 가려지므로 아니다.
-  // 큰 파일 뷰어는 대화 위를 통째로 덮는 읽기 화면이라 나란히 편 두 칸과 자리를 다툰다 —
-  // 분할 중에는 띄우지 않는다(⇧⌘O 도 아래에서 그 이유를 말하고 물러난다).
-  const fileViewerVisible =
-    !activeReviewId &&
-    !activeFanoutGroupId &&
-    !splitPane &&
-    !!fileViewer &&
-    fileViewer.workspaceId === selectedId
-
   // 모달 상태는 여기(App)에만 있으므로, 대화 화면의 전역 키 핸들러(Composer 의 Esc 등)가
   // 볼 수 있도록 store 로 내보낸다 — 모달이 떠 있을 때 뒤쪽 단축키가 같이 발동하면 안 된다.
   //
-  // 파일 뷰어도 같은 이유로 포함한다(Esc·⌘F 를 뷰어가 가져간다). 다만 아래 전역 단축키
-  // 핸들러는 뷰어를 막지 않는다 — 워크스페이스 전환(⌥⌘1–9·⌘K)은 뷰어 위에서도 되어야 하고,
-  // 전환하면 store 가 뷰어를 알아서 닫는다.
+  // 파일 탭은 여기 포함하지 않는다 — 예전 오버레이와 달리 ChatView 를 덮는 것이 아니라 그
+  // 자리를 갈아 끼우는 탭이라, 파일 탭이 활성이면 ChatView 자체가 마운트되지 않는다. Esc·⌘F
+  // 를 파일 탭이 가져가는 문제는 그래서 여기서 막을 필요가 없다(FileTab 이 스스로 듣고,
+  // MessageList 의 ⌘F 리스너는 ChatView 와 함께 언마운트돼 부딪히지 않는다).
   const setOverlayOpen = useStore((s) => s.setOverlayOpen)
   useEffect(() => {
-    setOverlayOpen(anyModalOpen || fileViewerVisible)
-  }, [anyModalOpen, fileViewerVisible, setOverlayOpen])
+    setOverlayOpen(anyModalOpen)
+  }, [anyModalOpen, setOverlayOpen])
 
   // '?' 키(어디서든, 단 입력 중이 아닐 때)로 단축키 도움말을 연다. Overview 등에서
   // 커스텀 이벤트로도 열 수 있다.
@@ -413,7 +409,7 @@ export default function App(): React.JSX.Element {
 
       /** dev·web 탭이 아니면 ⌘L 이 하던 원래 일 — 대화가 가려졌다면 몰래 포커스하지 않는다. */
       const focusComposerIfReachable = (): void => {
-        if (surfaces.composer && chatComposerReachable(st, fileViewerVisible)) {
+        if (surfaces.composer && chatComposerReachable(st)) {
           window.dispatchEvent(new CustomEvent(FOCUS_COMPOSER_EVENT))
         }
       }
@@ -562,8 +558,10 @@ export default function App(): React.JSX.Element {
         }
 
         case 'open-file':
-          // 큰 파일 뷰어는 대화를 통째로 덮는 읽기 화면이라 나란히 편 두 칸과 함께 쓸 수 없다.
-          // 조용히 무시하면 고장 난 것처럼 보이니 무엇을 먼저 해야 하는지 말해 준다.
+          // 파일 탭은 TabStrip 이 그리는 자리에 뜨는데, 나란히 편 두 칸(SplitPanes)은 그
+          // 자리 대신 ChatView/PrReviewScreen 만 그린다 — 지금 열어도 탭은 워크스페이스
+          // 데이터에는 생기지만 화면 어디에도 보이지 않는다. 조용히 무시하면 고장 난 것처럼
+          // 보이니 무엇을 먼저 해야 하는지 말해 준다.
           if (st.splitPane) {
             st.pushToast('info', 'Close one pane (⇧⌘W) to open the file viewer.')
             return
@@ -700,7 +698,6 @@ export default function App(): React.JSX.Element {
       }
     },
     [
-      fileViewerVisible,
       toggleDevScript,
       wsTabs.tabs,
       wsTabs.activeId,
@@ -778,7 +775,7 @@ export default function App(): React.JSX.Element {
       hasRepos: app.repos.length > 0,
       selectedWorkspaceId: focusedWorkspaceId,
       worktreeTools: workspaceSurfaces(archived).worktreeTools,
-      composerReachable: chatComposerReachable(paneAxes, fileViewerVisible),
+      composerReachable: chatComposerReachable(paneAxes),
       activeReviewId: focused?.kind === 'review' ? focused.reviewId : null,
       activeFanoutGroupId,
       pendingPermissionCount: approvablePermissionCount,
@@ -796,7 +793,6 @@ export default function App(): React.JSX.Element {
     activeStackWorkspaceId,
     splitPane,
     splitFocus,
-    fileViewerVisible,
     approvablePermissionCount,
     rebaseBlockedReason
   ])
@@ -877,7 +873,7 @@ export default function App(): React.JSX.Element {
       // 입력창 caret 에 들어가고 포커스가 따라간다. ⌘L 을 "먼저" 누르는 박자를 없애는 것이지
       // 대체하는 것은 아니다. 가려짐 판정은 ⌘L 과 같은 것을 쓴다(아래 참조).
       // '?'·⌃O 같은 기존 단축키가 위에서 먼저 return 하므로 그 키들은 여기까지 오지 않는다.
-      if (surfaces.composer && chatComposerReachable(st, fileViewerVisible)) {
+      if (surfaces.composer && chatComposerReachable(st)) {
         if (shouldFocusComposerFromEditingKey(e)) {
           // 기본 동작까지 막아야 한다 — 막지 않으면 이 핸들러가 옮겨 놓은 포커스 위에서
           // Backspace 가 그대로 실행돼, 보이지도 않는 초안의 마지막 글자가 지워진다.
@@ -898,7 +894,7 @@ export default function App(): React.JSX.Element {
       // "입력을 시작할 곳" 역할이라 기억하기 쉽고, 기존 Wooi 단축키와도 겹치지 않는다.
       // 대화가 다른 화면에 가려졌다면 뒤쪽 textarea 를 몰래 포커스하지 않는다.
       if (e.code === 'KeyL' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-        if (surfaces.composer && chatComposerReachable(st, fileViewerVisible)) {
+        if (surfaces.composer && chatComposerReachable(st)) {
           e.preventDefault()
           runPaletteAction('focus-composer')
         }
@@ -1093,9 +1089,9 @@ export default function App(): React.JSX.Element {
           runPaletteAction('reveal-in-finder')
           return
         }
-        // ⇧⌘O: 파일 퀵 오픈 — 고르면 대화창 위의 큰 파일 뷰어로 열린다. 그 뷰어는 대화를
-        // 통째로 덮으므로 나란히 편 두 칸과 함께 쓸 수 없다. 조용히 무시하면 단축키가 고장 난
-        // 것처럼 보이니, 무엇을 먼저 해야 하는지 말해 준다.
+        // ⇧⌘O: 파일 퀵 오픈 — 고르면 파일 탭이 열린다. 나란히 편 두 칸에서는 탭 스트립 자체가
+        // 그려지지 않으므로 함께 쓸 수 없다. 조용히 무시하면 단축키가 고장 난 것처럼 보이니,
+        // 무엇을 먼저 해야 하는지 말해 준다.
         if (e.code === 'KeyO') {
           e.preventDefault()
           runPaletteAction('open-file')
@@ -1172,7 +1168,7 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [anyModalOpen, fileViewerVisible, runPaletteAction])
+  }, [anyModalOpen, runPaletteAction])
 
   // 애플리케이션 메뉴는 글쇠·명령 팔레트와 **같은 구현**을 부른다. 메뉴가 자기 동작을 따로
   // 들면 세 입구가 조금씩 다르게 굴어서, 어느 것으로 했느냐에 따라 결과가 갈린다.
@@ -1300,7 +1296,6 @@ export default function App(): React.JSX.Element {
           onDelta={(dx) => setSidebarWidth(sidebarBase.current + dx)}
           onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
         />
-        {/* relative — 큰 파일 뷰어가 이 영역(대화 + 작업 패널)만 덮는 오버레이로 올라탄다. */}
         <div
           ref={contentRef}
           className="relative flex-1 min-w-0 border-l border-[var(--border)] flex"
@@ -1331,6 +1326,10 @@ export default function App(): React.JSX.Element {
                   tab={wsTabs.active}
                   navTarget={wsTabs.active.kind === 'dev' ? previewNav : null}
                 />
+              ) : wsTabs.active?.kind === 'file' ? (
+                // key 를 일부러 안 건다 — 이유는 FileTab 자신의 주석 참고(파일 탭 사이를
+                // 오가는 동안 저장하지 않은 초안을 잃지 않기 위해서다).
+                <FileTab workspace={selected} path={wsTabs.active.target ?? ''} nav={fileNav} />
               ) : (
                 <div className="flex-1 min-h-0 flex">
                   {/*
@@ -1380,10 +1379,6 @@ export default function App(): React.JSX.Element {
           ) : (
             <EmptyState />
           )}
-
-          {/* 대화 위에 띄우는 큰 파일 뷰어. 대화·작업 패널은 뒤에 그대로 마운트돼 있어
-              닫으면 스크롤 위치와 입력창 초안이 그대로 살아 있다. */}
-          {selected && fileViewerVisible && <FileViewerOverlay workspace={selected} />}
         </div>
       </div>
 

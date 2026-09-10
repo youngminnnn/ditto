@@ -22,7 +22,7 @@ let fullCount = 0
 const rects = new Set<HTMLElement>()
 
 /**
- * 뷰를 전부 숨긴다 — 모달·확인 대화상자·파일 뷰어·기능 투어처럼 화면을 덮는 것들.
+ * 뷰를 전부 숨긴다 — 모달·확인 대화상자·기능 투어처럼 화면을 덮는 것들.
  * 반환한 함수를 부르면 해제한다.
  */
 export function suppressAllViews(): () => void {

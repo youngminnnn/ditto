@@ -1,4 +1,4 @@
-import { MessageSquare, Globe, Plus, X } from 'lucide-react'
+import { MessageSquare, Globe, FileCode, Plus, X } from 'lucide-react'
 import type { WorkspaceTab } from '@shared/types'
 
 /**
@@ -109,6 +109,7 @@ function TabIcon({ tab }: { tab: WorkspaceTab }): React.JSX.Element {
   // dev 서버는 "도는 중" 이 곧 정체성이라 점으로 그린다 — 아이콘을 하나 더 두는 것보다 읽기 쉽다.
   if (tab.kind === 'dev')
     return <span className="shrink-0 h-[7px] w-[7px] rounded-full bg-[var(--success-400)]" />
+  if (tab.kind === 'file') return <FileCode size={12} className="shrink-0" />
   return <Globe size={12} className="shrink-0" />
 }
 

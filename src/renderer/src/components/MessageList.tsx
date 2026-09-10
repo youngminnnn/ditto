@@ -442,8 +442,9 @@ export default function MessageList({
     const onKey = (e: KeyboardEvent): void => {
       if (!paneFocused) return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-        // 모달·파일 뷰어가 떠 있으면 ⌘F 는 그쪽 것이다(파일 내 검색). 뒤에서 대화 검색바가
-        // 같이 열리면 닫을 때까지 사용자는 그 존재를 모른다.
+        // 모달이 떠 있으면 ⌘F 는 그쪽 것이다. 뒤에서 대화 검색바가 같이 열리면 닫을 때까지
+        // 사용자는 그 존재를 모른다(파일 탭의 ⌘F 는 이 컴포넌트가 언마운트된 동안만 활성화되는
+        // 별도 리스너라 여기서 따로 가릴 필요가 없다).
         if (useStore.getState().overlayOpen) return
         e.preventDefault()
         setSearchOpen(true)

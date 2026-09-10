@@ -13,10 +13,11 @@ import type { FileContent } from '@shared/types'
 
 /**
  * 우측 패널의 All files 탭. worktree 파일을 lazy 트리로 탐색하고, 파일을 고르면
- * 뷰어로 본문을 표시한다(오버레이 뷰어와 같은 규칙으로 그 자리에서 고칠 수도 있다).
+ * 뷰어로 본문을 표시한다(큰 뷰어와 같은 규칙으로 그 자리에서 고칠 수도 있다 — 둘 다
+ * `useFileEditor` 하나를 공유한다).
  *
  * 여기는 폭이 좁아 훑어보기용이다 — 코드를 실제로 읽어야 하면 확대 버튼이나 더블클릭으로
- * 대화창 위의 큰 뷰어([[FileViewerOverlay]])로 넘긴다.
+ * 파일 탭([[components/tabs/FileTab]])을 연다.
  */
 export default function FileBrowser({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const [openFile, setOpenFile] = useState<string | null>(null)

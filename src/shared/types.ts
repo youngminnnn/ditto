@@ -5204,7 +5204,11 @@ export type WorkspaceTabKind = 'work' | 'dev' | 'web' | 'file' | 'artifact' | 's
 export interface WorkspaceTab {
   id: string
   kind: WorkspaceTabKind
-  /** dev·web: 현재 주소. file: 워크트리 상대 경로(+#L42). artifact: artifactId@version. stack: 앵커 workspaceId. */
+  /**
+   * dev·web: 현재 주소. file: 워크트리 상대 경로(줄 번호는 안 싣는다 — 같은 파일을 다른 줄로
+   * 열 때마다 탭이 늘어난다, [[renderer/store]] fileNav 가 대신 나른다). artifact:
+   * artifactId@version. stack: 앵커 workspaceId.
+   */
   target?: string
   /** 사용자가 바꾼 이름. 없으면 화면이 target 에서 만든다. */
   title?: string

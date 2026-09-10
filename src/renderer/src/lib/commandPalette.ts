@@ -162,7 +162,8 @@ export function actionDisabledReason(
     case 'page-forward':
       if (ctx.activeFanoutGroupId) return 'Leave the fan-out comparison first.'
       if (action === 'delete-workspace' && ctx.activeReviewId) return 'Close the review first.'
-      // 큰 파일 뷰어는 대화를 통째로 덮으므로 나란히 편 두 칸과 함께 쓸 수 없다.
+      // 파일 탭은 TabStrip 자리에 뜨는데, 나란히 편 두 칸(SplitPanes)은 그 자리를 그리지
+      // 않는다 — 지금 열어도 화면 어디에도 보이지 않는다.
       if (action === 'open-file' && ctx.splitOpen) return 'Close one pane (⇧⌘W) first.'
       if (!ctx.selectedWorkspaceId) return NO_WORKSPACE
       if (!ctx.worktreeTools) return ARCHIVED

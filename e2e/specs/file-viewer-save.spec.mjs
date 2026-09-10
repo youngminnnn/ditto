@@ -41,7 +41,7 @@ export default async function 뷰어에서_저장할_때_디스크가_바뀌었�
       try {
         await openSeededWorkspace(win)
 
-        // ── 1. ⇧⌘O 로 뷰어를 연다(대화 위 오버레이) ───────────────────────────
+        // ── 1. ⇧⌘O 로 파일 탭을 연다 ───────────────────────────────────────
         await win.keyboard.press('Meta+Shift+KeyO')
         const quickOpen = win.getByRole('textbox', { name: 'Open a file' })
         await quickOpen.waitFor({ timeout: 10_000 })
@@ -51,8 +51,10 @@ export default async function 뷰어에서_저장할_때_디스크가_바뀌었�
         await hit.waitFor({ timeout: 10_000 })
         await hit.click()
 
-        const viewer = win.locator('[role="dialog"][aria-label^="File viewer"]')
-        await viewer.waitFor({ timeout: 10_000 })
+        // 예전에는 대화 위 오버레이(role="dialog")였다 — 지금은 파일 탭이라, 탭 헤더의
+        // 경로 표시로 그 파일이 열렸는지 확인한다.
+        const fileTab = win.locator(`[title="${FILE}"]`).first()
+        await fileTab.waitFor({ timeout: 10_000 })
         await win.getByText('world').first().waitFor({ timeout: 10_000 })
 
         // ── 2. 편집을 시작하고 한 줄 고친다 ───────────────────────────────────

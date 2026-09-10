@@ -90,8 +90,8 @@ function rememberChatFontScale(scale: number): void {
 }
 
 /**
- * 배율과 ⌘+ / ⌘- / ⌘0 바인딩. `enabled` 가 거짓이면 키를 듣지 않는다 — 모달·파일 뷰어가
- * 대화를 덮고 있을 때 뒤쪽 글자만 조용히 커지면 사용자는 무슨 일이 일어났는지 알 수 없다.
+ * 배율과 ⌘+ / ⌘- / ⌘0 바인딩. `enabled` 가 거짓이면 키를 듣지 않는다 — 모달이 대화를 덮고
+ * 있을 때 뒤쪽 글자만 조용히 커지면 사용자는 무슨 일이 일어났는지 알 수 없다.
  */
 export function useChatFontScale(enabled: boolean): number {
   const [scale, setScale] = useState(readRememberedChatFontScale)

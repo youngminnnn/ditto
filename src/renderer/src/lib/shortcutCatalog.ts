@@ -234,9 +234,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: 'Open a file — type a path, add #L42 to jump to a line',
         action: 'open-file'
       },
-      { keys: ['⌘F'], label: 'Find in the open file' },
-      { keys: ['⌘⌥←', '/', '⌘⌥→'], label: 'Back / forward through visited files' },
-      { keys: ['Esc'], label: 'Close the viewer and return to the conversation' }
+      // 파일마다 탭이 하나라 방문 기록이 곧 탭 목록이다 — 앞/뒤 이력은 없고, 닫기는 다른
+      // 탭과 똑같이 ⌘W 다(따로 적지 않는다).
+      { keys: ['⌘F'], label: 'Find in the open file — only while a file tab is active' }
     ]
   },
   {

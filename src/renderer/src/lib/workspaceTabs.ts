@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useStore } from '../store'
 import type { WorkspaceTab, WorkspaceTabKind, WorkspaceTabsState } from '@shared/types'
+import { isPathUnsaved } from './tabCloseGuard'
 
 /**
  * 이 워크스페이스의 탭 목록을 읽고 조작한다.
@@ -55,9 +57,27 @@ export function useWorkspaceTabs(workspaceId: string): WorkspaceTabsApi {
 
   const close = useCallback(
     (tabId: string) => {
-      if (workspaceId) void window.api.tabs.close(workspaceId, tabId).then(setState)
+      if (!workspaceId) return
+      const doClose = (): void => {
+        void window.api.tabs.close(workspaceId, tabId).then(setState)
+      }
+      // 저장하지 않은 편집을 말없이 버리지 않는다([[lib/tabCloseGuard]]). 이 탭이 어느 파일을
+      // 가리키는지는 여기가 알고, 그 파일이 더러운지는 편집기가 안다 — 그래서 대조를 여기서 한다.
+      const target = state?.tabs.find((t) => t.id === tabId)?.target
+      if (!target || !isPathUnsaved(target)) return doClose()
+      void useStore
+        .getState()
+        .confirm({
+          title: `Discard unsaved changes to ${target}?`,
+          body: 'Your edits were never written to disk. Closing the tab throws them away.',
+          confirmLabel: 'Discard',
+          danger: true
+        })
+        .then((ok) => {
+          if (ok) doClose()
+        })
     },
-    [workspaceId]
+    [workspaceId, state]
   )
 
   const open = useCallback(

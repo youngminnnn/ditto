@@ -5,7 +5,7 @@ import type { FileContent } from '@shared/types'
 import type { FileEditor } from './useFileEditor'
 
 /**
- * 표시 밀도. 우측 패널은 좁으니 촘촘하게, 오버레이 뷰어는 읽기 좋게 키운다.
+ * 표시 밀도. 우측 패널은 좁으니 촘촘하게, 파일 탭은 읽기 좋게 키운다.
  * gutter 와 본문이 **정확히** 같은 줄 높이를 써야 번호가 어긋나지 않으므로 px 로 못 박는다.
  */
 const DENSITY = {

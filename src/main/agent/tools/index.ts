@@ -10,6 +10,7 @@ import {
 } from './peer'
 import { capturePreview, openPreview, readPreviewIssues } from './preview'
 import { createArtifact } from './artifact'
+import { openArtifactTab, openFileTab, openWebTab } from './tabs'
 import { openPullRequest } from './pullRequest'
 import { checkRelatedWork } from './relatedWork'
 import {
@@ -66,6 +67,9 @@ export function initAgentTools(deps: AgentToolDeps): void {
   registerAgentTool('capture_preview', capturePreview)
   registerAgentTool('read_preview_issues', readPreviewIssues)
   registerAgentTool('create_artifact', createArtifact)
+  registerAgentTool('open_web_tab', openWebTab)
+  registerAgentTool('open_file_tab', openFileTab)
+  registerAgentTool('open_artifact_tab', openArtifactTab)
   registerAgentTool('check_related_work', checkRelatedWork)
   registerAgentTool('list_workspace_peers', listWorkspacePeers)
   registerAgentTool('send_to_workspace', sendToWorkspace)

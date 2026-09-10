@@ -58,8 +58,20 @@ export default function PreviewPanel({
 }): React.JSX.Element {
   const pushToast = useStore((s) => s.pushToast)
 
+  /**
+   * `workspace.previewUrl` 은 **dev 탭만의 것**이다.
+   *
+   * 이 컴포넌트는 dev 탭과 웹 탭이 함께 쓰는데, 그 값을 양쪽이 나눠 쓰면 두 방향으로 샌다:
+   * 새 웹 탭이 dev 서버 주소에서 시작하고, 웹 탭에서 돌아다닌 주소가 dev 쪽에 쌓인다.
+   *
+   * 뒤쪽이 특히 나쁘다 — `open_preview` 의 `devOrigin()`([[agent/tools/preview]])이 이 값을
+   * dev 서버 주소의 **마지막 후보**로 쓰기 때문이다. 웹 탭을 한 번 쓰고 나면 "자기 워크스페이스의
+   * dev 서버뿐" 이라는 그 도구의 경계가 조용히 "웹 탭이 마지막으로 있던 곳" 으로 바뀐다.
+   */
+  const remembered = kind === 'dev' ? (workspace.previewUrl ?? '') : ''
+
   // 화면에 보이는 주소(게스트가 실제로 있는 곳). 편집 중에는 draft 가 이걸 가린다.
-  const [url, setUrl] = useState(workspace.previewUrl ?? '')
+  const [url, setUrl] = useState(remembered)
   const [draft, setDraft] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   // 요소 픽커가 켜져 있는 동안(사용자가 게스트에서 요소를 고르는 중).
@@ -69,7 +81,7 @@ export default function PreviewPanel({
   const [issues, setIssues] = useState<PreviewIssue[] | null>(null)
 
   /** 첫 로드 주소. mount 이후 prop 이 바뀌어도 다시 로드하지 않도록 처음 값을 고정한다. */
-  const initialUrl = useRef(navTarget?.url ?? workspace.previewUrl ?? '')
+  const initialUrl = useRef(navTarget?.url ?? remembered)
   /** 이미 처리한 이동 명령의 seq. 같은 명령을 두 번 따라가지 않는다. */
   const handledSeq = useRef<number | null>(null)
 
@@ -85,8 +97,14 @@ export default function PreviewPanel({
   const loading = state?.loading ?? false
   const nav = { back: state?.canGoBack ?? false, forward: state?.canGoForward ?? false }
 
-  /** 주소를 워크스페이스에 적어 둔다 — 다음에 이 탭을 열면 여기서 시작한다. */
+  /**
+   * 주소를 워크스페이스에 적어 둔다 — 다음에 이 탭을 열면 여기서 시작한다.
+   *
+   * dev 탭만 적는다(위 `remembered` 주석). 웹 탭의 마지막 주소를 기억하려면 저장할 자리를
+   * 따로 만들어야 하는데, `previewUrl` 은 그 자리가 아니다.
+   */
   const remember = (next: string): void => {
+    if (kind !== 'dev') return
     if (!next || next === 'about:blank') return
     void window.api.preview.setUrl(workspace.id, next)
   }

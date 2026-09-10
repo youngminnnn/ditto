@@ -1,3 +1,4 @@
+import type { WebContents } from 'electron'
 import { log } from '../../logger'
 import type {
   AgentBackendId,
@@ -120,6 +121,13 @@ export interface AgentToolDeps {
   views: {
     destroyWorkspace: (workspaceId: string) => void
     ensure: (tabId: string, workspaceId: string, kind: HostedViewKind, initialUrl?: string) => void
+    /**
+     * 방금 만든 뷰의 게스트를 꺼낸다 — 이동을 **메인이 직접** 시키기 위해서다.
+     *
+     * `ensure` 의 `initialUrl` 로 대신할 수 없다. 그 길은 로드의 성패가 아무 데도 안 돌아와서,
+     * 실패했는데 "열었다" 고 답하는 도구가 된다([[agent/tools/preview]] loadGuest).
+     */
+    resolve: (tabId: string) => { guest: WebContents } | { error: string }
   }
   previewIssues: { disposeWorkspace: (workspaceId: string) => void }
   /**

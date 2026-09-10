@@ -447,6 +447,70 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     inputSchema: {},
     annotations: { title: 'Read preview errors', readOnlyHint: true }
   },
+  // 아래 셋은 `open_preview` 와 달리 **사용자에게 보여 주려고** 여는 도구라 화면을 그 탭으로
+  // 옮긴다. 근거는 핸들러 파일 머리말에 있다([[agent/tools/tabs]]).
+  {
+    name: 'open_web_tab',
+    description: [
+      'Open a web page as a tab in this workspace, so the user can see it next to the work.',
+      '',
+      'Reach for it when the thing you want them to look at lives on the web — the docs page',
+      'behind a decision, the issue you are describing, the design you are matching. It replaces',
+      'telling them an address and hoping they open it.',
+      '',
+      'This is not a way to read a page yourself: nothing about the page comes back to you, only',
+      'whether it loaded. Fetch pages the way you normally would; use this to put one on screen.',
+      'The tab switches the user’s screen to it, and web tabs keep their own cookies, separate',
+      'from the preview.'
+    ].join(' '),
+    inputSchema: {
+      url: z
+        .string()
+        .describe('Full http or https address, such as "https://react.dev/reference/react/use".')
+    },
+    annotations: { title: 'Open a web page', readOnlyHint: false }
+  },
+  {
+    name: 'open_file_tab',
+    description: [
+      'Open a file from this worktree as a tab, so the user is looking at the same file you are',
+      'talking about.',
+      '',
+      'Use it when your answer points at a file — "the guard lives in webViews.ts" is easier to',
+      'follow when that file is on their screen. The tab is read-write and has the same editing',
+      'controls as the file panel.',
+      '',
+      'This does not return the file to you — read it with your own tools. The path is relative',
+      'to the worktree root, and a path outside the worktree is rejected.'
+    ].join(' '),
+    inputSchema: {
+      path: z
+        .string()
+        .describe('Path relative to the worktree root, such as "src/main/webViews.ts".')
+    },
+    annotations: { title: 'Open a file', readOnlyHint: false }
+  },
+  {
+    name: 'open_artifact_tab',
+    description: [
+      'Bring an artifact this workspace already made back on screen, optionally an older version.',
+      '',
+      '`create_artifact` already opens what it makes, so reach for this afterwards — when the user',
+      'closed the tab and you are referring to the artifact again, or when you want them to see',
+      'the version before your last change to compare.',
+      '',
+      'You pass the id you chose when you created it. If the id is wrong the error lists the ones',
+      'this workspace has.'
+    ].join(' '),
+    inputSchema: {
+      artifact_id: z.string().describe('The id you gave create_artifact, such as "sales-report".'),
+      version: z
+        .number()
+        .optional()
+        .describe('Which version to show. Defaults to the most recent one.')
+    },
+    annotations: { title: 'Open an artifact', readOnlyHint: false }
+  },
   {
     name: 'check_related_work',
     description: [

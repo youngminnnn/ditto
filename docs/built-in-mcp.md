@@ -16,7 +16,7 @@ Tools normally appear to the agent as `mcp__wooi__<tool-name>`. Most tool defini
 are loaded on demand, so a tool may not be visible in the model's initial context even
 though it is available through tool search.
 
-The 26 core tools are available in every workspace. `claude_subagent` and
+The 29 core tools are available in every workspace. `claude_subagent` and
 `codex_subagent` are added only when multi-agent mode is enabled and the corresponding
 backend is available for delegation.
 
@@ -508,6 +508,55 @@ Wooi clears what it collected whenever the preview navigates, so the result is t
 since the last load — reopening the page is how you check whether a fix cleared them.
 The list is capped at 50 entries and roughly 8 KiB, and reports when it was truncated.
 
+## Tabs
+
+These three tools open something the agent already has on hand — a web page, a file in
+this worktree, an artifact this workspace made — as a tab, and switch the user's screen
+to it. That is what sets them apart from `open_preview`: the preview stays out of the
+way because the agent opens it to check its own work, while these three exist because
+the *user* is meant to look.
+
+### `open_web_tab`
+
+Opens a web page as a tab in this workspace and switches the user's screen to it.
+
+| Input | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | string | Yes | Full http or https address, such as `https://react.dev/reference/react/use`. |
+
+Only http and https addresses are accepted; any other scheme is rejected before Wooi
+opens a tab, so the agent gets a message instead of a silently blank one. Nothing about
+the page comes back to the agent — call it to put a page on screen, and fetch pages the
+usual way to read them yourself. Web tabs keep their own cookie session, separate from
+the preview.
+
+### `open_file_tab`
+
+Opens a file from this worktree as a tab and switches the user's screen to it.
+
+| Input | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | string | Yes | Path relative to the worktree root, such as `src/main/webViews.ts`. |
+
+The path is relative to the worktree root; an absolute path is normalized. A path
+outside the worktree, a missing file, or a directory is rejected. The file's contents do
+not come back to the agent — read it with your own tools.
+
+### `open_artifact_tab`
+
+Brings an artifact this workspace already made back on screen, optionally an older
+version, and switches the user's screen to it.
+
+| Input | Type | Required | Description |
+| --- | --- | --- | --- |
+| `artifact_id` | string | Yes | The id given to `create_artifact`, such as `sales-report`. |
+| `version` | number | No | Which version to show. Defaults to the most recent one. |
+
+`create_artifact` already opens what it makes, so this is for afterwards — the user
+closed the tab and the agent is referring to the artifact again, or the agent wants to
+show an older version to compare. An unknown `artifact_id` fails with the ids this
+workspace actually has.
+
 ## Artifacts
 
 ### `create_artifact`
@@ -642,6 +691,9 @@ with your own commands: `/wooi:pr`, `/wooi:children`, and so on. The catalog is
 | `/wooi:preview [path]` | `open_preview` | direct |
 | `/wooi:screenshot` | `capture_preview` | agent |
 | `/wooi:preview-errors` | `read_preview_issues` | direct |
+| `/wooi:web <url>` | `open_web_tab` | direct |
+| `/wooi:file <path>` | `open_file_tab` | direct |
+| `/wooi:open-artifact <id> [version]` | `open_artifact_tab` | direct |
 | `/wooi:archive [workspace id]` | `archive_workspace` | direct |
 | `/wooi:delete <workspace id>` | `delete_workspace` | direct |
 | `/wooi:rename [name]` | `set_workspace_name` | direct |
@@ -684,8 +736,10 @@ registered in `src/main/agent/tools/index.ts`. Claude uses the in-process adapte
 `src/main/claude/wooiMcp.ts`, while Codex uses the stdio adapter in
 `src/main/codex/toolShim.ts`. Both transports forward execution to the same registry and
 handlers under `src/main/agent/tools/`. The preview tools reach the panel's guest page
-through `src/main/preview.ts`, and results that carry an image are turned into MCP
-content blocks by `src/shared/agentToolContent.ts`, which both transports share. Slash
+through `src/main/preview.ts`, and the tab tools — `open_web_tab`, `open_file_tab`,
+`open_artifact_tab` — are handled in `src/main/agent/tools/tabs.ts`. Results that carry
+an image are turned into MCP content blocks by `src/shared/agentToolContent.ts`, which
+both transports share. Slash
 commands live in
 `src/shared/wooiCommands.ts`; the generated Claude plugin is written by
 `src/main/agent/plugin.ts` and direct execution goes through the `command:wooiRun` IPC handler in

@@ -251,4 +251,65 @@ describe('PreviewPanel', () => {
 
     expect(screen.queryByTitle('Console and network errors from this page')).not.toBeInTheDocument()
   })
+
+  /**
+   * `workspace.previewUrl` 은 dev 탭만의 것이다.
+   *
+   * 이 컴포넌트를 dev 탭과 웹 탭이 함께 쓰기 때문에 가드가 없으면 값이 두 방향으로 샌다.
+   * 나가는 쪽이 특히 나쁘다 — `open_preview` 의 `devOrigin()` 이 이 값을 dev 서버 주소의
+   * 마지막 후보로 쓰므로, 웹 탭을 한 번 쓰고 나면 "자기 워크스페이스의 dev 서버뿐" 이라는
+   * 그 도구의 경계가 조용히 "웹 탭이 마지막으로 있던 곳" 으로 바뀐다.
+   */
+  describe('웹 탭과 dev 탭이 주소를 나눠 갖지 않는다', () => {
+    it('웹 탭이 이동해도 워크스페이스의 프리뷰 주소를 덮어쓰지 않는다', async () => {
+      const ws = workspace({ previewUrl: 'http://localhost:5173' })
+      render(<PreviewPanel workspace={ws} tabId={TAB_ID} kind="web" navTarget={null} active />)
+      await waitReady()
+
+      act(() => {
+        fakeApi.dispatch('views.onEvent', {
+          type: 'state',
+          tabId: TAB_ID,
+          url: 'https://react.dev/learn',
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          ready: true
+        })
+      })
+
+      expect(fakeApi.called('preview.setUrl')).toHaveLength(0)
+    })
+
+    it('dev 탭은 그대로 기억한다 — 가드가 프리뷰까지 막으면 안 된다', async () => {
+      const ws = workspace({ previewUrl: 'http://localhost:5173' })
+      render(<PreviewPanel workspace={ws} tabId={TAB_ID} kind="dev" navTarget={null} active />)
+      await waitReady()
+
+      act(() => {
+        fakeApi.dispatch('views.onEvent', {
+          type: 'state',
+          tabId: TAB_ID,
+          url: 'http://localhost:5173/settings',
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          ready: true
+        })
+      })
+
+      expect(fakeApi.called('preview.setUrl').at(-1)?.args).toEqual([
+        ws.id,
+        'http://localhost:5173/settings'
+      ])
+    })
+
+    it('새 웹 탭은 dev 서버 주소에서 시작하지 않는다', async () => {
+      const ws = workspace({ previewUrl: 'http://localhost:5173' })
+      render(<PreviewPanel workspace={ws} tabId={TAB_ID} kind="web" navTarget={null} active />)
+      await waitReady()
+
+      expect(addressInput().value).toBe('')
+    })
+  })
 })

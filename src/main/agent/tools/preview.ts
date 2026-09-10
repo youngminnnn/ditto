@@ -155,8 +155,10 @@ const NOT_OPEN = 'The preview is not open for this workspace. Call open_preview 
  * 이동을 **메인이 직접** 하는 이유: 렌더러에게 이동을 시키면 성공했는지 실패했는지가 돌아오지
  * 않는다. `loadURL` 은 실패를 그대로 던지므로(ERR_CONNECTION_REFUSED 등) 그 문장이 곧 "왜 안
  * 되는지" 가 된다 — 이 앱이 실패 사유를 뭉개지 않는 방식이다.
+ *
+ * 웹 탭을 여는 도구도 같은 이유로 이것을 쓴다([[agent/tools/tabs]]).
  */
-async function load(guest: WebContents, url: string): Promise<void> {
+export async function loadGuest(guest: WebContents, url: string): Promise<void> {
   try {
     await guest.loadURL(url)
   } catch (err) {
@@ -195,7 +197,7 @@ export const openPreview: AgentToolHandler = async (deps, workspaceId, args) => 
   if (!guest) throw new Error('Wooi could not attach a preview for this workspace.')
 
   try {
-    await load(guest, url)
+    await loadGuest(guest, url)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(`Could not load ${url} — ${message}. ${noDevServerReason(deps, ws)}`, {

@@ -14,7 +14,7 @@ Wooi 는 모든 코딩 에이전트 세션에 `wooi` 라는 내장 MCP 서버를
 도구는 보통 에이전트에게 `mcp__wooi__<도구-이름>` 으로 보입니다. 대부분의 도구 정의는 필요할 때
 불러오므로, 처음 모델 컨텍스트에 보이지 않아도 도구 검색을 통해 사용할 수 있습니다.
 
-핵심 도구 26개는 모든 워크스페이스에 제공됩니다. `claude_subagent` 와 `codex_subagent` 는
+핵심 도구 29개는 모든 워크스페이스에 제공됩니다. `claude_subagent` 와 `codex_subagent` 는
 멀티 에이전트 모드를 켜고 해당 백엔드에 위임할 수 있을 때만 추가됩니다.
 
 ## 안전 모델
@@ -473,6 +473,50 @@ Wooi 는 프리뷰 탭이 화면에 있을 때만 그 화면을 그립니다. �
 에러를 없앴는지 보려면 페이지를 다시 여는 것이 그 확인입니다. 목록은 50건 · 약 8 KiB 로 제한되며,
 잘렸는지도 결과에 표시합니다.
 
+## 탭
+
+이 세 도구는 에이전트가 이미 가진 것 — 웹 페이지, 이 워크트리의 파일, 이 워크스페이스가 만든
+아티팩트 — 을 탭으로 열고 사용자의 화면을 그 탭으로 옮깁니다. `open_preview` 와 갈리는 지점이
+바로 이것입니다 — 프리뷰는 에이전트가 **자기 작업을 확인하려고** 여는 것이라 화면을 옮기지
+않지만, 이 셋은 **사용자가 보라고** 여는 것이 존재 이유입니다.
+
+### `open_web_tab`
+
+웹 페이지를 이 워크스페이스의 탭으로 열고 사용자의 화면을 그 탭으로 옮깁니다.
+
+| 입력 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `url` | string | 예 | 완전한 http 또는 https 주소. 예: `https://react.dev/reference/react/use`. |
+
+http·https 주소만 받고, 다른 스킴은 Wooi 가 탭을 열기 전에 거절하므로 에이전트는 조용히 빈 탭이
+아니라 오류 문장을 받습니다. 페이지 내용은 에이전트에게 돌아오지 않습니다 — 화면에 띄우려고
+부르는 것이고, 읽으려면 평소처럼 직접 가져오면 됩니다. 웹 탭은 프리뷰와 별도의 쿠키 세션을 씁니다.
+
+### `open_file_tab`
+
+이 워크트리의 파일을 탭으로 열고 사용자의 화면을 그 탭으로 옮깁니다.
+
+| 입력 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `path` | string | 예 | 워크트리 루트 기준 경로. 예: `src/main/webViews.ts`. |
+
+경로는 워크트리 루트 기준이며, 절대경로는 정규화합니다. 워크트리 밖 경로, 없는 파일, 디렉터리는
+거절합니다. 파일 내용은 에이전트에게 돌아오지 않습니다 — 읽으려면 자신의 도구를 씁니다.
+
+### `open_artifact_tab`
+
+이 워크스페이스가 이미 만든 아티팩트를 다시 화면에 띄우고, 원하면 옛 버전으로 띄우며, 사용자의
+화면을 그 탭으로 옮깁니다.
+
+| 입력 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `artifact_id` | string | 예 | `create_artifact` 에 준 id. 예: `sales-report`. |
+| `version` | number | 아니요 | 보여 줄 버전. 기본값은 최신 버전. |
+
+`create_artifact` 가 만들면서 이미 열어 두므로, 이 도구는 그 이후를 위한 것입니다 — 사용자가
+탭을 닫아 다시 그 아티팩트를 가리켜야 할 때, 또는 옛 버전을 비교로 보여 주고 싶을 때 씁니다.
+모르는 `artifact_id` 는 이 워크스페이스에 실제로 있는 id 목록과 함께 실패합니다.
+
 ## 아티팩트
 
 ### `create_artifact`
@@ -599,6 +643,9 @@ Claude 는 Wooi 서브에이전트 도구 여러 개를 동시에 시작할 수 
 | `/wooi:preview [경로]` | `open_preview` | 즉시 |
 | `/wooi:screenshot` | `capture_preview` | 에이전트 |
 | `/wooi:preview-errors` | `read_preview_issues` | 즉시 |
+| `/wooi:web <url>` | `open_web_tab` | 즉시 |
+| `/wooi:file <path>` | `open_file_tab` | 즉시 |
+| `/wooi:open-artifact <id> [version]` | `open_artifact_tab` | 즉시 |
 | `/wooi:archive [워크스페이스 id]` | `archive_workspace` | 즉시 |
 | `/wooi:delete <워크스페이스 id>` | `delete_workspace` | 즉시 |
 | `/wooi:rename [이름]` | `set_workspace_name` | 즉시 |
@@ -638,8 +685,10 @@ app-server 프로토콜에는 명령을 나열하거나 확장하는 RPC 가 없
 `src/main/agent/tools/index.ts` 에 있습니다. Claude 는 `src/main/claude/wooiMcp.ts` 의 인프로세스
 어댑터를, Codex 는 `src/main/codex/toolShim.ts` 의 stdio 어댑터를 사용합니다. 두 전송 계층 모두
 실행을 같은 registry 와 `src/main/agent/tools/` 아래 핸들러로 전달합니다. 프리뷰 도구는
-`src/main/preview.ts` 를 거쳐 패널의 게스트 페이지에 닿고, 이미지를 실은 결과를 MCP 콘텐츠
-블록으로 바꾸는 일은 두 전송 계층이 함께 쓰는 `src/shared/agentToolContent.ts` 가 합니다.
+`src/main/preview.ts` 를 거쳐 패널의 게스트 페이지에 닿고, 탭 도구 — `open_web_tab`,
+`open_file_tab`, `open_artifact_tab` — 는 `src/main/agent/tools/tabs.ts` 가 처리합니다.
+이미지를 실은 결과를 MCP 콘텐츠 블록으로 바꾸는 일은 두 전송 계층이 함께 쓰는
+`src/shared/agentToolContent.ts` 가 합니다.
 
 슬래시 명령 카탈로그는 `src/shared/wooiCommands.ts`, 생성되는 Claude 플러그인은
 `src/main/agent/plugin.ts`, 즉시 실행은 `src/main/ipc.ts` 의 `command:wooiRun` 핸들러가 맡습니다.

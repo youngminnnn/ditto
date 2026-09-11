@@ -69,7 +69,12 @@ export default function TabStrip({
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-            <MenuPanel className="absolute left-0 top-full z-50 mt-1 w-44">
+            {/*
+              오른쪽 끝에 붙여 왼쪽으로 편다. `+` 는 탭 줄의 맨 오른쪽, 즉 창의 오른쪽
+              가장자리에서 몇 px 안쪽에 있다 — `left-0` 으로 오른쪽으로 펴면 패널 폭만큼이
+              창 밖으로 나가 잘리고, 항목의 아이콘 부분만 남아 보인다.
+            */}
+            <MenuPanel className="absolute right-0 top-full z-50 mt-1 w-44">
               <button
                 className={menuItemCls}
                 onClick={() => {

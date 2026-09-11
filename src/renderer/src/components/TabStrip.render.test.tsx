@@ -72,6 +72,14 @@ describe('TabStrip', () => {
     expect(onNew).toHaveBeenCalledWith('artifact')
   })
 
+  it('새 탭 메뉴는 오른쪽 끝에 붙는다 — 왼쪽 기준으로 펴면 창 밖으로 나가 잘린다', () => {
+    renderStrip([work])
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
+    const panel = screen.getByRole('button', { name: 'New web tab' }).parentElement
+    expect(panel?.className).toContain('right-0')
+    expect(panel?.className).not.toContain('left-0')
+  })
+
   it('사용자가 붙인 이름이 있으면 그것이 이긴다', () => {
     renderStrip([work, { ...dev, title: '대시보드' }])
     expect(screen.getByRole('tab', { name: '대시보드' })).toBeInTheDocument()

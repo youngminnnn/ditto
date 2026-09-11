@@ -288,6 +288,24 @@ describe('HostedViewManager', () => {
     expect('guest' in manager.resolve('tab-keep')).toBe(true)
   })
 
+  it('뗀 뷰는 다시 예산 후보가 된다 — 렌더러는 언마운트 전에 마지막 visible:false 를 보내지 못한다', async () => {
+    const manager = await makeManager()
+    const win = makeWindow(1)
+    // 한 번 화면에 띄운다. 여기까지가 예전에 visible 을 true 로 굳혀 두던 자리다.
+    manager.ensure('tab-seen', 'ws-1', 'dev')
+    manager.attach('tab-seen', win.id)
+    manager.applyLayout(win.id, [
+      { tabId: 'tab-seen', x: 0, y: 0, width: 100, height: 100, visible: true }
+    ])
+
+    // 렌더러가 자리표시자를 언마운트하면 detach 만 온다(등록을 먼저 지우므로 레이아웃은 없다).
+    manager.detach('tab-seen')
+
+    for (let i = 0; i < 8; i++) manager.ensure(`tab-${i}`, 'ws-1', 'dev')
+
+    expect('guest' in manager.resolve('tab-seen')).toBe(false)
+  })
+
   it('창이 닫히면 그 창의 뷰를 뗀다 — 파괴가 아니다(분리 창을 닫았다고 페이지가 죽으면 안 된다)', async () => {
     const manager = await makeManager()
     const win = makeWindow(1)

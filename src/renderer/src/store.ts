@@ -96,6 +96,8 @@ import {
   nextTranscriptLimit,
   TRANSCRIPT_INITIAL_LIMIT
 } from './lib/transcriptPagination'
+import { pickEvictableTranscripts } from './lib/transcriptResidency'
+import { appendScriptTail } from '@shared/scriptOutputLimit'
 import { UNDO_CREATE_WINDOW_MS, undoCreateVerdict, type UndoableCreate } from './lib/undoCreate'
 import {
   DEFAULT_TRANSCRIPT_DENSITY,
@@ -107,6 +109,44 @@ import {
 
 export const scriptKey = (workspaceId: string, scriptId: string): string =>
   `${workspaceId}:${scriptId}`
+
+/**
+ * workspaceId 를 키로 쓰는 맵에서 사라진 워크스페이스의 항목을 놓는다. 놓을 것이 없으면
+ * `null` 을 돌려준다 — 새 객체를 괜히 만들면 그 맵을 구독하는 화면이 헛되이 다시 그린다.
+ *
+ * 스토어에는 이런 맵이 스무 개 넘게 있는데 낡은 키를 걷어 내는 자리는 한 곳뿐이었고, 거기서
+ * 돌보던 것은 그중 셋이었다. 나머지는 워크스페이스를 지워도 앱이 꺼질 때까지 남았다.
+ */
+function dropByWorkspace<T>(
+  map: Record<string, T>,
+  alive: ReadonlySet<string>
+): Record<string, T> | null {
+  return dropKeys(
+    map,
+    Object.keys(map).filter((id) => !alive.has(id))
+  )
+}
+
+/** 같은 일이지만 키가 `workspaceId:scriptId` 인 맵용(스크립트 출력·상태). */
+function dropByWorkspacePrefix<T>(
+  map: Record<string, T>,
+  alive: ReadonlySet<string>
+): Record<string, T> | null {
+  return dropKeys(
+    map,
+    Object.keys(map).filter((key) => {
+      const cut = key.indexOf(':')
+      return cut > 0 && !alive.has(key.slice(0, cut))
+    })
+  )
+}
+
+function dropKeys<T>(map: Record<string, T>, keys: string[]): Record<string, T> | null {
+  if (keys.length === 0) return null
+  const next = { ...map }
+  for (const key of keys) delete next[key]
+  return next
+}
 
 /** 대기 중인 첨부가 없을 때 돌려주는 고정 배열(매번 새 배열을 만들면 구독자가 헛되이 다시 그린다). */
 const EMPTY_ATTACHMENTS: ComposerAttachment[] = []
@@ -333,6 +373,11 @@ interface UIState {
    * 가지 않게 하기 위해서다. 항목이 없는 워크스페이스는 아직 한 번도 읽지 않은 것이다.
    */
   transcriptPaging: Record<string, TranscriptPaging>
+  /**
+   * 트랜스크립트를 마지막으로 쓴 시각. 상주 개수를 상한으로 묶을 때 무엇부터 놓을지 고르는
+   * 데에만 쓴다([[lib/transcriptResidency]]). 화면은 이 값을 읽지 않는다.
+   */
+  transcriptTouchedAt: Record<string, number>
   scriptOutput: Record<string, string>
   scriptStatus: Record<string, ScriptStatus[]>
   /**
@@ -540,6 +585,8 @@ interface UIState {
    * `selectWorkspace` 의 꼬리를 떼어 낸 것으로, 분할된 오른쪽 칸은 "선택" 없이 이것만 부른다.
    */
   loadWorkspaceView: (workspaceId: string) => Promise<void>
+  /** 상주 트랜스크립트를 상한 아래로 줄인다([[lib/transcriptResidency]]). */
+  trimResidentTranscripts: () => void
   /**
    * reviewId → 화면 상태(사이드카에서 읽어온 diff·지적·활동 + 선택/편집).
    * 리뷰의 **메타데이터는 여기 없다** — `app.reviews` 가 권위이고 상태 방송으로 갱신된다.
@@ -1140,6 +1187,7 @@ export const useStore = create<UIState>((set, get) => ({
   transcripts: {},
   loadedTranscripts: {},
   transcriptPaging: {},
+  transcriptTouchedAt: {},
   scriptOutput: {},
   scriptStatus: {},
   composerAttachments: {},
@@ -1537,6 +1585,47 @@ export const useStore = create<UIState>((set, get) => ({
           splitPane,
           splitFocus: splitPane ? s.splitFocus : ('main' as PaneSlot)
         }
+      })
+
+      // 목록에서 **아예 사라진**(= 삭제된) 워크스페이스가 남긴 것을 놓는다. 아카이브는 여기
+      // 걸리지 않는다 — 목록에 그대로 있고 들여다볼 수도 있다. 위 블록과 나눠 둔 이유는
+      // 저쪽이 "아카이브 포함해서 화면에 안 보이는 것" 을 다루기 때문이다. 기준이 다르다.
+      set((s) => {
+        // 아직 만들어지는 중인 자리표시 행(pending)도 살아 있는 것으로 친다 — 목록에 아직
+        // 안 올라왔을 뿐이라, 여기서 지우면 만드는 도중의 초안이 사라진다.
+        const alive = new Set<string>(next.workspaces.map((w) => w.id))
+        for (const p of s.pending) alive.add(p.id)
+
+        const patch: Partial<UIState> = {}
+        const put = <K extends keyof UIState>(key: K, value: UIState[K] | null): void => {
+          if (value !== null) patch[key] = value
+        }
+        put('transcripts', dropByWorkspace(s.transcripts, alive))
+        put('loadedTranscripts', dropByWorkspace(s.loadedTranscripts, alive))
+        put('transcriptPaging', dropByWorkspace(s.transcriptPaging, alive))
+        put('transcriptTouchedAt', dropByWorkspace(s.transcriptTouchedAt, alive))
+        put('composerAttachments', dropByWorkspace(s.composerAttachments, alive))
+        put('gitStatus', dropByWorkspace(s.gitStatus, alive))
+        put('prStatus', dropByWorkspace(s.prStatus, alive))
+        put('stackProgress', dropByWorkspace(s.stackProgress, alive))
+        put('prRefreshing', dropByWorkspace(s.prRefreshing, alive))
+        put('contextUsage', dropByWorkspace(s.contextUsage, alive))
+        put('compacting', dropByWorkspace(s.compacting, alive))
+        put('runningAgents', dropByWorkspace(s.runningAgents, alive))
+        put('apiRetries', dropByWorkspace(s.apiRetries, alive))
+        put('activeFallbackModels', dropByWorkspace(s.activeFallbackModels, alive))
+        put('goals', dropByWorkspace(s.goals, alive))
+        put('promptSuggestions', dropByWorkspace(s.promptSuggestions, alive))
+        put('agentsCollapsed', dropByWorkspace(s.agentsCollapsed, alive))
+        put('drafts', dropByWorkspace(s.drafts, alive))
+        put('scrollPositions', dropByWorkspace(s.scrollPositions, alive))
+        put('scriptPanelOpen', dropByWorkspace(s.scriptPanelOpen, alive))
+        put('transcriptDensity', dropByWorkspace(s.transcriptDensity, alive))
+        put('archivingWorkspaces', dropByWorkspace(s.archivingWorkspaces, alive))
+        // 이 둘만 키가 `workspaceId:scriptId` 다.
+        put('scriptOutput', dropByWorkspacePrefix(s.scriptOutput, alive))
+        put('scriptStatus', dropByWorkspacePrefix(s.scriptStatus, alive))
+        return patch
       })
     })
 
@@ -1999,7 +2088,9 @@ export const useStore = create<UIState>((set, get) => ({
     window.api.onScriptOutput(({ workspaceId, scriptId, chunk }) => {
       const key = scriptKey(workspaceId, scriptId)
       const out = get().scriptOutput
-      set({ scriptOutput: { ...out, [key]: (out[key] ?? '') + chunk } })
+      // 메인과 같은 상한으로 꼬리만 남긴다 — 이 문자열은 스크립트 패널이 `<pre>` 하나에
+      // 통째로 그리므로, 자라면 힙과 DOM 이 함께 자란다([[shared/scriptOutputLimit]]).
+      set({ scriptOutput: { ...out, [key]: appendScriptTail(out[key] ?? '', chunk) } })
     })
 
     // Preview 스크린샷. 방송은 모든 창이 받지만 컴포저는 메인 창에만 있으므로 여기서만 모은다
@@ -2019,7 +2110,7 @@ export const useStore = create<UIState>((set, get) => ({
       set({
         scriptOutput: {
           ...out,
-          [key]: (out[key] ?? '') + `\n[wooi] exited (code ${code ?? '?'})\n`
+          [key]: appendScriptTail(out[key] ?? '', `\n[wooi] exited (code ${code ?? '?'})\n`)
         }
       })
       void get().refreshScriptStatus(workspaceId)
@@ -2066,7 +2157,9 @@ export const useStore = create<UIState>((set, get) => ({
     window.api.onScriptOutput(({ workspaceId: id, scriptId, chunk }) => {
       const key = scriptKey(id, scriptId)
       const out = get().scriptOutput
-      set({ scriptOutput: { ...out, [key]: (out[key] ?? '') + chunk } })
+      // 메인과 같은 상한으로 꼬리만 남긴다 — 이 문자열은 스크립트 패널이 `<pre>` 하나에
+      // 통째로 그리므로, 자라면 힙과 DOM 이 함께 자란다([[shared/scriptOutputLimit]]).
+      set({ scriptOutput: { ...out, [key]: appendScriptTail(out[key] ?? '', chunk) } })
     })
     window.api.onScriptExit(({ workspaceId: id, scriptId, code }) => {
       const key = scriptKey(id, scriptId)
@@ -2074,7 +2167,7 @@ export const useStore = create<UIState>((set, get) => ({
       set({
         scriptOutput: {
           ...out,
-          [key]: (out[key] ?? '') + `\n[wooi] exited (code ${code ?? '?'})\n`
+          [key]: appendScriptTail(out[key] ?? '', `\n[wooi] exited (code ${code ?? '?'})\n`)
         }
       })
       void get().refreshScriptStatus(id)
@@ -2897,6 +2990,9 @@ export const useStore = create<UIState>((set, get) => ({
   },
 
   loadWorkspaceView: async (id) => {
+    // 지금 쓰고 있다는 표시를 먼저 남긴다 — 아래에서 상주 목록을 줄일 때 방금 연 것이
+    // 후보로 잡히면 열자마자 다시 읽게 된다.
+    set((s) => ({ transcriptTouchedAt: { ...s.transcriptTouchedAt, [id]: Date.now() } }))
     if (!get().loadedTranscripts[id]) {
       // 최근 몇 턴만 먼저 읽는다. 위로 올라가면 MessageList 가 더 부른다.
       const history = await window.api.chat.getHistory(id, TRANSCRIPT_INITIAL_LIMIT)
@@ -2918,9 +3014,43 @@ export const useStore = create<UIState>((set, get) => ({
         }
       }))
     }
+    get().trimResidentTranscripts()
     void get().refreshGit(id)
     void get().refreshPr(id)
     void get().refreshScriptStatus(id)
+  },
+
+  trimResidentTranscripts: () => {
+    set((s) => {
+      const resident = Object.keys(s.transcripts)
+      // 보고 있는 칸과 아직 도는 워크스페이스는 건드리지 않는다. 도는 것을 놓으면 아직
+      // 디스크에 적히지 않은 스트리밍 중간 상태가 사라져 화면이 흐르던 문장을 잃는다.
+      const keep = new Set<string>()
+      if (s.selectedWorkspaceId) keep.add(s.selectedWorkspaceId)
+      if (s.splitPane?.kind === 'workspace') keep.add(s.splitPane.workspaceId)
+      for (const w of s.app?.workspaces ?? []) if (w.status === 'running') keep.add(w.id)
+
+      const drop = pickEvictableTranscripts({
+        touchedAt: s.transcriptTouchedAt,
+        resident,
+        protectedIds: keep
+      })
+      if (drop.length === 0) return {}
+
+      // 읽음 표시(loadedTranscripts)와 읽기 창(transcriptPaging)도 함께 놓아야 다음에
+      // 고를 때 꼬리부터 깨끗이 다시 읽는다. 하나만 남기면 빈 대화가 그려진다.
+      const transcripts = { ...s.transcripts }
+      const loadedTranscripts = { ...s.loadedTranscripts }
+      const transcriptPaging = { ...s.transcriptPaging }
+      const transcriptTouchedAt = { ...s.transcriptTouchedAt }
+      for (const id of drop) {
+        delete transcripts[id]
+        delete loadedTranscripts[id]
+        delete transcriptPaging[id]
+        delete transcriptTouchedAt[id]
+      }
+      return { transcripts, loadedTranscripts, transcriptPaging, transcriptTouchedAt }
+    })
   },
 
   goBackWorkspace: async () => {

@@ -31,10 +31,19 @@ import { lookupTargetRepo } from './target'
 export interface ToolPermissionDeps {
   /** 렌더러에 권한 카드를 띄운다(IPC.evtPermission). */
   dispatch: (request: PermissionRequest) => void
+  /** 답을 받을 수 없게 된 카드를 렌더러에서 거둔다(IPC.evtPermissionCancel). */
+  cancel: (requestId: string) => void
 }
 
 let deps: ToolPermissionDeps | null = null
-const pending = new Map<string, (decision: PermissionDecision) => void>()
+
+interface PendingPermission {
+  /** 이 요청을 낸 워크스페이스. 워크스페이스가 사라질 때 그 요청만 거두는 데 쓴다. */
+  workspaceId: string
+  resolve: (decision: PermissionDecision) => void
+}
+
+const pending = new Map<string, PendingPermission>()
 
 export function initToolPermission(injected: ToolPermissionDeps): void {
   deps = injected
@@ -45,16 +54,33 @@ export function initToolPermission(injected: ToolPermissionDeps): void {
  * 응답은 백엔드들에도 함께 방송되므로(orchestrator.respondPermission) 멱등해야 한다.
  */
 export function resolveToolPermission(requestId: string, decision: PermissionDecision): void {
-  const resolve = pending.get(requestId)
-  if (!resolve) return
+  const entry = pending.get(requestId)
+  if (!entry) return
   pending.delete(requestId)
-  resolve(decision)
+  entry.resolve(decision)
 }
 
 /** 호스트가 죽거나 앱이 닫힐 때 매달린 요청을 정리한다. */
 export function cancelToolPermissions(): void {
-  for (const resolve of pending.values()) resolve({ behavior: 'deny' })
+  for (const entry of pending.values()) entry.resolve({ behavior: 'deny' })
   pending.clear()
+}
+
+/**
+ * 워크스페이스가 사라질 때 그 워크스페이스의 매달린 요청을 거둔다.
+ *
+ * Claude 쪽은 세션을 놓을 때 이미 같은 일을 한다([[claude/manager]] dispose). 이쪽만 빠져
+ * 있어서, 권한 카드가 떠 있는 채로 워크스페이스를 아카이브하면 resolver 와 그 뒤에 매달린
+ * 프라미스 사슬이 — 소켓 경로에서는 열린 소켓까지 — 앱이 꺼질 때까지 남았다. 답이 올 수
+ * 없게 된 카드이므로 거절로 확정하고 화면에서도 거둔다.
+ */
+export function cancelToolPermissionsFor(workspaceId: string): void {
+  for (const [requestId, entry] of [...pending]) {
+    if (entry.workspaceId !== workspaceId) continue
+    pending.delete(requestId)
+    entry.resolve({ behavior: 'deny' })
+    deps?.cancel(requestId)
+  }
 }
 
 /**
@@ -118,7 +144,7 @@ export async function ensureToolApproved(
     .join(' ')
   const requestId = randomUUID()
   const decision = await new Promise<PermissionDecision>((resolve) => {
-    pending.set(requestId, resolve)
+    pending.set(requestId, { workspaceId: workspace.id, resolve })
     deps!.dispatch({
       requestId,
       workspaceId: workspace.id,
@@ -159,7 +185,7 @@ export async function askSubAgentPermission(
   const label = AGENT_BACKEND_LABELS[backend] ?? backend
   const requestId = randomUUID()
   const decision = await new Promise<PermissionDecision>((resolve) => {
-    pending.set(requestId, resolve)
+    pending.set(requestId, { workspaceId: workspace.id, resolve })
     deps!.dispatch({
       requestId,
       workspaceId: workspace.id,

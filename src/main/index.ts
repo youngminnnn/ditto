@@ -188,7 +188,10 @@ process.env.WOOI_TOOL_SHIM = toolShimPath()
 
 // 소켓으로 들어온 도구 호출은 기존 권한 카드를 그대로 탄다([[agent/tools/permission]]) —
 // Codex 의 app-server 는 MCP 도구에 대해 승인을 물어보지 않기 때문이다.
-initToolPermission({ dispatch: (request) => dispatch(IPC.evtPermission, request) })
+initToolPermission({
+  dispatch: (request) => dispatch(IPC.evtPermission, request),
+  cancel: (requestId) => dispatch(IPC.evtPermissionCancel, requestId)
+})
 
 const terminals = new TerminalManager(dispatch)
 // 콘텐츠 영역 맨 위 탭 스트립(대화·dev 프리뷰·웹·파일·아티팩트·스택)의 소유자([[main/workspaceTabs]]).

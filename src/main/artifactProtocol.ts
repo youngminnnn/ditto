@@ -134,9 +134,37 @@ let dispatchToRenderer: (channel: string, payload: unknown) => void = () => {}
  */
 const artifactSessions = new Set<Session>()
 
+/**
+ * 파티션 이름으로 되찾기 위한 곁가지. 위 집합은 신원 판정용이라 이름을 모르는데, 워크스페이스가
+ * 사라질 때 **그 워크스페이스의 세션만** 놓으려면 이름에서 되짚을 수 있어야 한다.
+ */
+const artifactSessionsByPartition = new Map<string, Session>()
+
 /** 이 세션이 아티팩트 게스트의 것인가([[main/preview]] 가드가 분기 기준으로 쓴다). */
 export function isArtifactSession(candidate: Session): boolean {
   return artifactSessions.has(candidate)
+}
+
+/**
+ * 워크스페이스가 사라질 때 그 아티팩트 세션을 놓는다.
+ *
+ * 파티션이 **워크스페이스마다 하나**라, 놓지 않으면 아티팩트를 한 번이라도 띄운 워크스페이스가
+ * 앱이 꺼질 때까지 살아 있는 `Session` 하나씩을 남긴다 — 자기 캐시·스토리지와 등록된 protocol
+ * 핸들러, `will-download` 리스너를 함께 달고서. 세션 자체는 Electron 이 파티션 이름으로
+ * 들고 있으므로, 우리가 할 일은 얹어 둔 것을 떼고 저장분을 비우는 것이다.
+ */
+export function forgetArtifactSession(partition: string): void {
+  const artifactSession = artifactSessionsByPartition.get(partition)
+  if (!artifactSession) return
+  artifactSessionsByPartition.delete(partition)
+  artifactSessions.delete(artifactSession)
+  try {
+    artifactSession.protocol.unhandle(ARTIFACT_SCHEME)
+  } catch (err) {
+    log.info(`artifact: unhandle failed for ${partition} — ${err}`)
+  }
+  artifactSession.removeAllListeners('will-download')
+  void artifactSession.clearStorageData().catch(() => {})
 }
 
 /**
@@ -151,6 +179,7 @@ export function ensureArtifactSession(partition: string): Session {
   const artifactSession = session.fromPartition(partition)
   if (artifactSessions.has(artifactSession)) return artifactSession
   artifactSessions.add(artifactSession)
+  artifactSessionsByPartition.set(partition, artifactSession)
 
   // 카메라·마이크·알림·위치·클립보드 — 물어보지도 않고 전부 거절한다.
   artifactSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))

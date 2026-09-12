@@ -181,6 +181,21 @@ export class PreviewIssueCollector {
     return countIssues(this.list(tabId))
   }
 
+  /**
+   * 탭이 **영영** 닫힐 때 그 탭의 것을 통째로 놓는다.
+   *
+   * `clear` 와 `unwatch` 는 둘 다 "다시 볼 수 있다" 를 전제로 일부러 절반만 놓는다(모아 둔
+   * 문제를 남기거나, 곁가지 맵을 남기거나). 탭 레코드 자체가 사라지는 자리에서는 그 전제가
+   * 없으므로, 여기서 셋을 한 번에 거둔다 — 안 그러면 닫은 탭마다 최대 200개의 문제와
+   * `ofWorkspace` 항목이 워크스페이스가 사라질 때까지 남는다.
+   */
+  disposeTab(tabId: string): void {
+    this.issues.delete(tabId)
+    this.unwatch(tabId)
+    this.ofWorkspace.delete(tabId)
+    this.scheduleNotify(tabId)
+  }
+
   /** 워크스페이스가 사라질 때 그 아래 탭을 모두 정리한다. */
   disposeWorkspace(workspaceId: string): void {
     for (const [tabId, owner] of [...this.ofWorkspace]) {

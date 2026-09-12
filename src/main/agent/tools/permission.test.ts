@@ -10,6 +10,7 @@ vi.mock('../../store', () => ({ getStore: () => ({ getState: () => state, update
 
 import {
   cancelToolPermissions,
+  cancelToolPermissionsFor,
   ensureToolApproved,
   initToolPermission,
   resolveToolPermission
@@ -23,11 +24,21 @@ import { neverAsksWooiTool } from './catalog'
  */
 
 const cards: PermissionRequest[] = []
+/** 렌더러에서 거둬 간 카드의 requestId. */
+const cancelled: string[] = []
 
 beforeEach(() => {
   cards.length = 0
+  cancelled.length = 0
   cancelToolPermissions()
-  initToolPermission({ dispatch: (r) => cards.push(r) })
+  initToolPermission({
+    dispatch: (r) => {
+      cards.push(r)
+    },
+    cancel: (requestId) => {
+      cancelled.push(requestId)
+    }
+  })
   state.workspaces = [{ id: 'ws-parent', branch: 'feat/base' }]
   state.repos = [
     {
@@ -76,6 +87,21 @@ describe('ensureToolApproved', () => {
 
     answer('allow')
     await expect(pending).resolves.toBeUndefined()
+  })
+
+  it('워크스페이스가 사라지면 그 카드만 거절로 확정하고 화면에서도 거둔다', async () => {
+    const mine = ensureToolApproved(workspace(), 'create_stacked_workspace', {})
+    const other = ensureToolApproved(workspace({ id: 'ws-other' }), 'create_stacked_workspace', {})
+    await vi.waitFor(() => expect(cards).toHaveLength(2))
+
+    cancelToolPermissionsFor('ws-1')
+
+    await expect(mine).rejects.toThrow(/declined/)
+    expect(cancelled).toEqual([cards[0].requestId])
+
+    // 다른 워크스페이스의 카드는 그대로 살아 있어야 한다 — 답하면 정상 통과한다.
+    answer('allow')
+    await expect(other).resolves.toBeUndefined()
   })
 
   it('거부하면 던져서 도구가 실행되지 않게 한다', async () => {

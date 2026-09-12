@@ -32,10 +32,17 @@ import {
   getPrStatus,
   getViewerLogin
 } from './github'
+import { cancelToolPermissionsFor } from './agent/tools/permission'
+import { forgetContextUsage } from './contextUsageCache'
+import { forgetFileIndex } from './fsbrowse'
+import { forgetStatusRef } from './git'
 import { log } from './logger'
 import { generateWorkspaceName } from './names'
 import { findFreePort } from './net'
 import { invalidateWorkspacePr } from './prCache'
+import { forgetPrStatus } from './prStatusCache'
+import { forgetRunningAgents } from './runningAgentsCache'
+import { forgetWorkspaceUsage } from './usageLedger'
 import { getStore } from './store'
 import { getTranscripts } from './transcripts'
 import { getArtifacts } from './artifacts'
@@ -539,6 +546,26 @@ export function workspaceForkError(source: Pick<Workspace, 'sessionId' | 'status
  *
  * 없는 워크스페이스는 조용히 넘긴다 — 아카이브의 목적은 "없는 상태" 이고 이미 그 상태다.
  */
+/**
+ * 워크스페이스가 사라질 때 그 워크스페이스로만 뜻이 서는 휘발성 캐시를 놓는다.
+ *
+ * `dispose*` 다섯 개가 프로세스와 뷰를 거두는 것과 짝이다. 이쪽은 전부 "다시 계산하면
+ * 그만인" 값이라 하나하나는 작지만, **놓는 자리가 아예 없었다** — 있는 것은 맥락 초기화
+ * (`/clear`·백엔드 전환)용 호출뿐이라 워크스페이스가 없어져도 항목이 남았다. 앱을 오래 켜
+ * 두고 워크스페이스를 여럿 만들었다 지우는 사용에서 한 방향으로만 자라던 자리다.
+ */
+export function forgetWorkspaceCaches(workspaceId: string, worktreePath: string): void {
+  forgetContextUsage(workspaceId)
+  forgetWorkspaceUsage(workspaceId)
+  forgetRunningAgents(workspaceId)
+  forgetPrStatus(workspaceId)
+  // 이 둘만 워크스페이스 id 가 아니라 워크트리 경로가 키다.
+  forgetFileIndex(worktreePath)
+  forgetStatusRef(worktreePath)
+  // 캐시는 아니지만 같은 조건에서 놓아야 하는 것 — 답이 올 수 없게 된 권한 요청이다.
+  cancelToolPermissionsFor(workspaceId)
+}
+
 export async function archiveWorkspace(
   deps: ArchiveWorkspaceDeps,
   workspaceId: string
@@ -554,6 +581,7 @@ export async function archiveWorkspace(
   deps.tabs.disposeWorkspace(workspaceId)
   deps.views.destroyWorkspace(workspaceId)
   deps.previewIssues.disposeWorkspace(workspaceId)
+  forgetWorkspaceCaches(workspaceId, ws.worktreePath)
   // 아카이브 스크립트는 worktree 가 아직 살아 있을 때 실행한다.
   // 실패해도 멈추지 않는다 — 정리를 중간에 세우면 worktree 만 남아 상태가 더 나빠진다.
   const archiveScriptFailure = repo
@@ -627,6 +655,7 @@ export async function deleteWorkspace(
   deps.tabs.disposeWorkspace(workspaceId)
   deps.views.destroyWorkspace(workspaceId)
   deps.previewIssues.disposeWorkspace(workspaceId)
+  forgetWorkspaceCaches(workspaceId, ws.worktreePath)
   const archiveScriptFailure =
     !ws.archived && repo
       ? await runArchiveScript(deps.scripts, repo.archiveScript, ws.worktreePath)

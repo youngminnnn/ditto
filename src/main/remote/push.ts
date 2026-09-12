@@ -106,6 +106,14 @@ export class RemotePush {
   private pending: PendingPush[] = []
   private timer: ReturnType<typeof setTimeout> | null = null
   private readonly sent = new Set<string>()
+  /**
+   * `sent` 가 담고 있는 분 버킷.
+   *
+   * 중복 제거 키는 끝에 분 단위 버킷을 달고 있어서, 분이 넘어가는 순간 남아 있는 키는 다시
+   * 맞을 일이 없다. 그런데 지우는 자리가 실패 경로뿐이라 성공한 키는 전부 남았다 — 워크스페이스마다
+   * 분마다 새 키가 발급되니 앱이 켜져 있는 내내 한 방향으로만 자랐다. 버킷이 바뀌면 통째로 비운다.
+   */
+  private sentBucket = -1
 
   constructor(private readonly options: RemotePushOptions) {
     this.now = options.now ?? Date.now
@@ -141,6 +149,8 @@ export class RemotePush {
     const pending = this.pending
     this.pending = []
     for (const item of pending) item.resolve()
+    this.sent.clear()
+    this.sentBucket = -1
   }
 
   private async flush(summary: boolean): Promise<void> {
@@ -167,10 +177,13 @@ export class RemotePush {
     const machineId = this.options.machineId()
     if (!machineId) return
 
+    const bucket = Math.floor(this.now() / 60_000)
     const dedupeKey =
-      kind === 'summary'
-        ? `summary:${Math.floor(this.now() / 60_000)}`
-        : `${notification.workspaceId}:${kind}:${Math.floor(this.now() / 60_000)}`
+      kind === 'summary' ? `summary:${bucket}` : `${notification.workspaceId}:${kind}:${bucket}`
+    if (bucket !== this.sentBucket) {
+      this.sent.clear()
+      this.sentBucket = bucket
+    }
     if (this.sent.has(dedupeKey)) return
 
     const { data, error } = await this.options

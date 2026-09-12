@@ -159,6 +159,7 @@ import {
   carrySuggestionsFor,
   createWorkspace,
   deleteWorkspace,
+  forgetWorkspaceCaches,
   portEnvName,
   scriptEnvFor,
   syncPrBase,
@@ -547,6 +548,27 @@ export function registerIpc(ctx: IpcContext): void {
   const deleteDeps: DeleteWorkspaceDeps = { ...archiveDeps, pruneFanoutGroups }
 
   /**
+   * 워크스페이스 하나에 매달린 것을 전부 끊는다.
+   *
+   * 정식 경로는 [[workspaces]] 의 `deleteWorkspace` 지만, 일괄 경로 둘(리포 제거·아카이브 일괄
+   * 삭제)은 worktree 처리 방식이 달라 그 함수를 그대로 못 쓰고 손으로 같은 절차를 적어 왔다.
+   * 그리고 **갈라졌다** — 두 곳 모두 탭·뷰·프리뷰 이슈를 끊지 않았다. 뷰 하나가 렌더러
+   * 프로세스 하나인데, 워크스페이스 레코드가 먼저 사라지므로 그 뒤로는 아무도 그 뷰를
+   * 지목할 수 없다. 절차를 여기 한 곳으로 모아 다시 갈라지지 않게 한다.
+   */
+  const disposeWorkspaceResources = (ws: Workspace): void => {
+    ctx.sessions.dispose(ws.id)
+    ctx.scripts.disposeWorkspace(ws.id)
+    ctx.terminals.disposeWorkspace(ws.id)
+    ctx.tabs.disposeWorkspace(ws.id)
+    ctx.views.destroyWorkspace(ws.id)
+    previewIssues().disposeWorkspace(ws.id)
+    getTranscripts().remove(ws.id)
+    getArtifacts().remove(ws.id)
+    forgetWorkspaceCaches(ws.id, ws.worktreePath)
+  }
+
+  /**
    * 리포의 origin 리모트가 GitHub 이면 소유자 아바타를 받아 data URL 로 저장한다(best-effort).
    * 네트워크·비 GitHub 리모트 등으로 실패하면 조용히 넘어가 기본 아이콘을 유지한다.
    * repo 추가 직후·앱 시작 시 백그라운드로 호출해, 아바타 조회가 UI 흐름을 막지 않게 한다.
@@ -776,17 +798,15 @@ export function registerIpc(ctx: IpcContext): void {
     const repo = repoFor(repoId)
     const workspaces = store.getState().workspaces.filter((w) => w.repoId === repoId)
     for (const ws of workspaces) {
-      ctx.sessions.dispose(ws.id)
-      ctx.scripts.disposeWorkspace(ws.id)
-      ctx.terminals.disposeWorkspace(ws.id)
-      getTranscripts().remove(ws.id)
-      getArtifacts().remove(ws.id)
+      disposeWorkspaceResources(ws)
       if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, false)
     }
     store.update((st) => {
       st.workspaces = st.workspaces.filter((w) => w.repoId !== repoId)
       st.repos = st.repos.filter((r) => r.id !== repoId)
     })
+    // 레코드가 사라졌으므로 이 id 를 들고 있던 fan-out 그룹도 함께 접는다(일괄 삭제와 같은 이유).
+    pruneFanoutGroups(workspaces.map((w) => w.id))
     broadcastState()
   })
 
@@ -1145,11 +1165,7 @@ export function registerIpc(ctx: IpcContext): void {
     const repo = repoFor(repoId)
 
     for (const ws of targets) {
-      ctx.sessions.dispose(ws.id)
-      ctx.scripts.disposeWorkspace(ws.id)
-      ctx.terminals.disposeWorkspace(ws.id)
-      getTranscripts().remove(ws.id)
-      getArtifacts().remove(ws.id)
+      disposeWorkspaceResources(ws)
       // 아카이브된 워크스페이스는 worktree 디렉토리가 이미 제거된 상태일 수 있으나,
       // removeWorktree 는 누락된 worktree 를 prune 으로 정리하므로 안전하다. 브랜치도 함께 삭제.
       if (repo) await removeWorktree(repo.path, ws.worktreePath, ws.branch, true)
@@ -3472,9 +3488,17 @@ export function registerIpc(ctx: IpcContext): void {
       ctx.tabs.openTab(workspaceId, opts)
   )
 
-  handle(IPC.tabsClose, (_e, workspaceId: string, tabId: string) =>
-    ctx.tabs.closeTab(workspaceId, tabId)
-  )
+  // 탭을 닫으면 그 탭이 붙들고 있던 것도 함께 놓는다. 탭(영속)과 뷰(캐시)의 수명을 나눈
+  // 설계라 뷰는 닫아도 주소로 되살아나지만, **놓아 주는 쪽을 아무도 안 부르면** 그 설계가
+  // 한쪽만 성립한다 — 뷰 하나가 렌더러 프로세스 하나여서, 닫은 탭이 그대로 프로세스로 남는다.
+  // 동면 스윕에 맡기지 않고 여기서 즉시 거두는 이유는 닫기가 사용자의 명시적인 "이제 안 본다"
+  // 이기 때문이다. 되살리기(reopenTab)는 주소로 다시 로드한다.
+  handle(IPC.tabsClose, (_e, workspaceId: string, tabId: string) => {
+    const next = ctx.tabs.closeTab(workspaceId, tabId)
+    ctx.views.destroy(tabId)
+    previewIssues().disposeTab(tabId)
+    return next
+  })
 
   handle(IPC.tabsSelect, (_e, workspaceId: string, tabId: string) =>
     ctx.tabs.selectTab(workspaceId, tabId)

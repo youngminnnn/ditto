@@ -188,7 +188,31 @@ const INDEX_MAX = 20_000
 /** 비-git 폴백 워크가 훑는 최대 디렉토리 수. */
 const WALK_MAX_DIRS = 2_000
 
+/**
+ * 인덱스를 동시에 들고 있을 워크트리 수.
+ *
+ * 항목 하나가 아니라 **워크트리 하나가 최대 2만 개 항목**이다. TTL(5초)은 신선도 판정일 뿐
+ * 아무것도 버리지 않아서, 상한이 없으면 `@` 를 한 번이라도 친 워크트리가 전부 그대로 남는다
+ * — 아카이브해도, 삭제해도. 인덱스는 5초면 어차피 다시 만드므로 몇 개만 들고 있으면 된다.
+ */
+const INDEX_ROOTS_MAX = 4
+
+/** 워크트리별 파일 인덱스. 삽입 순서가 곧 최근 사용 순서다(`trimIndexCache` 참고). */
 const indexCache = new Map<string, { at: number; entries: FileHit[] }>()
+
+/** 상한을 넘은 만큼 오래 안 쓴 워크트리의 인덱스를 버린다. */
+function trimIndexCache(): void {
+  while (indexCache.size > INDEX_ROOTS_MAX) {
+    const oldest = indexCache.keys().next()
+    if (oldest.done) return
+    indexCache.delete(oldest.value)
+  }
+}
+
+/** 워크스페이스가 사라질 때 그 워크트리의 인덱스를 놓는다. */
+export function forgetFileIndex(root: string): void {
+  indexCache.delete(root)
+}
 
 /**
  * git 이 아는 파일 목록(추적 + 미추적, `.gitignore` 제외).
@@ -293,10 +317,15 @@ export async function searchFiles(root: string, query: string, limit = 30): Prom
   let entries: FileHit[]
   if (cached && Date.now() - cached.at < INDEX_TTL_MS) {
     entries = cached.entries
+    // 다시 넣어 맨 뒤로 보낸다 — Map 의 삽입 순서가 곧 최근 사용 순서다. `at` 은 그대로
+    // 실어 보내므로 신선도 판정은 달라지지 않는다.
+    indexCache.delete(root)
+    indexCache.set(root, cached)
   } else {
     entries = await buildIndex(root)
     indexCache.set(root, { at: Date.now(), entries })
   }
+  trimIndexCache()
 
   const q = query.toLowerCase()
   const scored: { e: FileHit; rank: number; depth: number }[] = []

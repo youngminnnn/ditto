@@ -3,7 +3,7 @@ import type { WebContents } from 'electron'
 import { BROWSER_PARTITION, IPC, PREVIEW_PARTITION, artifactPartition } from '@shared/types'
 import { ARTIFACT_ORIGIN } from '@shared/artifactUrl'
 import { applyContextMenu } from './guestContextMenu'
-import { ensureArtifactSessionFor } from './artifactProtocol'
+import { ensureArtifactSessionFor, forgetArtifactSession } from './artifactProtocol'
 import type { HostedViewKind, HostedViewLayout } from '@shared/types'
 import { windowBackgroundColor } from './windows'
 import { log } from './logger'
@@ -57,6 +57,8 @@ interface Entry {
   lastVisibleAt: number
   /** 캡처·요소 픽커가 잡고 있는 동안 0 보다 크다. 이 사이에는 파괴하지 않는다. */
   busy: number
+  /** 잡혀 있는 동안 파괴 요청이 왔다. 놓는 순간 처리한다. */
+  destroyWhenFree?: boolean
 }
 
 /**
@@ -333,10 +335,22 @@ export class HostedViewManager {
    * 어느 창에도 안 붙은 뷰는 **정상 상태**다 — 에이전트가 만든 dev 탭은 사용자가 그 탭을
    * 누르기 전까지 정확히 그 상태이고, 다른 워크스페이스를 보는 동안의 뷰도 그렇다.
    * 붙어 있기만 하고 안 보이는 뷰도 창 컴포지터에 남으므로, 숨길 때는 떼기까지 해야 실효가 있다.
+   *
+   * **뗀 뷰는 안 보이는 뷰다.** 이 한 줄이 예산(evict)과 동면(sweep)의 전제다 — 둘 다
+   * `visible` 이 false 인 것만 후보로 본다. 렌더러는 자리표시자를 언마운트할 때 등록을 먼저
+   * 지우고 detach 를 부르므로(`lib/hostedView.ts`), 마지막 `visible:false` 레이아웃은 영영
+   * 오지 않는다. 여기서 직접 내리지 않으면 한 번이라도 화면에 떴던 뷰는 `visible:true` 로
+   * 굳어 두 장치 모두에서 빠지고, 앱이 꺼질 때까지 렌더러 프로세스를 붙들고 있게 된다.
    */
   detach(tabId: string): void {
     const entry = this.entries.get(tabId)
-    if (!entry || entry.ownerWindowId === null) return
+    if (!entry) return
+    // 주인 창이 이미 없더라도(중복 detach) 가시 상태는 내린다 — 굳는 것을 막는 게 요점이다.
+    if (entry.visible) {
+      entry.view.setVisible(false)
+      entry.visible = false
+    }
+    if (entry.ownerWindowId === null) return
     const win = BrowserWindow.fromId(entry.ownerWindowId)
     entry.ownerWindowId = null
     if (!win || win.isDestroyed()) return
@@ -435,6 +449,9 @@ export class HostedViewManager {
     entry.busy += 1
     return () => {
       entry.busy = Math.max(0, entry.busy - 1)
+      // 잡혀 있는 동안 온 파괴 요청을 여기서 갚는다. 탭이 닫힌 뒤에는 다시 요청해 줄 사람이
+      // 없으므로, 이걸 안 하면 찍는 중에 닫은 탭의 뷰만 동면 스윕까지 살아남는다.
+      if (entry.busy === 0 && entry.destroyWhenFree) this.destroy(tabId)
     }
   }
 
@@ -475,7 +492,10 @@ export class HostedViewManager {
   destroy(tabId: string): void {
     const entry = this.entries.get(tabId)
     if (!entry) return
-    if (entry.busy > 0) return
+    if (entry.busy > 0) {
+      entry.destroyWhenFree = true
+      return
+    }
     this.detach(tabId)
     this.entries.delete(tabId)
     this.hooks.onDestroyed?.(tabId, entry.workspaceId)
@@ -527,6 +547,9 @@ export class HostedViewManager {
   destroyWorkspace(workspaceId: string): void {
     for (const [tabId, entry] of [...this.entries])
       if (entry.workspaceId === workspaceId) this.destroy(tabId)
+    // 뷰를 다 거뒀으면 그 워크스페이스 전용 아티팩트 세션도 놓는다 — 파티션이 워크스페이스마다
+    // 하나라, 여기서 안 놓으면 세션과 그 protocol 핸들러가 앱이 꺼질 때까지 남는다.
+    forgetArtifactSession(partitionFor('artifact', workspaceId))
   }
 
   /** 창이 닫힐 때 그 창이 붙이고 있던 뷰를 뗀다 — 파괴가 아니다(페이지를 살려 둔다). */

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { IPC } from '@shared/types'
 import type { ScriptStatus } from '@shared/types'
+import { appendScriptTail, SCRIPT_OUTPUT_LIMIT } from '@shared/scriptOutputLimit'
 
 type Dispatch = (channel: string, payload: unknown) => void
 
@@ -21,15 +22,12 @@ const PENDING_LIMIT = 512 * 1024
  * 돌고 있는 dev 서버의 로그를 "No output yet." 로 보게 된다.
  *
  * runOnce 가 모으는 출력도 같은 상한을 쓴다 — 둘 다 "무한정 자라면 안 되는 로그 꼬리" 로
- * 성질이 같아서, 상한이 갈라지면 한쪽만 조용히 메모리를 먹는다.
+ * 성질이 같아서, 상한이 갈라지면 한쪽만 조용히 메모리를 먹는다. 같은 이유로 렌더러의 버퍼와도
+ * 값을 공유한다([[shared/scriptOutputLimit]]).
  */
-export const HISTORY_LIMIT = 256 * 1024
+export const HISTORY_LIMIT = SCRIPT_OUTPUT_LIMIT
 
-/** 꼬리 버퍼에 이어 붙인다. 상한을 넘으면 앞을 잘라 최신 부분만 남긴다. */
-function appendTail(prev: string, chunk: string): string {
-  const next = prev + chunk
-  return next.length > HISTORY_LIMIT ? next.slice(-HISTORY_LIMIT) : next
-}
+const appendTail = appendScriptTail
 
 /** 일회성 명령(runOnce)의 실행 결과. */
 export interface RunOnceResult {

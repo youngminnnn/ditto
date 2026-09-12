@@ -540,6 +540,16 @@ const statusRefCache = new Map<
 >()
 
 /**
+ * 워크스페이스가 사라질 때 그 워크트리의 항목을 놓는다.
+ *
+ * `STATUS_REF_CACHE_MS` 는 재사용 창이지 축출 정책이 아니다 — 시간이 지나도 값이 낡을 뿐
+ * 사라지지는 않아서, 이걸 부르지 않으면 한 번이라도 본 워크트리가 앱이 꺼질 때까지 남는다.
+ */
+export function forgetStatusRef(worktreePath: string): void {
+  statusRefCache.delete(worktreePath)
+}
+
+/**
  * 전체 사이드바 폴링에서는 파일 상태만 매번 읽고, 브랜치와 base 대비 커밋 수는 잠시 재사용한다.
  * 명시적 사용자 동작·턴 완료·fetch 뒤 조회는 force=true 로 즉시 다시 계산한다.
  */
